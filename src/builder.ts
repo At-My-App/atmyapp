@@ -5,6 +5,7 @@ import type {
   Definition,
   DocumentDefinition,
   EnumFieldDefinition,
+  EventDefinition,
   FieldDefinition,
   FileDefinition,
   MdxFieldDefinition,
@@ -151,6 +152,25 @@ export function defineImage(
   return {
     kind: 'image',
     ...input,
+  };
+}
+
+export function defineEvent(
+  columns: string[] = [],
+  options: Partial<EventDefinition> = {}
+): EventDefinition {
+  return {
+    columns,
+    ...options,
+  };
+}
+
+export function defineBasicEvent(
+  options: Partial<Omit<EventDefinition, 'columns'>> = {}
+): EventDefinition {
+  return {
+    columns: [],
+    ...options,
   };
 }
 

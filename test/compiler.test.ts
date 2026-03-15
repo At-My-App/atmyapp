@@ -1,12 +1,15 @@
 import {
   compileSchema,
   defineCollection,
+  defineEvent,
   defineDocument,
   defineSchema,
+  getEvent,
   getCollection,
   getDocument,
   getField,
   listAssetFields,
+  listEvents,
   listReferences,
   listSystemFields,
   resolveDefinitionForPath,
@@ -31,6 +34,11 @@ describe("@atmyapp/structure compiler", () => {
               },
             },
           },
+        },
+        events: {
+          page_view: defineEvent(["page", "referrer", "timestamp"], {
+            description: "Tracked page view analytics event",
+          }),
         },
         definitions: {
           posts: defineCollection({
@@ -111,6 +119,14 @@ describe("@atmyapp/structure compiler", () => {
       "document"
     );
     expect(resolveDefinitionForPath(compiled, "settings")?.kind).toBe("document");
+    expect(getEvent(compiled, "page_view")?.description).toBe(
+      "Tracked page view analytics event"
+    );
+    expect(listEvents(compiled).page_view?.columns).toEqual([
+      "page",
+      "referrer",
+      "timestamp",
+    ]);
     expect(listAssetFields(compiled, "posts")).toHaveLength(2);
     expect(listReferences(compiled)).toHaveLength(1);
     expect(listSystemFields(compiled, "posts").some((field) => field.name === "slug")).toBe(true);
@@ -119,6 +135,12 @@ describe("@atmyapp/structure compiler", () => {
   it("compiles legacy .structure input into canonical collection and document definitions", () => {
     const compiled = compileSchema({
       description: "Legacy schema",
+      events: {
+        purchase: {
+          description: "Purchase tracking event",
+          columns: ["product_id", "amount"],
+        },
+      },
       definitions: {
         posts: {
           type: "collection",
@@ -150,12 +172,21 @@ describe("@atmyapp/structure compiler", () => {
 
     expect(getCollection(compiled, "posts")).toBeDefined();
     expect(getDocument(compiled, "settings")).toBeDefined();
+    expect(getEvent(compiled, "purchase")?.columns).toEqual([
+      "product_id",
+      "amount",
+    ]);
     expect(getField(compiled, "posts.title")?.description).toBe("Post title");
     expect(getField(compiled, "settings.accent")?.optional).toBe(true);
   });
 
   it("emits legacy .structure compatibility output", () => {
     const schema = defineSchema({
+      events: {
+        signup: defineEvent(["email"], {
+          description: "Signup event",
+        }),
+      },
       definitions: {
         settings: defineDocument({
           description: "Settings",
@@ -170,6 +201,10 @@ describe("@atmyapp/structure compiler", () => {
     const legacy = toLegacyStructure(schema);
 
     expect(legacy.definitions.settings.type).toBe("jsonx");
+    expect(legacy.events?.signup).toEqual({
+      description: "Signup event",
+      columns: ["email"],
+    });
     expect(legacy.definitions.settings.description).toBe("Settings");
     expect(legacy.definitions.settings.structure?.properties?.theme?.description).toBe(
       "Theme"

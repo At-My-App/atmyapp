@@ -5,6 +5,7 @@ import type {
   CompiledSchema,
   DefinitionKind,
   DocumentDefinition,
+  EventDefinition,
   FieldDefinition,
   MdxConfigDefinition,
   SystemFieldDefinition,
@@ -109,4 +110,17 @@ export function listDefinitionsByKind(
   return Object.values(compiled.definitionsByName).filter(
     (definition) => definition.kind === kind
   );
+}
+
+export function getEvent(
+  compiled: CompiledSchema,
+  name: string
+): EventDefinition | undefined {
+  return compiled.events[name];
+}
+
+export function listEvents(
+  compiled: CompiledSchema
+): Record<string, EventDefinition> {
+  return compiled.events;
 }

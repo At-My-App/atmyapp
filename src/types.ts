@@ -52,6 +52,11 @@ export interface MdxConfigDefinition {
   components: Record<string, MdxComponentConfig>;
 }
 
+export interface EventDefinition {
+  description?: string;
+  columns: string[];
+}
+
 export interface FieldBase {
   kind: FieldKind;
   description?: string;
@@ -213,6 +218,7 @@ export interface SchemaDocument {
   version: 1;
   description?: string;
   definitions: Record<string, Definition>;
+  events?: Record<string, EventDefinition>;
   args?: Record<string, unknown>;
   mdx?: Record<string, MdxConfigDefinition>;
   submissions?: Record<string, unknown>;
@@ -243,6 +249,7 @@ export interface CompiledSchema {
   fieldsByPath: Record<string, CompiledField>;
   referenceFields: CompiledField[];
   assetFields: CompiledField[];
+  events: Record<string, EventDefinition>;
   configs: Record<string, MdxConfigDefinition>;
 }
 
@@ -307,6 +314,7 @@ export interface LegacySingleDefinition {
 export interface LegacyStructureDocument {
   description?: string;
   definitions: Record<string, LegacySingleDefinition>;
+  events?: Record<string, EventDefinition>;
   args?: Record<string, unknown>;
   mdx?: Record<string, MdxConfigDefinition>;
   submissions?: Record<string, unknown>;

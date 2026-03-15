@@ -332,6 +332,36 @@ function validateDefinitionSchema(
   }
 }
 
+function validateEventSchema(
+  eventName: string,
+  event: { columns: string[] },
+  issues: ValidationIssue[]
+) {
+  const seen = new Set<string>();
+
+  event.columns.forEach((column, index) => {
+    if (!column || typeof column !== 'string') {
+      pushIssue(
+        issues,
+        `events.${eventName}.columns.${index}`,
+        'Event column names must be non-empty strings'
+      );
+      return;
+    }
+
+    if (seen.has(column)) {
+      pushIssue(
+        issues,
+        `events.${eventName}.columns.${index}`,
+        `Duplicate event column "${column}"`
+      );
+      return;
+    }
+
+    seen.add(column);
+  });
+}
+
 export function validateSchemaDocument(
   input: string | SchemaDocument | Record<string, unknown>
 ): ValidationResult {
@@ -345,6 +375,10 @@ export function validateSchemaDocument(
 
     for (const [name, definition] of Object.entries(schema.definitions || {})) {
       validateDefinitionSchema(name, definition, issues, schema);
+    }
+
+    for (const [name, event] of Object.entries(schema.events || {})) {
+      validateEventSchema(name, event, issues);
     }
 
     return {

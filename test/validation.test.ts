@@ -1,6 +1,7 @@
 import {
   compileSchema,
   defineCollection,
+  defineEvent,
   defineDocument,
   defineSchema,
   s,
@@ -17,6 +18,9 @@ describe("@atmyapp/structure validation", () => {
           blog: {
             components: {},
           },
+        },
+        events: {
+          page_view: defineEvent(["page", "timestamp"]),
         },
         definitions: {
           settings: defineDocument({
@@ -77,6 +81,11 @@ describe("@atmyapp/structure validation", () => {
           },
         },
       },
+      events: {
+        page_view: {
+          columns: ["page", "page"],
+        },
+      },
     });
 
     expect(result.valid).toBe(false);
@@ -88,6 +97,11 @@ describe("@atmyapp/structure validation", () => {
     expect(
       result.issues.some((issue) =>
         issue.message.includes('does not expose a slug')
+      )
+    ).toBe(true);
+    expect(
+      result.issues.some((issue) =>
+        issue.message.includes('Duplicate event column "page"')
       )
     ).toBe(true);
   });

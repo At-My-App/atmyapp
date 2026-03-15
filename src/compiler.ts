@@ -3,6 +3,7 @@ import type {
   CompiledField,
   CompiledSchema,
   Definition,
+  EventDefinition,
   FieldDefinition,
   LegacyStructureDocument,
   SchemaDocument,
@@ -127,10 +128,24 @@ export function normalizeSchema(input: SchemaDocument): SchemaDocument {
     definitions[name] = normalizeDefinition(name, definition);
   }
 
+  const events: Record<string, EventDefinition> = {};
+  for (const [name, event] of Object.entries(input.events || {})) {
+    events[name] = {
+      description:
+        typeof event.description === 'string' ? event.description : undefined,
+      columns: Array.isArray(event.columns)
+        ? event.columns.filter(
+            (entry: unknown): entry is string => typeof entry === 'string'
+          )
+        : [],
+    };
+  }
+
   return {
     version: 1,
     description: input.description,
     definitions,
+    events,
     args:
       input.args && typeof input.args === 'object'
         ? input.args
@@ -270,6 +285,7 @@ export function compileSchema(
     fieldsByPath,
     referenceFields,
     assetFields,
+    events: document.events || {},
     configs: document.mdx || {},
   };
 }

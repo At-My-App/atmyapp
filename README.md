@@ -13,6 +13,7 @@ Canonical schema toolkit for AtMyApp. `@atmyapp/structure` is the single runtime
 - Shared validation across CLI, server, dashboard, and assistant flows
 - First-class system fields such as `id`, `createdAt`, `updatedAt`, and `slug`
 - First-class asset fields for associated files and images
+- First-class analytics event definitions with ordered columns
 - Shared migration planning with actionable change prompts
 - Legacy `.structure.json` generation and parsing during rollout
 
@@ -37,6 +38,7 @@ pnpm add @atmyapp/structure
 - `systemFields`: reserved fields that can be enabled and configured but not declared as normal fields
 - fields are required by default; use `optional: true` to make a field optional
 - `description`: supported at schema, definition, field, MDX config, and MDX component levels for assistant-facing context
+- `events`: top-level analytics/event definitions with assistant-facing descriptions and ordered columns
 
 ## TypeScript DSL
 
@@ -44,6 +46,7 @@ pnpm add @atmyapp/structure
 import {
   compileSchema,
   defineCollection,
+  defineEvent,
   defineDocument,
   defineSchema,
   s,
@@ -63,6 +66,11 @@ const schema = defineSchema({
         },
       },
     },
+  },
+  events: {
+    page_view: defineEvent(["page", "referrer", "timestamp"], {
+      description: "Tracked page view analytics event",
+    }),
   },
   definitions: {
     posts: defineCollection({
@@ -183,6 +191,28 @@ import {
 ```
 
 Use these helpers instead of manually traversing raw `.structure` objects.
+
+## Events
+
+Analytics events are modeled as a top-level schema concern and preserved through canonical and legacy compilation:
+
+```ts
+import { defineBasicEvent, defineEvent, defineSchema } from "@atmyapp/structure";
+
+const schema = defineSchema({
+  events: {
+    page_view: defineEvent(["page", "referrer", "timestamp"], {
+      description: "Ordered columns for page view analytics",
+    }),
+    session_start: defineBasicEvent({
+      description: "Marker event with dynamic payload",
+    }),
+  },
+  definitions: {},
+});
+```
+
+The compiled schema exposes these under `compiled.events`, and legacy `.structure.json` compatibility output preserves them under top-level `events`.
 
 ## References
 

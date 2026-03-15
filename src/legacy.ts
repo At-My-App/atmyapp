@@ -4,6 +4,7 @@ import type {
   CollectionDefinition,
   Definition,
   DocumentDefinition,
+  EventDefinition,
   FieldDefinition,
   LegacySingleDefinition,
   LegacyStructureDocument,
@@ -579,15 +580,29 @@ export function compileLegacyStructure(
   raw: LegacyStructureDocument
 ): SchemaDocument {
   const definitions: Record<string, Definition> = {};
+  const events: Record<string, EventDefinition> = {};
 
   for (const [name, definition] of Object.entries(raw.definitions || {})) {
     definitions[name] = compileLegacyDefinition(name, definition);
+  }
+
+  for (const [name, event] of Object.entries(raw.events || {})) {
+    events[name] = {
+      description:
+        typeof event?.description === 'string' ? event.description : undefined,
+      columns: Array.isArray(event?.columns)
+        ? event.columns.filter(
+            (entry: unknown): entry is string => typeof entry === 'string'
+          )
+        : [],
+    };
   }
 
   return {
     version: 1,
     description: raw.description,
     definitions,
+    events,
     args:
       raw.args && typeof raw.args === 'object'
         ? raw.args
@@ -607,6 +622,7 @@ export function toLegacyStructure(
   schema: SchemaDocument
 ): LegacyStructureDocument {
   const definitions: Record<string, LegacySingleDefinition> = {};
+  const events: Record<string, EventDefinition> = {};
 
   for (const [name, definition] of Object.entries(schema.definitions)) {
     if (definition.kind === 'collection') {
@@ -678,9 +694,23 @@ export function toLegacyStructure(
     };
   }
 
+  for (const [name, event] of Object.entries(schema.events || {})) {
+    events[name] = {
+      ...(typeof event.description === 'string'
+        ? { description: event.description }
+        : {}),
+      columns: Array.isArray(event.columns)
+        ? event.columns.filter(
+            (entry: unknown): entry is string => typeof entry === 'string'
+          )
+        : [],
+    };
+  }
+
   return {
     description: schema.description,
     definitions,
+    events,
     args: schema.args || {},
     mdx: schema.mdx,
     submissions: schema.submissions,
