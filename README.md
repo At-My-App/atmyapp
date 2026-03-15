@@ -30,6 +30,15 @@ yarn add @atmyapp/structure
 pnpm add @atmyapp/structure
 ```
 
+## Rollout status
+
+`@atmyapp/structure` is the canonical runtime schema package today.
+
+- authoring should target canonical schema inputs such as `ama.schema.ts` or `ama.schema.json`
+- runtime consumers should use compiled schema APIs from this package
+- `.structure.json` is still supported as the persisted/generated compatibility artifact during rollout
+- legacy labels such as `jsonx` and legacy markers such as `__amatype` are accepted only for compatibility with older projects and older CLI outputs
+
 ## Core concepts
 
 - `collection`: multi-entry structured data with indexes, query semantics, and system fields
