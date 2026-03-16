@@ -73,4 +73,8 @@ jobs:
       - name: Publish to NPM
         run: |
           npm config delete "//registry.npmjs.org/:_authToken" || true
-          npm publish --provenance
+          if [ "${{ steps.check_prerelease.outputs.prerelease }}" == "true" ]; then
+            npm publish --provenance --tag next
+          else
+            npm publish --provenance
+          fi
