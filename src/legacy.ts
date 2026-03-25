@@ -41,6 +41,8 @@ function legacyFieldToCanonical(
   const description =
     typeof schema.description === 'string' ? schema.description : undefined;
 
+  // COMPAT(legacy-structure): support legacy __amatype markers while older
+  // generated .structure payloads still rely on them.
   if (schema.__amatype === 'AmaMdxDef' || schema.format === 'mdx') {
     return {
       kind: 'mdx',
@@ -50,6 +52,8 @@ function legacyFieldToCanonical(
     };
   }
 
+  // COMPAT(legacy-structure): AmaImageDef/AmaFileDef are preserved so the
+  // canonical compiler can ingest old raw structures and CLI outputs.
   if (
     schema.__amatype === 'AmaImageDef' ||
     schema.__amatype === 'AmaFileDef'
@@ -531,6 +535,8 @@ function compileLegacyDefinition(
     return collection;
   }
 
+  // COMPAT(legacy-structure): accept both the legacy `jsonx` label and the
+  // canonical `document` label when parsing persisted/generated structures.
   if (definition.type === 'jsonx' || definition.type === 'document') {
     const structure = definition.structure || {};
     const requiredNames = new Set<string>(
@@ -671,6 +677,8 @@ export function toLegacyStructure(
           required.push(fieldName);
         }
       }
+      // COMPAT(legacy-structure): `.structure.json` still persists documents as
+      // `jsonx` during rollout so existing services and projects keep working.
       definitions[name] = {
         type: 'jsonx',
         description: definition.description,

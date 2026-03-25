@@ -17,6 +17,19 @@ export type ScalarType =
   | 'date'
   | 'datetime'
   | 'timestamp';
+export type StringFieldFormat =
+  | 'short'
+  | 'long'
+  | 'markdown'
+  | 'email'
+  | 'url'
+  | 'slug'
+  | 'code'
+  | 'textarea'
+  | 'date'
+  | 'datetime'
+  | 'timestamp';
+export type NumberFieldFormat = 'integer' | 'percent' | 'currency';
 export type AssetKind = 'image' | 'file' | 'gallery';
 export type SystemFieldName = 'id' | 'createdAt' | 'updatedAt' | 'slug';
 export type ReferenceResolveBy = 'id' | 'slug' | 'path';
@@ -89,13 +102,20 @@ export interface FileAssetConfig {
 export interface ScalarFieldDefinition extends FieldBase {
   kind: 'scalar';
   scalar: ScalarType;
+  min?: number;
+  max?: number;
   minLength?: number;
   maxLength?: number;
   minimum?: number;
   maximum?: number;
+  preferredLength?: number;
+  step?: number;
   pattern?: string;
   enumValues?: Array<string | number | boolean | null>;
-  format?: string;
+  format?: StringFieldFormat | NumberFieldFormat | (string & {});
+  placeholder?: string;
+  examples?: Array<string | number | boolean | null>;
+  integer?: boolean;
 }
 
 export interface EnumFieldDefinition extends FieldBase {

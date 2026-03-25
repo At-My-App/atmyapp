@@ -50,6 +50,15 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Check if prerelease
+        id: check_prerelease
+        run: |
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -57,10 +66,15 @@ jobs:
           tag_name: v${{ steps.check_version.outputs.version }}
           name: Release v${{ steps.check_version.outputs.version }}
           generate_release_notes: true
+          prerelease: ${{ steps.check_prerelease.outputs.prerelease }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to NPM
         run: |
           npm config delete "//registry.npmjs.org/:_authToken" || true
-          npm publish --provenance
+          if [ "${{ steps.check_prerelease.outputs.prerelease }}" == "true" ]; then
+            npm publish --provenance --tag next
+          else
+            npm publish --provenance
+          fi

@@ -105,4 +105,29 @@ describe("@atmyapp/structure validation", () => {
       )
     ).toBe(true);
   });
+
+  it("treats fields with defaults as optional during validation", () => {
+    const compiled = compileSchema(
+      defineSchema({
+        definitions: {
+          settings: defineDocument({
+            fields: {
+              theme: s.string({
+                default: "sunrise",
+              }),
+              retries: s.integer({
+                min: 1,
+                max: 5,
+                default: 3,
+              }),
+            },
+          }),
+        },
+      })
+    );
+
+    expect(
+      validateContent(compiled, "settings", {}).valid
+    ).toBe(true);
+  });
 });

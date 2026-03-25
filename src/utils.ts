@@ -34,6 +34,9 @@ export function clone<T>(value: T): T {
 }
 
 export function isFieldOptional(field: FieldDefinition): boolean {
+  if (field.default !== undefined) {
+    return true;
+  }
   if (typeof field.optional === 'boolean') {
     return field.optional;
   }
