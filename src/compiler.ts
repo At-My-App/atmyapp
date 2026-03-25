@@ -33,6 +33,36 @@ function normalizeField(field: FieldDefinition): FieldDefinition {
       : false;
 
   switch (field.kind) {
+    case 'scalar':
+      return {
+        ...field,
+        optional: normalizedOptional,
+        required: undefined,
+        minLength:
+          field.scalar === 'string'
+            ? (field.minLength ?? field.min)
+            : field.minLength,
+        maxLength:
+          field.scalar === 'string'
+            ? (field.maxLength ?? field.max)
+            : field.maxLength,
+        minimum:
+          field.scalar === 'number'
+            ? (field.minimum ?? field.min)
+            : field.minimum,
+        maximum:
+          field.scalar === 'number'
+            ? (field.maximum ?? field.max)
+            : field.maximum,
+        format:
+          field.scalar === 'number' && field.integer === true
+            ? (field.format ?? 'integer')
+            : field.format,
+        step:
+          field.scalar === 'number' && field.integer === true
+            ? (field.step ?? 1)
+            : field.step,
+      };
     case 'object': {
       const fields: Record<string, FieldDefinition> = {};
       for (const [name, child] of Object.entries(field.fields)) {

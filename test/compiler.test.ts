@@ -211,4 +211,64 @@ describe("@atmyapp/structure compiler", () => {
     );
     expect(legacy.definitions.settings.structure?.required).toEqual(["theme"]);
   });
+
+  it("normalizes DX-friendly scalar aliases and builder shortcuts", () => {
+    const compiled = compileSchema(
+      defineSchema({
+        definitions: {
+          settings: defineDocument({
+            path: "content/site",
+            fields: {
+              summary: s.shortText({
+                min: 10,
+                max: 120,
+                default: "Welcome",
+              }),
+              body: s.markdown({
+                optional: true,
+              }),
+              retries: s.integer({
+                min: 1,
+                max: 5,
+                default: 3,
+              }),
+            },
+          }),
+        },
+      })
+    );
+
+    const summary = getField(compiled, "settings.summary");
+    const body = getField(compiled, "settings.body");
+    const retries = getField(compiled, "settings.retries");
+
+    expect(summary).toMatchObject({
+      kind: "scalar",
+      scalar: "string",
+      format: "short",
+      minLength: 10,
+      maxLength: 120,
+      preferredLength: 80,
+      default: "Welcome",
+    });
+    expect(body).toMatchObject({
+      kind: "scalar",
+      scalar: "string",
+      format: "markdown",
+      preferredLength: 1200,
+      optional: true,
+    });
+    expect(retries).toMatchObject({
+      kind: "scalar",
+      scalar: "number",
+      format: "integer",
+      minimum: 1,
+      maximum: 5,
+      step: 1,
+      default: 3,
+    });
+    expect(getDocument(compiled, "settings")?.definition.path).toBe(
+      "content/site.json"
+    );
+  });
 });
