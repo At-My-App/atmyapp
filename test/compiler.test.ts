@@ -1,15 +1,19 @@
 import {
   compileSchema,
+  type DefinitionType,
   defineCollection,
   defineEvent,
   defineDocument,
+  defineSubmission,
   defineSchema,
   getEvent,
   getCollection,
   getDocument,
   getField,
+  getSubmission,
   listAssetFields,
   listEvents,
+  listSubmissions,
   listReferences,
   listSystemFields,
   resolveDefinitionForPath,
@@ -57,27 +61,24 @@ describe("@atmyapp/structure compiler", () => {
                   },
                 },
               }),
-              author: s.reference("authors", {
+              author: s.reference({
+                target: "authors",
                 description: "Reference to the author profile",
                 by: "slug",
               }),
-              seo: s.object(
-                {
+              seo: s.object({
+                description: "Nested SEO metadata",
+                fields: {
                   title: s.string(),
-                  ogImages: s.array(
-                    s.image({
+                  ogImages: s.array({
+                    items: s.image({
                       description: "Open Graph image",
                     }),
-                    {
-                      description: "List of OG images",
-                      optional: true,
-                    }
-                  ),
+                    description: "List of OG images",
+                    optional: true,
+                  }),
                 },
-                {
-                  description: "Nested SEO metadata",
-                }
-              ),
+              }),
             },
             systemFields: {
               slug: {
@@ -270,5 +271,169 @@ describe("@atmyapp/structure compiler", () => {
     expect(getDocument(compiled, "settings")?.definition.path).toBe(
       "content/site.json"
     );
+  });
+
+  it("supports DX-friendly composite field inputs on s", () => {
+    const schema = defineSchema({
+      mdx: {
+        blog: {
+          components: {},
+        },
+      },
+      events: {
+        signup: defineEvent({
+          columns: ["email"],
+          description: "Signup event",
+        }),
+      },
+      definitions: {
+        authors: defineCollection({
+          fields: {
+            name: s.string(),
+          },
+          systemFields: {
+            slug: {
+              enabled: true,
+              source: "name",
+            },
+          },
+        }),
+        posts: defineCollection({
+          fields: {
+            title: s.string(),
+            seo: s.object({
+              description: "SEO block",
+              optional: true,
+              fields: {
+                summary: s.string({
+                  optional: true,
+                  description: "SEO summary",
+                }),
+                tags: s.array({
+                  description: "SEO tags",
+                  optional: true,
+                  items: s.string(),
+                }),
+              },
+            }),
+            status: s.enum({
+              values: ["draft", "published"] as const,
+              optional: true,
+              description: "Publishing status",
+            }),
+            body: s.union({
+              description: "Flexible body content",
+              variants: [s.markdown(), s.mdx({ config: "blog" })],
+            }),
+            author: s.reference({
+              target: "authors",
+              by: "slug",
+              optional: true,
+              description: "Author lookup",
+            }),
+          },
+        }),
+      },
+    });
+
+    type PostEntry = DefinitionType<(typeof schema)["definitions"]["posts"]>;
+
+    const validPost: PostEntry = {
+      title: "Hello",
+      body: "# Hello",
+      seo: {
+        tags: ["launch"],
+      },
+    };
+
+    expect(validPost.seo?.tags).toEqual(["launch"]);
+
+    // @ts-expect-error body is required
+    const invalidPost: PostEntry = {
+      title: "Missing body",
+    };
+
+    void invalidPost;
+
+    const compiled = compileSchema(schema);
+    const legacy = toLegacyStructure(schema);
+
+    expect(getField(compiled, "posts.seo")?.description).toBe("SEO block");
+    expect(getField(compiled, "posts.seo")?.optional).toBe(true);
+    expect(getField(compiled, "posts.seo.tags")?.description).toBe("SEO tags");
+    expect(getField(compiled, "posts.status")?.optional).toBe(true);
+    expect(getField(compiled, "posts.author")?.description).toBe("Author lookup");
+    expect(getEvent(compiled, "signup")?.description).toBe("Signup event");
+    expect(legacy.definitions.posts.structure?.properties?.seo?.description).toBe(
+      "SEO block"
+    );
+    expect(legacy.definitions.posts.structure?.properties?.seo?.properties?.tags?.description).toBe(
+      "SEO tags"
+    );
+    expect(legacy.definitions.posts.structure?.required).toEqual([
+      "title",
+      "body",
+    ]);
+  });
+
+  it("normalizes first-class submissions and preserves legacy compatibility output", () => {
+    const schema = defineSchema({
+      definitions: {
+        settings: defineDocument({
+          fields: {
+            title: s.string(),
+          },
+        }),
+      },
+      submissions: {
+        contact: defineSubmission({
+          description: "Main contact form",
+          fields: {
+            name: s.string(),
+            email: s.email(),
+            message: s.longText({
+              optional: true,
+            }),
+            resume: s.file({
+              optional: true,
+            }),
+          },
+          captcha: {
+            required: true,
+            provider: "hcaptcha",
+            secret: "secret",
+          },
+        }),
+      },
+    });
+
+    const compiled = compileSchema(schema);
+    const legacy = toLegacyStructure(schema);
+
+    expect(getSubmission(compiled, "contact")).toEqual({
+      description: "Main contact form",
+      fields: {
+        name: expect.objectContaining({ kind: "scalar", scalar: "string" }),
+        email: expect.objectContaining({
+          kind: "scalar",
+          scalar: "string",
+          format: "email",
+        }),
+        message: expect.objectContaining({ optional: true }),
+        resume: expect.objectContaining({ kind: "asset", assetKind: "file" }),
+      },
+      captcha: {
+        required: true,
+        provider: "hcaptcha",
+        secret: "secret",
+      },
+    });
+    expect(listSubmissions(compiled).contact?.captcha?.required).toBe(true);
+    expect(legacy.submissions?.contact).toMatchObject({
+      description: "Main contact form",
+      requiresCaptcha: true,
+      captchaProvider: "hcaptcha",
+      hcaptchaSecret: "secret",
+    });
   });
 });

@@ -3,6 +3,7 @@ import {
   defineCollection,
   defineEvent,
   defineDocument,
+  defineSubmission,
   defineSchema,
   s,
   validateContent,
@@ -27,7 +28,7 @@ describe("@atmyapp/structure validation", () => {
             fields: {
               theme: s.string(),
               retries: s.number({ optional: true }),
-              body: s.mdx("blog"),
+              body: s.mdx({ config: "blog" }),
             },
           }),
           posts: defineCollection({
@@ -128,6 +129,41 @@ describe("@atmyapp/structure validation", () => {
 
     expect(
       validateContent(compiled, "settings", {}).valid
+    ).toBe(true);
+  });
+
+  it("validates submission schema fields and allows schemas without content definitions", () => {
+    const result = validateSchemaDocument(
+      defineSchema({
+        definitions: {},
+        submissions: {
+          contact: defineSubmission({
+            fields: {
+              authorSlug: {
+                kind: "reference",
+                target: "authors",
+                by: "slug",
+              },
+              body: {
+                kind: "mdx",
+                config: "missing",
+              },
+            },
+          }),
+        },
+      })
+    );
+
+    expect(result.valid).toBe(false);
+    expect(
+      result.issues.some((issue) =>
+        issue.message.includes('Reference target "authors" does not exist')
+      )
+    ).toBe(true);
+    expect(
+      result.issues.some((issue) =>
+        issue.message.includes('MDX config "missing" does not exist')
+      )
     ).toBe(true);
   });
 });

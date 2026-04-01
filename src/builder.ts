@@ -6,6 +6,7 @@ import type {
   DocumentDefinition,
   EnumFieldDefinition,
   EventDefinition,
+  FieldBase,
   FieldDefinition,
   FileDefinition,
   MdxFieldDefinition,
@@ -14,6 +15,7 @@ import type {
   ReferenceFieldDefinition,
   ScalarFieldDefinition,
   SchemaDocument,
+  SubmissionDefinition,
   SlugFieldDefinition,
   StringFieldFormat,
   UnionFieldDefinition,
@@ -21,7 +23,9 @@ import type {
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-type StringFieldOptions = Partial<
+export type FieldOptions = Partial<Omit<FieldBase, 'kind'>>;
+
+export type StringFieldOptions = Partial<
   Omit<ScalarFieldDefinition, 'kind' | 'scalar' | 'minimum' | 'maximum'>
 > & {
   min?: number;
@@ -29,13 +33,86 @@ type StringFieldOptions = Partial<
   format?: StringFieldFormat | (string & {});
 };
 
-type NumberFieldOptions = Partial<
+export type NumberFieldOptions = Partial<
   Omit<ScalarFieldDefinition, 'kind' | 'scalar' | 'minLength' | 'maxLength'>
 > & {
   min?: number;
   max?: number;
   format?: NumberFieldFormat | (string & {});
 };
+
+export type BooleanFieldOptions = Partial<
+  Omit<ScalarFieldDefinition, 'kind' | 'scalar'>
+>;
+
+export type DateFieldOptions = Partial<
+  Omit<ScalarFieldDefinition, 'kind' | 'scalar'>
+>;
+
+export type ObjectFieldOptions = Partial<
+  Omit<ObjectFieldDefinition, 'kind' | 'fields'>
+>;
+
+export type ArrayFieldOptions = Partial<
+  Omit<ArrayFieldDefinition, 'kind' | 'items'>
+>;
+
+export type EnumFieldOptions = Partial<
+  Omit<EnumFieldDefinition, 'kind' | 'values'>
+>;
+
+export type UnionFieldOptions = Partial<
+  Omit<UnionFieldDefinition, 'kind' | 'variants'>
+>;
+
+export type AssetFieldOptions = Partial<
+  Omit<AssetFieldDefinition, 'kind' | 'assetKind' | 'multiple'>
+>;
+
+export type ReferenceFieldOptions = Partial<
+  Omit<ReferenceFieldDefinition, 'kind' | 'target'>
+>;
+
+export type MdxFieldOptions = Partial<
+  Omit<MdxFieldDefinition, 'kind' | 'config'>
+>;
+
+export type SlugFieldOptions = Partial<Omit<SlugFieldDefinition, 'kind'>>;
+
+export type EventOptions = Partial<Omit<EventDefinition, 'columns'>>;
+export type SubmissionOptions = Partial<Omit<SubmissionDefinition, 'fields'>>;
+
+export type ObjectFieldInput<
+  TFields extends Record<string, FieldDefinition>,
+> = Simplify<{ fields: TFields } & ObjectFieldOptions>;
+
+export type ArrayFieldInput<TItems extends FieldDefinition> = Simplify<
+  { items: TItems } & ArrayFieldOptions
+>;
+
+export type EnumFieldInput<
+  TValues extends EnumFieldDefinition['values'],
+> = Simplify<{ values: TValues } & EnumFieldOptions>;
+
+export type UnionFieldInput<TVariants extends FieldDefinition[]> = Simplify<
+  { variants: TVariants } & UnionFieldOptions
+>;
+
+export type ReferenceFieldInput<TTarget extends string> = Simplify<
+  { target: TTarget } & ReferenceFieldOptions
+>;
+
+export type MdxFieldInput<TConfig extends string> = Simplify<
+  { config: TConfig } & MdxFieldOptions
+>;
+
+export type EventInput<TColumns extends string[] = []> = Simplify<
+  { columns: TColumns } & EventOptions
+>;
+
+export type SubmissionInput<
+  TFields extends Record<string, FieldDefinition>,
+> = Simplify<{ fields: TFields } & SubmissionOptions>;
 
 function normalizeStringOptions<const TOptions extends StringFieldOptions>(
   options: TOptions
@@ -94,6 +171,62 @@ function withFieldBase<
     return field as Simplify<T & TOptions>;
   }
   return { ...field, ...options } as Simplify<T & TOptions>;
+}
+
+function splitConfig<
+  const TInput extends Record<string, unknown>,
+  const TKey extends keyof TInput,
+>(input: TInput, key: TKey): [TInput[TKey], Simplify<Omit<TInput, TKey>>] {
+  const { [key]: value, ...options } = input;
+  return [value, options as Simplify<Omit<TInput, TKey>>];
+}
+
+function objectField<
+  const TFields extends Record<string, FieldDefinition>,
+  const TInput extends ObjectFieldInput<TFields>,
+>(input: TInput) {
+  const [fields, options] = splitConfig(input, 'fields');
+  return withFieldBase({ kind: 'object', fields }, options);
+}
+
+function arrayField<
+  const TItems extends FieldDefinition,
+  const TInput extends ArrayFieldInput<TItems>,
+>(input: TInput) {
+  const [items, options] = splitConfig(input, 'items');
+  return withFieldBase({ kind: 'array', items }, options);
+}
+
+function enumField<
+  const TValues extends EnumFieldDefinition['values'],
+  const TInput extends EnumFieldInput<TValues>,
+>(input: TInput) {
+  const [values, options] = splitConfig(input, 'values');
+  return withFieldBase({ kind: 'enum', values }, options);
+}
+
+function unionField<
+  const TVariants extends FieldDefinition[],
+  const TInput extends UnionFieldInput<TVariants>,
+>(input: TInput) {
+  const [variants, options] = splitConfig(input, 'variants');
+  return withFieldBase({ kind: 'union', variants }, options);
+}
+
+function referenceField<
+  const TTarget extends string,
+  const TInput extends ReferenceFieldInput<TTarget>,
+>(input: TInput) {
+  const [target, options] = splitConfig(input, 'target');
+  return withFieldBase({ kind: 'reference', target }, options);
+}
+
+function mdxField<
+  const TConfig extends string,
+  const TInput extends MdxFieldInput<TConfig>,
+>(input: TInput) {
+  const [config, options] = splitConfig(input, 'config');
+  return withFieldBase({ kind: 'mdx', config }, options);
 }
 
 export const s = {
@@ -183,108 +316,56 @@ export const s = {
       step: number;
     });
   },
-  boolean<
-    const TOptions extends Partial<
-      Omit<ScalarFieldDefinition, 'kind' | 'scalar'>
-    > = {}
-  >(options: TOptions = {} as TOptions) {
+  boolean<const TOptions extends BooleanFieldOptions = {}>(
+    options: TOptions = {} as TOptions
+  ) {
     return withFieldBase({ kind: 'scalar', scalar: 'boolean' }, options);
   },
-  date<
-    const TOptions extends Partial<
-      Omit<ScalarFieldDefinition, 'kind' | 'scalar'>
-    > = {}
-  >(options: TOptions = {} as TOptions) {
+  date<const TOptions extends DateFieldOptions = {}>(
+    options: TOptions = {} as TOptions
+  ) {
     return withFieldBase({ kind: 'scalar', scalar: 'date', format: 'date' }, options);
   },
-  datetime<
-    const TOptions extends Partial<
-      Omit<ScalarFieldDefinition, 'kind' | 'scalar'>
-    > = {}
-  >(options: TOptions = {} as TOptions) {
+  datetime<const TOptions extends DateFieldOptions = {}>(
+    options: TOptions = {} as TOptions
+  ) {
     return withFieldBase(
       { kind: 'scalar', scalar: 'datetime', format: 'datetime' },
       options
     );
   },
-  timestamp<
-    const TOptions extends Partial<
-      Omit<ScalarFieldDefinition, 'kind' | 'scalar'>
-    > = {}
-  >(options: TOptions = {} as TOptions) {
+  timestamp<const TOptions extends DateFieldOptions = {}>(
+    options: TOptions = {} as TOptions
+  ) {
     return withFieldBase(
       { kind: 'scalar', scalar: 'timestamp', format: 'timestamp' },
       options
     );
   },
-  object<
-    const TFields extends Record<string, FieldDefinition>,
-    const TOptions extends Partial<
-      Omit<ObjectFieldDefinition, 'kind' | 'fields'>
-    > = {}
-  >(fields: TFields, options: TOptions = {} as TOptions) {
-    return withFieldBase({ kind: 'object', fields }, options);
-  },
-  array<
-    const TItems extends FieldDefinition,
-    const TOptions extends Partial<
-      Omit<ArrayFieldDefinition, 'kind' | 'items'>
-    > = {}
-  >(items: TItems, options: TOptions = {} as TOptions) {
-    return withFieldBase({ kind: 'array', items }, options);
-  },
-  enum<
-    const TValues extends EnumFieldDefinition['values'],
-    const TOptions extends Partial<Omit<EnumFieldDefinition, 'kind' | 'values'>> = {}
-  >(values: TValues, options: TOptions = {} as TOptions) {
-    return withFieldBase({ kind: 'enum', values }, options);
-  },
-  union<
-    const TVariants extends FieldDefinition[],
-    const TOptions extends Partial<
-      Omit<UnionFieldDefinition, 'kind' | 'variants'>
-    > = {}
-  >(variants: TVariants, options: TOptions = {} as TOptions) {
-    return withFieldBase({ kind: 'union', variants }, options);
-  },
-  image<
-    const TOptions extends Partial<
-      Omit<AssetFieldDefinition, 'kind' | 'assetKind' | 'multiple'>
-    > = {}
-  >(options: TOptions = {} as TOptions) {
+  object: objectField,
+  array: arrayField,
+  enum: enumField,
+  union: unionField,
+  image<const TOptions extends AssetFieldOptions = {}>(
+    options: TOptions = {} as TOptions
+  ) {
     return withFieldBase({ kind: 'asset', assetKind: 'image', multiple: false }, options);
   },
-  file<
-    const TOptions extends Partial<
-      Omit<AssetFieldDefinition, 'kind' | 'assetKind' | 'multiple'>
-    > = {}
-  >(options: TOptions = {} as TOptions) {
+  file<const TOptions extends AssetFieldOptions = {}>(
+    options: TOptions = {} as TOptions
+  ) {
     return withFieldBase({ kind: 'asset', assetKind: 'file', multiple: false }, options);
   },
-  gallery<
-    const TOptions extends Partial<
-      Omit<AssetFieldDefinition, 'kind' | 'assetKind' | 'multiple'>
-    > = {}
-  >(options: TOptions = {} as TOptions) {
+  gallery<const TOptions extends AssetFieldOptions = {}>(
+    options: TOptions = {} as TOptions
+  ) {
     return withFieldBase({ kind: 'asset', assetKind: 'gallery', multiple: true }, options);
   },
-  reference<
-    const TTarget extends string,
-    const TOptions extends Partial<
-      Omit<ReferenceFieldDefinition, 'kind' | 'target'>
-    > = {}
-  >(target: TTarget, options: TOptions = {} as TOptions) {
-    return withFieldBase({ kind: 'reference', target }, options);
-  },
-  mdx<
-    const TConfig extends string,
-    const TOptions extends Partial<Omit<MdxFieldDefinition, 'kind' | 'config'>> = {}
-  >(config: TConfig, options: TOptions = {} as TOptions) {
-    return withFieldBase({ kind: 'mdx', config }, options);
-  },
-  slug<
-    const TOptions extends Partial<Omit<SlugFieldDefinition, 'kind'>> = {}
-  >(options: TOptions = {} as TOptions) {
+  reference: referenceField,
+  mdx: mdxField,
+  slug<const TOptions extends SlugFieldOptions = {}>(
+    options: TOptions = {} as TOptions
+  ) {
     return withFieldBase(
       {
         kind: 'slug',
@@ -336,16 +417,45 @@ export function defineImage<
 
 export function defineEvent<
   const TColumns extends string[] = [],
-  const TOptions extends Partial<EventDefinition> = {}
->(columns: TColumns = [] as unknown as TColumns, options: TOptions = {} as TOptions): Simplify<{ columns: TColumns } & TOptions> {
+  const TOptions extends EventOptions = {}
+>(
+  columns?: TColumns,
+  options?: TOptions
+): Simplify<{ columns: TColumns } & TOptions>;
+export function defineEvent<
+  const TColumns extends string[],
+  const TInput extends EventInput<TColumns>,
+>(input: TInput): TInput;
+export function defineEvent<
+  const TColumns extends string[] = [],
+  const TOptions extends EventOptions = {},
+>(
+  columnsOrInput: TColumns | EventInput<TColumns> = [] as unknown as TColumns,
+  options: TOptions = {} as TOptions
+): Simplify<{ columns: TColumns } & TOptions> | EventInput<TColumns> {
+  if (Array.isArray(columnsOrInput)) {
+    return {
+      columns: columnsOrInput,
+      ...options,
+    } as Simplify<{ columns: TColumns } & TOptions>;
+  }
+
   return {
-    columns,
-    ...options,
-  } as Simplify<{ columns: TColumns } & TOptions>;
+    ...columnsOrInput,
+  } as EventInput<TColumns>;
+}
+
+export function defineSubmission<
+  const TFields extends Record<string, FieldDefinition>,
+  const TInput extends SubmissionInput<TFields>,
+>(input: TInput): TInput {
+  return {
+    ...input,
+  } as TInput;
 }
 
 export function defineBasicEvent<
-  const TOptions extends Partial<Omit<EventDefinition, 'columns'>> = {}
+  const TOptions extends EventOptions = {}
 >(options: TOptions = {} as TOptions): Simplify<{ columns: [] } & TOptions> {
   return {
     columns: [],

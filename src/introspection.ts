@@ -8,6 +8,7 @@ import type {
   EventDefinition,
   FieldDefinition,
   MdxConfigDefinition,
+  SubmissionDefinition,
   SystemFieldDefinition,
 } from './types';
 import { normalizePath, stripExtension } from './utils';
@@ -123,4 +124,17 @@ export function listEvents(
   compiled: CompiledSchema
 ): Record<string, EventDefinition> {
   return compiled.events;
+}
+
+export function getSubmission(
+  compiled: CompiledSchema,
+  name: string
+): SubmissionDefinition | undefined {
+  return compiled.submissions[name];
+}
+
+export function listSubmissions(
+  compiled: CompiledSchema
+): Record<string, SubmissionDefinition> {
+  return compiled.submissions;
 }

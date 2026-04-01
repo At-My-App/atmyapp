@@ -25,7 +25,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "jest"
+    "test": "npm run test:types && jest",
+    "test:types": "tsc -p tsconfig.type-tests.json --noEmit"
   },
   "author": "Maciej Gamrot",
   "license": "ISC",

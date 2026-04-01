@@ -70,6 +70,32 @@ export interface EventDefinition {
   columns: string[];
 }
 
+export type SubmissionCaptchaProvider = 'hcaptcha' | (string & {});
+
+export interface SubmissionCaptchaConfig {
+  required?: boolean;
+  provider?: SubmissionCaptchaProvider;
+  secret?: string;
+}
+
+export interface SubmissionDefinition {
+  description?: string;
+  fields: Record<string, FieldDefinition>;
+  captcha?: SubmissionCaptchaConfig;
+}
+
+export interface LegacySubmissionDefinition {
+  description?: string;
+  fields?: Record<string, FieldDefinition>;
+  requiresCaptcha?: boolean;
+  captchaProvider?: SubmissionCaptchaProvider;
+  hcaptchaSecret?: string;
+}
+
+export type SubmissionInputDefinition =
+  | SubmissionDefinition
+  | LegacySubmissionDefinition;
+
 export interface FieldBase {
   kind: FieldKind;
   description?: string;
@@ -241,7 +267,7 @@ export interface SchemaDocument {
   events?: Record<string, EventDefinition>;
   args?: Record<string, unknown>;
   mdx?: Record<string, MdxConfigDefinition>;
-  submissions?: Record<string, unknown>;
+  submissions?: Record<string, SubmissionInputDefinition>;
 }
 
 export interface CompiledField {
@@ -270,6 +296,7 @@ export interface CompiledSchema {
   referenceFields: CompiledField[];
   assetFields: CompiledField[];
   events: Record<string, EventDefinition>;
+  submissions: Record<string, SubmissionDefinition>;
   configs: Record<string, MdxConfigDefinition>;
 }
 
@@ -337,5 +364,5 @@ export interface LegacyStructureDocument {
   events?: Record<string, EventDefinition>;
   args?: Record<string, unknown>;
   mdx?: Record<string, MdxConfigDefinition>;
-  submissions?: Record<string, unknown>;
+  submissions?: Record<string, SubmissionInputDefinition>;
 }

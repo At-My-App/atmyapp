@@ -7,6 +7,8 @@ import type {
   FieldDefinition,
   LegacyStructureDocument,
   SchemaDocument,
+  SubmissionDefinition,
+  SubmissionInputDefinition,
 } from './types';
 import { compileLegacyStructure, materializeSystemFields, toLegacyStructure } from './legacy';
 import { ensureDocumentPath, normalizePath, stripExtension } from './utils';
@@ -139,6 +141,67 @@ function normalizeDefinition(name: string, definition: Definition): Definition {
   };
 }
 
+function normalizeSubmission(
+  submission: SubmissionInputDefinition | unknown
+): SubmissionDefinition {
+  if (!submission || typeof submission !== 'object' || Array.isArray(submission)) {
+    return {
+      fields: {},
+    };
+  }
+
+  const fields: Record<string, FieldDefinition> = {};
+  for (const [name, field] of Object.entries(
+    (submission as SubmissionInputDefinition).fields || {}
+  )) {
+    fields[name] = normalizeField(field);
+  }
+
+  const submissionInput = submission as SubmissionInputDefinition & {
+    captcha?: {
+      required?: boolean;
+      provider?: string;
+      secret?: string;
+    };
+    requiresCaptcha?: boolean;
+    captchaProvider?: string;
+    hcaptchaSecret?: string;
+  };
+
+  const required =
+    submissionInput.captcha?.required ??
+    submissionInput.requiresCaptcha ??
+    false;
+  const provider =
+    submissionInput.captcha?.provider ??
+    submissionInput.captchaProvider;
+  const secret =
+    submissionInput.captcha?.secret ??
+    submissionInput.hcaptchaSecret;
+
+  const hasCaptcha =
+    required === true ||
+    typeof provider === 'string' ||
+    typeof secret === 'string';
+
+  return {
+    description:
+      typeof (submission as SubmissionInputDefinition).description === 'string'
+        ? (submission as SubmissionInputDefinition).description
+        : undefined,
+    fields,
+    ...(hasCaptcha
+      ? {
+          captcha: {
+            required,
+            ...(typeof provider === 'string' ? { provider } : {}),
+            ...(typeof secret === 'string' ? { secret } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
 export function parseSchema(input: string | SchemaDocument | LegacyStructureDocument): SchemaDocument {
   const parsed =
     typeof input === 'string'
@@ -171,6 +234,11 @@ export function normalizeSchema(input: SchemaDocument): SchemaDocument {
     };
   }
 
+  const submissions: Record<string, SubmissionDefinition> = {};
+  for (const [name, submission] of Object.entries(input.submissions || {})) {
+    submissions[name] = normalizeSubmission(submission);
+  }
+
   return {
     version: 1,
     description: input.description,
@@ -184,10 +252,7 @@ export function normalizeSchema(input: SchemaDocument): SchemaDocument {
       input.mdx && typeof input.mdx === 'object'
         ? input.mdx
         : {},
-    submissions:
-      input.submissions && typeof input.submissions === 'object'
-        ? input.submissions
-        : {},
+    submissions,
   };
 }
 
@@ -316,6 +381,7 @@ export function compileSchema(
     referenceFields,
     assetFields,
     events: document.events || {},
+    submissions: document.submissions as Record<string, SubmissionDefinition>,
     configs: document.mdx || {},
   };
 }

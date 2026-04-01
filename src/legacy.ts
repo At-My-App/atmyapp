@@ -721,6 +721,44 @@ export function toLegacyStructure(
     events,
     args: schema.args || {},
     mdx: schema.mdx,
-    submissions: schema.submissions,
+    submissions: Object.fromEntries(
+      Object.entries(schema.submissions || {}).map(([name, submission]) => [
+        name,
+        (() => {
+          const submissionInput = submission as {
+            description?: string;
+            fields?: Record<string, FieldDefinition>;
+            captcha?: {
+              required?: boolean;
+              provider?: string;
+              secret?: string;
+            };
+            requiresCaptcha?: boolean;
+            captchaProvider?: string;
+            hcaptchaSecret?: string;
+          };
+
+          return {
+            ...(typeof submissionInput.description === 'string'
+              ? { description: submissionInput.description }
+              : {}),
+            fields:
+              submissionInput.fields && typeof submissionInput.fields === 'object'
+                ? submissionInput.fields
+                : {},
+            requiresCaptcha:
+              submissionInput.captcha?.required ??
+              submissionInput.requiresCaptcha ??
+              false,
+            captchaProvider:
+              submissionInput.captcha?.provider ??
+              submissionInput.captchaProvider,
+            hcaptchaSecret:
+              submissionInput.captcha?.secret ??
+              submissionInput.hcaptchaSecret,
+          };
+        })(),
+      ])
+    ),
   };
 }

@@ -1,6 +1,7 @@
 export * from './builder';
 export * from './collectionSchemaConverter';
 export * from './compiler';
+export * from './editor';
 export * from './infer';
 export * from './introspection';
 export * from './legacy';

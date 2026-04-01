@@ -14,6 +14,7 @@ Canonical schema toolkit for AtMyApp. `@atmyapp/structure` is the single runtime
 - First-class system fields such as `id`, `createdAt`, `updatedAt`, and `slug`
 - First-class asset fields for associated files and images
 - First-class analytics event definitions with ordered columns
+- First-class submission definitions with typed fields and captcha config
 - Shared migration planning with actionable change prompts
 - Legacy `.structure.json` generation and parsing during rollout
 
@@ -48,6 +49,7 @@ pnpm add @atmyapp/structure
 - fields are required by default; use `optional: true` to make a field optional
 - `description`: supported at schema, definition, field, MDX config, and MDX component levels for assistant-facing context
 - `events`: top-level analytics/event definitions with assistant-facing descriptions and ordered columns
+- `submissions`: top-level form submission definitions with typed fields and optional captcha config
 
 ## TypeScript DSL
 
@@ -57,6 +59,7 @@ import {
   defineCollection,
   defineEvent,
   defineDocument,
+  defineSubmission,
   defineSchema,
   s,
 } from "@atmyapp/structure";
@@ -81,6 +84,25 @@ const schema = defineSchema({
       description: "Tracked page view analytics event",
     }),
   },
+  submissions: {
+    contact: defineSubmission({
+      description: "Main contact form",
+      fields: {
+        name: s.string(),
+        email: s.email(),
+        message: s.longText({
+          optional: true,
+        }),
+        resume: s.file({
+          optional: true,
+        }),
+      },
+      captcha: {
+        required: true,
+        provider: "hcaptcha",
+      },
+    }),
+  },
   definitions: {
     posts: defineCollection({
       description: "Blog posts",
@@ -98,24 +120,27 @@ const schema = defineSchema({
             },
           },
         }),
-        body: s.mdx("blog", {
+        body: s.mdx({
+          config: "blog",
           description: "Long-form article body",
         }),
-        author: s.reference("authors", {
+        author: s.reference({
+          target: "authors",
           description: "Linked author profile",
           by: "slug",
         }),
         seo: s.object({
-          title: s.string(),
-          socialImages: s.array(
-            s.image({
-              description: "Image used for social previews",
-            }),
-            {
+          description: "SEO metadata",
+          fields: {
+            title: s.string(),
+            socialImages: s.array({
               optional: true,
               description: "Nested list of social preview images",
-            }
-          ),
+              items: s.image({
+                description: "Image used for social previews",
+              }),
+            }),
+          },
         }),
       },
       systemFields: {
@@ -223,20 +248,68 @@ const schema = defineSchema({
 
 The compiled schema exposes these under `compiled.events`, and legacy `.structure.json` compatibility output preserves them under top-level `events`.
 
+## Submissions
+
+Submissions are modeled as a first-class top-level schema concern:
+
+```ts
+import {
+  defineSchema,
+  defineSubmission,
+  s,
+  type InferSubmission,
+} from "@atmyapp/structure";
+
+const schema = defineSchema({
+  definitions: {},
+  submissions: {
+    contact: defineSubmission({
+      description: "Marketing contact form",
+      fields: {
+        name: s.string(),
+        email: s.email(),
+        message: s.longText({
+          optional: true,
+        }),
+        resume: s.file({
+          optional: true,
+        }),
+      },
+      captcha: {
+        required: true,
+        provider: "hcaptcha",
+      },
+    }),
+  },
+});
+
+type ContactSubmission = InferSubmission<"contact", typeof schema>;
+```
+
+Notes:
+
+- `acceptingResponses` is intentionally not part of the schema; that stays dashboard-managed
+- submission fields use the same field DSL as collections and documents
+- `InferSubmission` is input-oriented, so asset fields infer upload values rather than stored CDN URLs
+- legacy compatibility output keeps captcha settings under `requiresCaptcha`, `captchaProvider`, and `hcaptchaSecret`
+
 ## References
 
 References store string values by default, but the schema can describe how those strings should resolve:
 
 ```ts
-s.reference("authors", {
+s.reference({
+  target: "authors",
   by: "id",
 });
 
-s.reference("posts", {
+s.reference({
+  target: "posts",
   by: "slug",
 });
 
-s.reference("settings", {
+s.reference({
+  target: "settings",
   by: "path",
 });
 ```
@@ -259,19 +332,20 @@ const article = defineDocument({
   fields: {
     title: s.string(),
     seo: s.object({
-      title: s.string(),
-      summary: s.string({ optional: true }),
+      description: "SEO metadata",
+      fields: {
+        title: s.string(),
+        summary: s.string({ optional: true }),
+      },
     }),
-    gallery: s.array(
-      s.image({
+    gallery: s.array({
+      optional: true,
+      items: s.image({
         config: {
           optimizeFormat: "webp",
         },
       }),
-      {
-        optional: true,
-      }
-    ),
+    }),
   },
 });
 ```
@@ -279,7 +353,8 @@ const article = defineDocument({
 Notes:
 
 - all nested fields are required unless marked with `optional: true`
-- `s.array(s.image())` works for image lists
+- composite fields use the object-input style: `s.object({ fields, optional, description })`, `s.array({ items, optional, description })`, `s.reference({ target, ... })`, and `s.mdx({ config, ... })`
+- `s.array({ items: s.image() })` works for image lists
 - `s.gallery()` is still available when you want a semantic “multiple images” asset field
 - nested field descriptions are preserved in the compiled schema and legacy output
 

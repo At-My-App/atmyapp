@@ -4,6 +4,7 @@ import type {
   FieldDefinition,
   MdxConfigDefinition,
   SchemaDocument,
+  SubmissionDefinition,
   ValidationIssue,
   ValidationResult,
 } from './types';
@@ -300,35 +301,82 @@ function validateDefinitionSchema(
     }
 
     for (const [fieldName, field] of Object.entries(definition.fields)) {
-      if (field.kind === 'reference' && !schema.definitions[field.target]) {
-        pushIssue(
-          issues,
-          `definitions.${definitionName}.fields.${fieldName}`,
-          `Reference target "${field.target}" does not exist`
-        );
-      }
-      if (field.kind === 'reference' && field.by === 'slug') {
-        const targetDefinition = schema.definitions[field.target];
-        const hasSlugSupport =
-          targetDefinition &&
-          ((targetDefinition.kind === 'collection' || targetDefinition.kind === 'document') &&
-            (Boolean(targetDefinition.systemFields?.slug) || 'slug' in targetDefinition.fields));
-        if (!hasSlugSupport) {
-          pushIssue(
-            issues,
-            `definitions.${definitionName}.fields.${fieldName}`,
-            `Reference "${fieldName}" resolves by slug, but target "${field.target}" does not expose a slug`
-          );
-        }
-      }
-      if (field.kind === 'mdx' && !schema.mdx?.[field.config]) {
-        pushIssue(
-          issues,
-          `definitions.${definitionName}.fields.${fieldName}`,
-          `MDX config "${field.config}" does not exist`
-        );
-      }
+      validateFieldSchema(
+        field,
+        `definitions.${definitionName}.fields.${fieldName}`,
+        issues,
+        schema
+      );
     }
+  }
+}
+
+function validateFieldSchema(
+  field: FieldDefinition,
+  path: string,
+  issues: ValidationIssue[],
+  schema: SchemaDocument
+) {
+  if (field.kind === 'reference' && !schema.definitions[field.target]) {
+    pushIssue(issues, path, `Reference target "${field.target}" does not exist`);
+  }
+
+  if (field.kind === 'reference' && field.by === 'slug') {
+    const targetDefinition = schema.definitions[field.target];
+    const hasSlugSupport =
+      targetDefinition &&
+      ((targetDefinition.kind === 'collection' ||
+        targetDefinition.kind === 'document') &&
+        (Boolean(targetDefinition.systemFields?.slug) ||
+          'slug' in targetDefinition.fields));
+    if (!hasSlugSupport) {
+      pushIssue(
+        issues,
+        path,
+        `Reference "${path.split('.').pop()}" resolves by slug, but target "${field.target}" does not expose a slug`
+      );
+    }
+  }
+
+  if (field.kind === 'mdx' && !schema.mdx?.[field.config]) {
+    pushIssue(issues, path, `MDX config "${field.config}" does not exist`);
+  }
+
+  if (field.kind === 'object') {
+    for (const [childName, childField] of Object.entries(field.fields)) {
+      validateFieldSchema(childField, `${path}.${childName}`, issues, schema);
+    }
+  } else if (field.kind === 'array') {
+    validateFieldSchema(field.items, `${path}[]`, issues, schema);
+  } else if (field.kind === 'union') {
+    field.variants.forEach((variant, index) => {
+      validateFieldSchema(variant, `${path}|${index}`, issues, schema);
+    });
+  }
+}
+
+function validateSubmissionSchema(
+  submissionName: string,
+  submission: SubmissionDefinition,
+  issues: ValidationIssue[],
+  schema: SchemaDocument
+) {
+  if (!submission.fields || typeof submission.fields !== 'object') {
+    pushIssue(
+      issues,
+      `submissions.${submissionName}.fields`,
+      'Submission fields must be an object'
+    );
+    return;
+  }
+
+  for (const [fieldName, field] of Object.entries(submission.fields)) {
+    validateFieldSchema(
+      field,
+      `submissions.${submissionName}.fields.${fieldName}`,
+      issues,
+      schema
+    );
   }
 }
 
@@ -369,8 +417,16 @@ export function validateSchemaDocument(
     const schema = parseSchema(input as any);
     const issues: ValidationIssue[] = [];
 
-    if (!schema.definitions || Object.keys(schema.definitions).length === 0) {
-      pushIssue(issues, 'definitions', 'At least one definition is required');
+    if (
+      Object.keys(schema.definitions || {}).length === 0 &&
+      Object.keys(schema.events || {}).length === 0 &&
+      Object.keys(schema.submissions || {}).length === 0
+    ) {
+      pushIssue(
+        issues,
+        'root',
+        'At least one definition, event, or submission is required'
+      );
     }
 
     for (const [name, definition] of Object.entries(schema.definitions || {})) {
@@ -379,6 +435,10 @@ export function validateSchemaDocument(
 
     for (const [name, event] of Object.entries(schema.events || {})) {
       validateEventSchema(name, event, issues);
+    }
+
+    for (const [name, submission] of Object.entries(schema.submissions || {})) {
+      validateSubmissionSchema(name, submission as SubmissionDefinition, issues, schema);
     }
 
     return {
