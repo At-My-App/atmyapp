@@ -207,7 +207,11 @@ function validateStructuredObject(
   configs: Record<string, MdxConfigDefinition>
 ): ValidationResult {
   const issues: ValidationIssue[] = [];
-  if (definition.kind !== 'collection' && definition.kind !== 'document') {
+  if (
+    definition.kind !== 'collection' &&
+    definition.kind !== 'document' &&
+    definition.kind !== 'system_config'
+  ) {
     return { valid: true, issues };
   }
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
@@ -261,7 +265,11 @@ export function validateContentAtPath(
   if (!definition) {
     return { valid: true, issues: [] };
   }
-  if (definition.kind !== 'collection' && definition.kind !== 'document') {
+  if (
+    definition.kind !== 'collection' &&
+    definition.kind !== 'document' &&
+    definition.kind !== 'system_config'
+  ) {
     return { valid: true, issues: [] };
   }
 
@@ -289,7 +297,11 @@ function validateDefinitionSchema(
   issues: ValidationIssue[],
   schema: SchemaDocument
 ) {
-  if (definition.kind === 'collection' || definition.kind === 'document') {
+  if (
+    definition.kind === 'collection' ||
+    definition.kind === 'document' ||
+    definition.kind === 'system_config'
+  ) {
     for (const reserved of ['id', 'createdAt', 'updatedAt'] as const) {
       if (reserved in definition.fields) {
         pushIssue(
@@ -326,7 +338,8 @@ function validateFieldSchema(
     const hasSlugSupport =
       targetDefinition &&
       ((targetDefinition.kind === 'collection' ||
-        targetDefinition.kind === 'document') &&
+        targetDefinition.kind === 'document' ||
+        targetDefinition.kind === 'system_config') &&
         (Boolean(targetDefinition.systemFields?.slug) ||
           'slug' in targetDefinition.fields));
     if (!hasSlugSupport) {

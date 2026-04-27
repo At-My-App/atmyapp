@@ -4,8 +4,11 @@ import {
   defineCollection,
   defineEvent,
   defineDocument,
+  defineSystemConfig,
   defineSubmission,
   defineSchema,
+  frameworkPresets,
+  frameworkSystemConfigs,
   getEvent,
   getCollection,
   getDocument,
@@ -434,6 +437,54 @@ describe("@atmyapp/structure compiler", () => {
       requiresCaptcha: true,
       captchaProvider: "hcaptcha",
       hcaptchaSecret: "secret",
+    });
+  });
+
+  it("compiles framework-managed system config definitions", () => {
+    const schema = defineSchema({
+      definitions: {
+        astroWebsiteMetadata: frameworkSystemConfigs.astro.websiteMetadata,
+        customSystemConfig: defineSystemConfig({
+          framework: "astro",
+          systemKey: "custom.config",
+          displayName: "Custom System Config",
+          path: "_SystemConfig/astro/custom.json",
+          managedBy: "framework_preset",
+          fields: {
+            label: s.string({ optional: true, default: "" }),
+          },
+        }),
+      },
+    });
+
+    const compiled = compileSchema(schema);
+    const resolved = resolveDefinitionForPath(
+      compiled,
+      "_SystemConfig/astro/website-metadata.json",
+      "application/json"
+    );
+    const legacy = toLegacyStructure(schema);
+
+    expect(frameworkPresets.astro.systemConfigDefinitions).toEqual([
+      "astroWebsiteMetadata",
+    ]);
+    expect(resolved?.kind).toBe("system_config");
+    expect(resolved?.definition).toMatchObject({
+      framework: "astro",
+      systemKey: "website.metadata",
+      displayName: "Website Configuration - Astro Metadata",
+      managedBy: "framework_preset",
+    });
+    expect(getField(compiled, "astroWebsiteMetadata.title")?.optional).toBe(
+      true
+    );
+    expect(legacy.definitions.astroWebsiteMetadata).toMatchObject({
+      type: "system_config",
+      framework: "astro",
+      systemKey: "website.metadata",
+      displayName: "Website Configuration - Astro Metadata",
+      path: "_SystemConfig/astro/website-metadata.json",
+      managedBy: "framework_preset",
     });
   });
 });

@@ -12,6 +12,7 @@ import type {
   SchemaDocument,
   ScalarFieldDefinition,
   SlugFieldDefinition,
+  SystemConfigDefinition,
   SystemFieldDefinition,
 } from './types';
 import { ensureDocumentPath, isFieldOptional, normalizePath } from './utils';
@@ -537,7 +538,11 @@ function compileLegacyDefinition(
 
   // COMPAT(legacy-structure): accept both the legacy `jsonx` label and the
   // canonical `document` label when parsing persisted/generated structures.
-  if (definition.type === 'jsonx' || definition.type === 'document') {
+  if (
+    definition.type === 'jsonx' ||
+    definition.type === 'document' ||
+    definition.type === 'system_config'
+  ) {
     const structure = definition.structure || {};
     const requiredNames = new Set<string>(
       Array.isArray(structure.required)
@@ -554,6 +559,28 @@ function compileLegacyDefinition(
         fieldSchema,
         requiredNames.has(fieldName)
       );
+    }
+
+    if (definition.type === 'system_config') {
+      return {
+        kind: 'system_config',
+        name,
+        path: normalizePath(definition.path || name),
+        framework: String(definition.framework || ''),
+        systemKey: String(definition.systemKey || name),
+        displayName: String(definition.displayName || definition.description || name),
+        managedBy:
+          definition.managedBy === 'framework_preset'
+            ? 'framework_preset'
+            : 'framework_preset',
+        description:
+          typeof definition.description === 'string'
+            ? definition.description
+            : typeof structure.description === 'string'
+            ? structure.description
+            : undefined,
+        fields,
+      };
     }
 
     return {
@@ -668,7 +695,7 @@ export function toLegacyStructure(
       continue;
     }
 
-    if (definition.kind === 'document') {
+    if (definition.kind === 'document' || definition.kind === 'system_config') {
       const properties: Record<string, any> = {};
       const required: string[] = [];
       for (const [fieldName, field] of Object.entries(definition.fields)) {
@@ -677,18 +704,37 @@ export function toLegacyStructure(
           required.push(fieldName);
         }
       }
-      // COMPAT(legacy-structure): `.structure.json` still persists documents as
-      // `jsonx` during rollout so existing services and projects keep working.
-      definitions[name] = {
-        type: 'jsonx',
-        description: definition.description,
-        structure: {
-          type: 'object',
-          description: definition.description || '',
-          properties,
-          ...(required.length > 0 ? { required } : {}),
-        },
-      };
+      if (definition.kind === 'system_config') {
+        const systemConfig = definition as SystemConfigDefinition;
+        definitions[name] = {
+          type: 'system_config',
+          description: systemConfig.description,
+          framework: systemConfig.framework,
+          systemKey: systemConfig.systemKey,
+          displayName: systemConfig.displayName,
+          path: systemConfig.path,
+          managedBy: systemConfig.managedBy,
+          structure: {
+            type: 'object',
+            description: systemConfig.description || systemConfig.displayName || '',
+            properties,
+            ...(required.length > 0 ? { required } : {}),
+          },
+        };
+      } else {
+        // COMPAT(legacy-structure): `.structure.json` still persists documents as
+        // `jsonx` during rollout so existing services and projects keep working.
+        definitions[name] = {
+          type: 'jsonx',
+          description: definition.description,
+          structure: {
+            type: 'object',
+            description: definition.description || '',
+            properties,
+            ...(required.length > 0 ? { required } : {}),
+          },
+        };
+      }
       continue;
     }
 

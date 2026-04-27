@@ -16,6 +16,7 @@ import type {
   ScalarFieldDefinition,
   SchemaDocument,
   SubmissionDefinition,
+  SystemConfigDefinition,
   SlugFieldDefinition,
   StringFieldFormat,
   UnionFieldDefinition,
@@ -395,6 +396,15 @@ export function defineDocument<
     kind: 'document',
     ...input,
   } as Simplify<T & { kind: 'document' }>;
+}
+
+export function defineSystemConfig<
+  const T extends Omit<SystemConfigDefinition, 'kind'>
+>(input: T): Simplify<T & { kind: 'system_config' }> {
+  return {
+    kind: 'system_config',
+    ...input,
+  } as Simplify<T & { kind: 'system_config' }>;
 }
 
 export function defineFile<

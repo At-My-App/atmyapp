@@ -121,17 +121,21 @@ function normalizeDefinition(name: string, definition: Definition): Definition {
     };
   }
 
-  if (definition.kind === 'document') {
+  if (definition.kind === 'document' || definition.kind === 'system_config') {
     const fields: Record<string, FieldDefinition> = {};
     for (const [fieldName, field] of Object.entries(definition.fields || {})) {
       fields[fieldName] = normalizeField(field);
     }
+    const path =
+      definition.kind === 'system_config'
+        ? normalizePath(definition.path || name)
+        : ensureDocumentPath(definition.path || name);
     return {
       ...definition,
       name,
-      path: ensureDocumentPath(definition.path || name),
+      path,
       fields,
-    };
+    } as Definition;
   }
 
   return {
@@ -319,6 +323,9 @@ function buildPathAliases(name: string, definition: Definition): string[] {
     const documentPath = ensureDocumentPath(definition.path || name);
     aliases.add(normalizePath(documentPath));
     aliases.add(stripExtension(documentPath));
+  } else if (definition.kind === 'system_config') {
+    aliases.add(normalizePath(definition.path));
+    aliases.add(stripExtension(definition.path));
   } else if (definition.kind === 'file' || definition.kind === 'image') {
     aliases.add(normalizePath(definition.path));
     aliases.add(stripExtension(definition.path));
@@ -357,7 +364,11 @@ export function compileSchema(
       definitionKindsByPath[alias] = definition.kind;
     }
 
-    if (definition.kind === 'collection' || definition.kind === 'document') {
+    if (
+      definition.kind === 'collection' ||
+      definition.kind === 'document' ||
+      definition.kind === 'system_config'
+    ) {
       for (const [fieldName, field] of Object.entries(definition.fields)) {
         collectFieldIndexes(
           name,

@@ -3,6 +3,7 @@ import {
   defineCollection,
   defineEvent,
   defineDocument,
+  defineSystemConfig,
   defineSubmission,
   defineSchema,
   s,
@@ -165,5 +166,49 @@ describe("@atmyapp/structure validation", () => {
         issue.message.includes('MDX config "missing" does not exist')
       )
     ).toBe(true);
+  });
+
+  it("validates system config content as structured document content", () => {
+    const compiled = compileSchema(
+      defineSchema({
+        definitions: {
+          astroWebsiteMetadata: defineSystemConfig({
+            framework: "astro",
+            systemKey: "website.metadata",
+            displayName: "Website Configuration - Astro Metadata",
+            path: "_SystemConfig/astro/website-metadata.json",
+            managedBy: "framework_preset",
+            fields: {
+              title: s.string({ optional: true, default: "" }),
+              jsonLd: s.object({
+                optional: true,
+                default: {},
+                additionalProperties: true,
+                fields: {},
+              }),
+            },
+          }),
+        },
+      })
+    );
+
+    expect(
+      validateContentAtPath(
+        compiled,
+        "_SystemConfig/astro/website-metadata.json",
+        JSON.stringify({ title: "Hello", jsonLd: {} }),
+        "application/json"
+      ).valid
+    ).toBe(true);
+
+    const invalid = validateContentAtPath(
+      compiled,
+      "_SystemConfig/astro/website-metadata.json",
+      JSON.stringify({ title: 123 }),
+      "application/json"
+    );
+
+    expect(invalid.valid).toBe(false);
+    expect(invalid.issues[0]?.message).toContain("Expected string");
   });
 });

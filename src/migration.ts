@@ -244,8 +244,12 @@ export function diffSchemas(
     );
 
     if (
-      (currentDefinition.kind === 'collection' || currentDefinition.kind === 'document') &&
-      (nextDefinition.kind === 'collection' || nextDefinition.kind === 'document')
+      (currentDefinition.kind === 'collection' ||
+        currentDefinition.kind === 'document' ||
+        currentDefinition.kind === 'system_config') &&
+      (nextDefinition.kind === 'collection' ||
+        nextDefinition.kind === 'document' ||
+        nextDefinition.kind === 'system_config')
     ) {
       compareFields(name, currentDefinition.fields, nextDefinition.fields, changes);
     }

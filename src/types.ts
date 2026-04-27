@@ -1,4 +1,9 @@
-export type DefinitionKind = 'collection' | 'document' | 'file' | 'image';
+export type DefinitionKind =
+  | 'collection'
+  | 'document'
+  | 'file'
+  | 'image'
+  | 'system_config';
 export type FieldKind =
   | 'scalar'
   | 'object'
@@ -36,6 +41,7 @@ export type ReferenceResolveBy = 'id' | 'slug' | 'path';
 export type LegacyDefinitionType =
   | 'collection'
   | 'document'
+  | 'system_config'
   | 'jsonx'
   | 'file'
   | 'image';
@@ -249,6 +255,16 @@ export interface DocumentDefinition extends DefinitionBase {
   fields: Record<string, FieldDefinition>;
 }
 
+export interface SystemConfigDefinition extends DefinitionBase {
+  kind: 'system_config';
+  framework: string;
+  systemKey: string;
+  displayName: string;
+  path: string;
+  fields: Record<string, FieldDefinition>;
+  managedBy: 'framework_preset' | (string & {});
+}
+
 export interface FileDefinition extends DefinitionBase {
   kind: 'file' | 'image';
   path: string;
@@ -258,6 +274,7 @@ export interface FileDefinition extends DefinitionBase {
 export type Definition =
   | CollectionDefinition
   | DocumentDefinition
+  | SystemConfigDefinition
   | FileDefinition;
 
 export interface SchemaDocument {
@@ -356,6 +373,11 @@ export interface LegacySingleDefinition {
   type: LegacyDefinitionType;
   structure?: any;
   description?: string;
+  framework?: string;
+  systemKey?: string;
+  displayName?: string;
+  path?: string;
+  managedBy?: string;
 }
 
 export interface LegacyStructureDocument {

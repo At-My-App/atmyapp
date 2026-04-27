@@ -14,6 +14,7 @@ import type {
   ReferenceFieldDefinition,
   ScalarFieldDefinition,
   SubmissionDefinition,
+  SystemConfigDefinition,
 } from './types';
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
@@ -133,7 +134,9 @@ type SubmissionAssetFieldValue<
   ? SingleSubmissionAssetValue<TField>[]
   : SingleSubmissionAssetValue<TField>;
 
-type GeneratedSystemFields<TDefinition extends CollectionDefinition | DocumentDefinition> =
+type GeneratedSystemFields<
+  TDefinition extends CollectionDefinition | DocumentDefinition | SystemConfigDefinition,
+> =
   TDefinition extends { systemFields?: { slug?: infer TSlug } }
     ? TSlug extends false | undefined | null
       ? {}
@@ -188,13 +191,16 @@ type StructuredSubmissionObjectValue<
   }
 >;
 
-export type EntryType<TDefinition extends CollectionDefinition | DocumentDefinition> = Simplify<
+export type EntryType<
+  TDefinition extends CollectionDefinition | DocumentDefinition | SystemConfigDefinition,
+> = Simplify<
   StructuredObjectValue<TDefinition['fields']> & GeneratedSystemFields<TDefinition>
 >;
 
 export type DefinitionType<TDefinition extends Definition> = TDefinition extends
   | CollectionDefinition
   | DocumentDefinition
+  | SystemConfigDefinition
   ? EntryType<TDefinition>
   : TDefinition extends FileDefinition
   ? TDefinition['kind'] extends 'image'

@@ -2,7 +2,12 @@ export const MONACO_STRUCTURE_TYPES = `
 declare module "@atmyapp/structure" {
   type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-  export type DefinitionKind = "collection" | "document" | "file" | "image";
+  export type DefinitionKind =
+    | "collection"
+    | "document"
+    | "file"
+    | "image"
+    | "system_config";
   export type FieldKind =
     | "scalar"
     | "object"
@@ -154,6 +159,19 @@ declare module "@atmyapp/structure" {
     fields: Record<string, FieldDefinition>;
   }
 
+  export interface SystemConfigDefinition {
+    kind: "system_config";
+    name?: string;
+    description?: string;
+    systemFields?: Record<string, unknown>;
+    framework: string;
+    systemKey: string;
+    displayName: string;
+    path: string;
+    fields: Record<string, FieldDefinition>;
+    managedBy: "framework_preset" | (string & {});
+  }
+
   export interface FileDefinition {
     kind: "file" | "image";
     name?: string;
@@ -166,6 +184,7 @@ declare module "@atmyapp/structure" {
   export type Definition =
     | CollectionDefinition
     | DocumentDefinition
+    | SystemConfigDefinition
     | FileDefinition;
 
   export interface EventDefinition {
@@ -452,7 +471,7 @@ declare module "@atmyapp/structure" {
       : SingleSubmissionAssetValue<TField>;
 
   type GeneratedSystemFields<
-    TDefinition extends CollectionDefinition | DocumentDefinition,
+    TDefinition extends CollectionDefinition | DocumentDefinition | SystemConfigDefinition,
   > = TDefinition extends { systemFields?: { slug?: infer TSlug } }
     ? TSlug extends false | undefined | null
       ? {}
@@ -542,14 +561,14 @@ declare module "@atmyapp/structure" {
       : never;
 
   export type EntryType<
-    TDefinition extends CollectionDefinition | DocumentDefinition,
+    TDefinition extends CollectionDefinition | DocumentDefinition | SystemConfigDefinition,
   > = Simplify<
     StructuredObjectValue<TDefinition["fields"]> &
       GeneratedSystemFields<TDefinition>
   >;
 
   export type DefinitionType<TDefinition extends Definition> =
-    TDefinition extends CollectionDefinition | DocumentDefinition
+    TDefinition extends CollectionDefinition | DocumentDefinition | SystemConfigDefinition
       ? EntryType<TDefinition>
       : TDefinition extends FileDefinition
       ? TDefinition["kind"] extends "image"
@@ -588,6 +607,9 @@ declare module "@atmyapp/structure" {
   export function defineDocument<
     const T extends Omit<DocumentDefinition, "kind">,
   >(input: T): Simplify<T & { kind: "document" }>;
+  export function defineSystemConfig<
+    const T extends Omit<SystemConfigDefinition, "kind">,
+  >(input: T): Simplify<T & { kind: "system_config" }>;
   export function defineFile<
     const T extends Omit<FileDefinition & { kind: "file" }, "kind">,
   >(input: T): Simplify<T & { kind: "file" }>;
