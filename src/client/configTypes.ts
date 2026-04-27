@@ -1,6 +1,4 @@
-export type AtMyAppConfigArgs = Record<string, unknown> & {
-  usesAtMyAppHeadConfig?: boolean;
-};
+export type AtMyAppConfigArgs = Record<string, unknown>;
 
 export type AtMyAppConfig = {
   include?: string[];

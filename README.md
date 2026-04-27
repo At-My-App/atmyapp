@@ -438,7 +438,9 @@ await client.submissions.submit("contact", {
 
 Generate `<form>` attributes
 ```typescript
-const formParams = await client.submissions.getFormParams("contact");
+const formParams = await client.submissions.getFormParams("contact", {
+  returnTo: "/thank-you",
+});
 
 <form
   action={formParams.action}

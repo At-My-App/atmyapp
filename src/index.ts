@@ -26,8 +26,11 @@ export type {
   LocalDataSourceEntry,
   LocalStorageOptions,
 } from "./client/clientTypes";
-export type { MetaClient } from "./client/meta";
-export type { AtMyAppHeadConfig } from "./client/metaTypes";
+export type {
+  SystemConfigClient,
+  SystemConfigGetInput,
+  SystemConfigResponse,
+} from "./client/systemConfig";
 export type { AtMyAppConfig, AtMyAppConfigArgs } from "./client/configTypes";
 export { createCollectionsClient } from "./client/collections";
 export { createSubmissionsClient } from "./client/submissions";

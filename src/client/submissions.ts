@@ -1,4 +1,4 @@
-import { AtMyAppClientOptions, SubmissionsClient, SubmissionFormEncType, SubmissionFormParams, SubmissionSubmitOptions, SubmissionSubmitResult, SubmissionTypeStatus } from "./clientTypes";
+import { AtMyAppClientOptions, SubmissionsClient, SubmissionFormEncType, SubmissionFormOptions, SubmissionFormParams, SubmissionSubmitOptions, SubmissionSubmitResult, SubmissionTypeStatus } from "./clientTypes";
 import {
   compileSchema,
   type Definition,
@@ -306,6 +306,52 @@ function toSubmissionStatus(record: SubmissionTypeRecord | null): SubmissionType
   };
 }
 
+function resolveReturnToUrl(returnTo: string): string {
+  const trimmed = returnTo.trim();
+  if (!trimmed) {
+    throw new Error("Submission form returnTo cannot be empty");
+  }
+
+  if (trimmed.startsWith("/")) {
+    const runtimeLocation =
+      typeof globalThis !== "undefined" &&
+      "location" in globalThis &&
+      globalThis.location &&
+      typeof globalThis.location.origin === "string"
+        ? globalThis.location
+        : null;
+
+    if (!runtimeLocation?.origin) {
+      throw new Error(
+        'Submission form returnTo paths like "/thank-you" require a browser-like runtime with location.origin'
+      );
+    }
+
+    return new URL(trimmed, runtimeLocation.origin).toString();
+  }
+
+  const url = new URL(trimmed);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Submission form returnTo must use http or https");
+  }
+
+  return url.toString();
+}
+
+function withReturnTo(
+  action: string,
+  options?: SubmissionFormOptions
+): string {
+  const returnTo = options?.returnTo?.trim();
+  if (!returnTo) {
+    return action;
+  }
+
+  const url = new URL(action);
+  url.searchParams.set("returnTo", resolveReturnToUrl(returnTo));
+  return url.toString();
+}
+
 export const createSubmissionsClient = <TSchema = unknown>(
   clientOptions: AtMyAppClientOptions
 ): SubmissionsClient<TSchema> => {
@@ -353,7 +399,10 @@ export const createSubmissionsClient = <TSchema = unknown>(
     return status?.acceptingResponses ?? false;
   }
 
-  async function getFormUrl(submission: string): Promise<string> {
+  async function getFormUrl(
+    submission: string,
+    options?: SubmissionFormOptions
+  ): Promise<string> {
     const data = await request<{ formUrl: string | null }>(
       `/${encodeURIComponent(submission)}/form-url`,
       {
@@ -369,11 +418,14 @@ export const createSubmissionsClient = <TSchema = unknown>(
       throw new Error(`Submission "${submission}" does not have a public form URL`);
     }
 
-    return data.formUrl;
+    return withReturnTo(data.formUrl, options);
   }
 
-  async function getFormParams(submission: string): Promise<SubmissionFormParams> {
-    const action = await getFormUrl(submission);
+  async function getFormParams(
+    submission: string,
+    options?: SubmissionFormOptions
+  ): Promise<SubmissionFormParams> {
+    const action = await getFormUrl(submission, options);
     const encType = inferEncType(compiledSubmissions[submission]);
 
     return {

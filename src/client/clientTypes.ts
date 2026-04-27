@@ -23,7 +23,7 @@ import type {
 import type { AmaContent } from "../definitions/AmaContent";
 import type { AmaFile } from "../definitions/AmaFile";
 import type { AmaImage } from "../definitions/AmaImage";
-import type { MetaClient } from "./meta";
+import type { SystemConfigClient } from "./systemConfig";
 
 export type CanonicalSchemaInput =
   | SchemaDocument
@@ -243,7 +243,7 @@ export type AtMyAppClient<
   analytics: AnalyticsClient<TSchema>;
   collections: CollectionsClient<TSchema>;
   submissions: SubmissionsClient<TSchema>;
-  meta: MetaClient;
+  systemConfig: SystemConfigClient;
 };
 
 export type StorageGetOptions = {
@@ -489,6 +489,10 @@ export type SubmissionFormParams = {
   encType: SubmissionFormEncType;
 };
 
+export type SubmissionFormOptions = {
+  returnTo?: string;
+};
+
 export type SubmissionSubmitOptions = {
   signal?: AbortSignal;
 };
@@ -516,13 +520,21 @@ export type SubmissionsClient<TSchema = unknown> = {
     data: Record<string, unknown> | FormData,
     options?: SubmissionSubmitOptions,
   ): Promise<SubmissionSubmitResult>;
-  getFormUrl<Name extends SubmissionName<TSchema>>(submission: Name): Promise<string>;
-  getFormUrl(submission: SubmissionName<TSchema> extends never ? string : never): Promise<string>;
+  getFormUrl<Name extends SubmissionName<TSchema>>(
+    submission: Name,
+    options?: SubmissionFormOptions,
+  ): Promise<string>;
+  getFormUrl(
+    submission: SubmissionName<TSchema> extends never ? string : never,
+    options?: SubmissionFormOptions,
+  ): Promise<string>;
   getFormParams<Name extends SubmissionName<TSchema>>(
     submission: Name,
+    options?: SubmissionFormOptions,
   ): Promise<SubmissionFormParams>;
   getFormParams(
     submission: SubmissionName<TSchema> extends never ? string : never,
+    options?: SubmissionFormOptions,
   ): Promise<SubmissionFormParams>;
   isAcceptingResponses<Name extends SubmissionName<TSchema>>(
     submission: Name,

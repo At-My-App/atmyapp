@@ -100,6 +100,54 @@ describe("Submissions client", () => {
     });
   });
 
+  it("supports absolute returnTo URLs in form params", async () => {
+    const client = createAtMyAppClient({
+      apiKey: "k",
+      baseUrl: API_BASE_URL,
+      schema,
+    });
+
+    const formParams = await client.submissions.getFormParams("contact", {
+      returnTo: "https://www.example.com/thank-you?source=form",
+    });
+
+    expect(formParams).toEqual({
+      action:
+        "https://edge.atmyapp.com/forms/project/contact?returnTo=https%3A%2F%2Fwww.example.com%2Fthank-you%3Fsource%3Dform",
+      method: "POST",
+      encType: "multipart/form-data",
+    });
+  });
+
+  it("resolves relative returnTo paths against the current origin", async () => {
+    const originalLocation = globalThis.location;
+    Object.defineProperty(globalThis, "location", {
+      value: { origin: "https://site.example.com" },
+      configurable: true,
+    });
+
+    try {
+      const client = createAtMyAppClient({
+        apiKey: "k",
+        baseUrl: API_BASE_URL,
+        schema,
+      });
+
+      const formParams = await client.submissions.getFormParams("contact", {
+        returnTo: "/thank-you",
+      });
+
+      expect(formParams.action).toBe(
+        "https://edge.atmyapp.com/forms/project/contact?returnTo=https%3A%2F%2Fsite.example.com%2Fthank-you"
+      );
+    } finally {
+      Object.defineProperty(globalThis, "location", {
+        value: originalLocation,
+        configurable: true,
+      });
+    }
+  });
+
   it("submits plain JSON payloads for non-file submissions", async () => {
     let contentType: string | null = null;
     let receivedBody: unknown;

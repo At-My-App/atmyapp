@@ -12,11 +12,17 @@ export const preview_json = {
   data: 2,
 };
 
-export const default_head_config = {
-  title: "AtMyApp default title",
-  description: "AtMyApp default description",
-  robots: "index, follow",
-  canonical: "https://example.com",
+export const default_system_config = {
+  framework: "astro",
+  systemKey: "website.metadata",
+  displayName: "Website Configuration - Astro Metadata",
+  path: "_SystemConfig/astro/website-metadata.json",
+  config: {
+    title: "AtMyApp default title",
+    description: "AtMyApp default description",
+    robots: "index, follow",
+    canonical: "https://example.com",
+  },
 };
 
 export const handlers = [
@@ -58,17 +64,18 @@ export const handlers = [
     },
   ),
 
-  // Head config handler
-  http.get(`${API_BASE_URL}/meta/sites/:siteId/head`, ({ params }) => {
-    const siteId = params.siteId as string;
+  // System config handler
+  http.get(`${API_BASE_URL}/system-config/:framework/:systemKey`, ({ params }) => {
+    const framework = params.framework as string;
+    const systemKey = params.systemKey as string;
 
-    if (siteId === "missing") {
+    if (framework === "missing") {
       return new HttpResponse(null, { status: 404 });
     }
 
-    if (siteId === "error") {
+    if (framework === "error") {
       return new HttpResponse(
-        JSON.stringify({ error: "Meta head config failed" }),
+        JSON.stringify({ error: "System config failed" }),
         {
           status: 500,
           headers: { "Content-Type": "application/json" },
@@ -79,8 +86,9 @@ export const handlers = [
     return HttpResponse.json({
       success: true,
       data: {
-        ...default_head_config,
-        siteId,
+        ...default_system_config,
+        framework,
+        systemKey,
       },
     });
   }),

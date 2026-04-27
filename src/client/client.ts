@@ -7,7 +7,7 @@ import {
 import { createStorageClient } from "./storage";
 import { createAnalyticsClient } from "./analytics";
 import { createCollectionsClient } from "./collections";
-import { createMetaClient } from "./meta";
+import { createSystemConfigClient } from "./systemConfig";
 import { createSubmissionsClient } from "./submissions";
 
 export function createAtMyAppClient<const TSchema extends CanonicalSchemaInput>(
@@ -24,6 +24,6 @@ export function createAtMyAppClient<TSchema = unknown>(
     analytics: createAnalyticsClient<TSchema>(options),
     collections: createCollectionsClient<TSchema>(options),
     submissions: createSubmissionsClient<TSchema>(options),
-    meta: createMetaClient(options),
+    systemConfig: createSystemConfigClient(options),
   } as AtMyAppClient<TSchema, boolean>;
 }
