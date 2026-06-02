@@ -245,6 +245,7 @@ export const s = {
     return s.string({
       format: 'short',
       preferredLength: 80,
+      localize: true,
       ...options,
     } as TOptions & {
       format: 'short';
@@ -257,6 +258,7 @@ export const s = {
     return s.string({
       format: 'long',
       preferredLength: 280,
+      localize: true,
       ...options,
     } as TOptions & {
       format: 'long';
@@ -269,6 +271,7 @@ export const s = {
     return s.string({
       format: 'markdown',
       preferredLength: 1200,
+      localize: true,
       ...options,
     } as TOptions & {
       format: 'markdown';

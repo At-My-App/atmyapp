@@ -131,13 +131,14 @@ function compareFields(
   definitionName: string,
   currentFields: Record<string, FieldDefinition>,
   nextFields: Record<string, FieldDefinition>,
-  changes: MigrationChange[]
+  changes: MigrationChange[],
+  pathPrefix: string = definitionName
 ) {
   const names = new Set([...Object.keys(currentFields), ...Object.keys(nextFields)]);
   for (const name of names) {
     const currentField = currentFields[name];
     const nextField = nextFields[name];
-    const fieldPath = `${definitionName}.${name}`;
+    const fieldPath = `${pathPrefix}.${name}`;
 
     if (!currentField && nextField) {
       changes.push({
@@ -183,6 +184,53 @@ function compareFields(
         compatibility: nextField.unique ? 'confirmable_convert' : 'compatible',
       });
     }
+
+    if (Boolean(currentField.localize) !== Boolean(nextField.localize)) {
+      changes.push({
+        kind: 'field_localize_changed',
+        definitionName,
+        fieldPath,
+        compatibility: 'incompatible',
+      });
+    }
+
+    if (
+      currentField.kind === 'array' &&
+      nextField.kind === 'array' &&
+      currentField.identityField !== nextField.identityField
+    ) {
+      changes.push({
+        kind: 'array_identity_field_changed',
+        definitionName,
+        fieldPath,
+        compatibility: 'incompatible',
+      });
+    }
+
+    if (currentField.kind === 'object' && nextField.kind === 'object') {
+      compareFields(
+        definitionName,
+        currentField.fields,
+        nextField.fields,
+        changes,
+        fieldPath
+      );
+    }
+
+    if (
+      currentField.kind === 'array' &&
+      nextField.kind === 'array' &&
+      currentField.items.kind === 'object' &&
+      nextField.items.kind === 'object'
+    ) {
+      compareFields(
+        definitionName,
+        currentField.items.fields,
+        nextField.items.fields,
+        changes,
+        `${fieldPath}[]`
+      );
+    }
   }
 }
 
@@ -195,6 +243,17 @@ export function diffSchemas(
   const currentCompiled = compileSchema(current);
   const nextCompiled = compileSchema(next);
   const changes: MigrationChange[] = [];
+
+  if (
+    Boolean(current.localization?.enabled) !==
+    Boolean(next.localization?.enabled)
+  ) {
+    changes.push({
+      kind: 'localization_changed',
+      definitionName: '*',
+      compatibility: 'incompatible',
+    });
+  }
 
   const names = new Set([
     ...Object.keys(current.definitions),
@@ -234,6 +293,14 @@ export function diffSchemas(
         compatibility: 'incompatible',
       });
       continue;
+    }
+
+    if (Boolean(currentDefinition.localize) !== Boolean(nextDefinition.localize)) {
+      changes.push({
+        kind: 'definition_localize_changed',
+        definitionName: name,
+        compatibility: 'incompatible',
+      });
     }
 
     compareSystemFields(
@@ -347,6 +414,19 @@ function actionForChange(change: MigrationChange): MigrationAction[] {
         ];
       }
       return [];
+    case 'localization_changed':
+    case 'definition_localize_changed':
+    case 'field_localize_changed':
+    case 'array_identity_field_changed':
+      return [
+        {
+          type: 'require_clear',
+          definitionName: change.definitionName,
+          fieldPath: change.fieldPath,
+          message: `Localized storage metadata changed for "${change.fieldPath || change.definitionName}" and scoped data must be cleared explicitly.`,
+          compatibility: change.compatibility,
+        },
+      ];
     default:
       return [];
   }

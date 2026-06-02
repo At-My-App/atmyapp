@@ -254,12 +254,14 @@ describe("@atmyapp/structure compiler", () => {
       maxLength: 120,
       preferredLength: 80,
       default: "Welcome",
+      localize: true,
     });
     expect(body).toMatchObject({
       kind: "scalar",
       scalar: "string",
       format: "markdown",
       preferredLength: 1200,
+      localize: true,
       optional: true,
     });
     expect(retries).toMatchObject({
@@ -274,6 +276,50 @@ describe("@atmyapp/structure compiler", () => {
     expect(getDocument(compiled, "settings")?.definition.path).toBe(
       "content/site.json"
     );
+  });
+
+  it("preserves localization metadata through canonical and legacy compilation", () => {
+    const schema = defineSchema({
+      localization: { enabled: true },
+      definitions: {
+        menu: defineDocument({
+          localize: true,
+          fields: {
+            title: s.shortText(),
+            rawCode: s.string(),
+            items: s.array({
+              identityField: "id",
+              items: s.object({
+                fields: {
+                  id: s.string(),
+                  label: s.longText(),
+                },
+              }),
+            }),
+          },
+        }),
+      },
+    });
+
+    const compiled = compileSchema(schema);
+    const legacy = toLegacyStructure(schema);
+    const roundTrip = compileSchema(legacy);
+
+    expect(compiled.document.localization).toEqual({ enabled: true });
+    expect(getDocument(compiled, "menu")?.definition.localize).toBe(true);
+    expect(getField(compiled, "menu.title")?.localize).toBe(true);
+    expect(getField(compiled, "menu.rawCode")?.localize).toBeUndefined();
+    expect(getField(compiled, "menu.items")).toMatchObject({
+      kind: "array",
+      identityField: "id",
+    });
+    expect(legacy.localization).toEqual({ enabled: true });
+    expect(legacy.definitions.menu.localize).toBe(true);
+    expect(roundTrip.document.localization).toEqual({ enabled: true });
+    expect(getField(roundTrip, "menu.items")).toMatchObject({
+      kind: "array",
+      identityField: "id",
+    });
   });
 
   it("supports DX-friendly composite field inputs on s", () => {

@@ -211,4 +211,77 @@ describe("@atmyapp/structure validation", () => {
     expect(invalid.valid).toBe(false);
     expect(invalid.issues[0]?.message).toContain("Expected string");
   });
+
+  it("requires project opt-in and stable scalar identities for localized resources", () => {
+    const disabled = validateSchemaDocument(
+      defineSchema({
+        definitions: {
+          menu: defineDocument({
+            localize: true,
+            fields: {
+              title: s.shortText(),
+            },
+          }),
+        },
+      })
+    );
+    expect(disabled.valid).toBe(false);
+    expect(disabled.issues.some((issue) =>
+      issue.message.includes("requires localization.enabled")
+    )).toBe(true);
+
+    const missingIdentity = validateSchemaDocument(
+      defineSchema({
+        localization: { enabled: true },
+        definitions: {
+          menu: defineDocument({
+            localize: true,
+            fields: {
+              items: s.array({
+                items: s.object({
+                  fields: {
+                    id: s.string(),
+                    label: s.shortText(),
+                  },
+                }),
+              }),
+            },
+          }),
+        },
+      })
+    );
+    expect(missingIdentity.valid).toBe(false);
+    expect(missingIdentity.issues.some((issue) =>
+      issue.message.includes("require identityField")
+    )).toBe(true);
+  });
+
+  it("rejects localized binary resources and non-string localized fields", () => {
+    const result = validateSchemaDocument(
+      defineSchema({
+        localization: { enabled: true },
+        definitions: {
+          logo: {
+            kind: "image",
+            path: "logo.png",
+            localize: true,
+          },
+          menu: defineDocument({
+            localize: true,
+            fields: {
+              rank: s.number({ localize: true }),
+            },
+          }),
+        },
+      })
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((issue) =>
+      issue.message.includes("Localized image definitions are not supported")
+    )).toBe(true);
+    expect(result.issues.some((issue) =>
+      issue.message.includes("Only string and MDX leaf fields")
+    )).toBe(true);
+  });
 });

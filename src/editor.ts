@@ -45,6 +45,7 @@ declare module "@atmyapp/structure" {
   export interface FieldBase {
     kind: FieldKind;
     description?: string;
+    localize?: boolean;
     optional?: boolean;
     required?: boolean;
     unique?: boolean;
@@ -87,6 +88,7 @@ declare module "@atmyapp/structure" {
   export interface ArrayFieldDefinition extends FieldBase {
     kind: "array";
     items: FieldDefinition;
+    identityField?: string;
     minItems?: number;
     maxItems?: number;
     uniqueItems?: boolean;
@@ -145,6 +147,7 @@ declare module "@atmyapp/structure" {
     kind: "collection";
     name?: string;
     description?: string;
+    localize?: boolean;
     systemFields?: Record<string, unknown>;
     fields: Record<string, FieldDefinition>;
     indexes?: Array<string | string[]>;
@@ -154,6 +157,7 @@ declare module "@atmyapp/structure" {
     kind: "document";
     name?: string;
     description?: string;
+    localize?: boolean;
     systemFields?: Record<string, unknown>;
     path?: string;
     fields: Record<string, FieldDefinition>;
@@ -163,6 +167,7 @@ declare module "@atmyapp/structure" {
     kind: "system_config";
     name?: string;
     description?: string;
+    localize?: boolean;
     systemFields?: Record<string, unknown>;
     framework: string;
     systemKey: string;
@@ -176,6 +181,7 @@ declare module "@atmyapp/structure" {
     kind: "file" | "image";
     name?: string;
     description?: string;
+    localize?: boolean;
     systemFields?: Record<string, unknown>;
     path: string;
     config?: Record<string, unknown>;
@@ -209,6 +215,9 @@ declare module "@atmyapp/structure" {
   export interface SchemaDocument {
     version: 1;
     description?: string;
+    localization?: {
+      enabled: boolean;
+    };
     definitions: Record<string, Definition>;
     events?: Record<string, EventDefinition>;
     args?: Record<string, unknown>;
@@ -296,13 +305,13 @@ declare module "@atmyapp/structure" {
     ): Simplify<{ kind: "scalar"; scalar: "string" } & TOptions>;
     shortText<const TOptions extends StringFieldOptions = {}>(
       options?: TOptions,
-    ): Simplify<{ kind: "scalar"; scalar: "string"; format: "short"; preferredLength: number } & TOptions>;
+    ): Simplify<{ kind: "scalar"; scalar: "string"; format: "short"; preferredLength: number; localize: true } & TOptions>;
     longText<const TOptions extends StringFieldOptions = {}>(
       options?: TOptions,
-    ): Simplify<{ kind: "scalar"; scalar: "string"; format: "long"; preferredLength: number } & TOptions>;
+    ): Simplify<{ kind: "scalar"; scalar: "string"; format: "long"; preferredLength: number; localize: true } & TOptions>;
     markdown<const TOptions extends StringFieldOptions = {}>(
       options?: TOptions,
-    ): Simplify<{ kind: "scalar"; scalar: "string"; format: "markdown"; preferredLength: number } & TOptions>;
+    ): Simplify<{ kind: "scalar"; scalar: "string"; format: "markdown"; preferredLength: number; localize: true } & TOptions>;
     email<const TOptions extends StringFieldOptions = {}>(
       options?: TOptions,
     ): Simplify<{ kind: "scalar"; scalar: "string"; format: "email" } & TOptions>;

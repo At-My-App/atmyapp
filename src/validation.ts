@@ -297,6 +297,33 @@ function validateDefinitionSchema(
   issues: ValidationIssue[],
   schema: SchemaDocument
 ) {
+  if (definition.localize === true) {
+    if (schema.localization?.enabled !== true) {
+      pushIssue(
+        issues,
+        `definitions.${definitionName}.localize`,
+        'Resource localization requires localization.enabled'
+      );
+    }
+    if (definition.kind === 'image' || definition.kind === 'system_config') {
+      pushIssue(
+        issues,
+        `definitions.${definitionName}.localize`,
+        `Localized ${definition.kind} definitions are not supported`
+      );
+    }
+    if (
+      definition.kind === 'file' &&
+      !/\.(md|markdown|txt)$/i.test(definition.path)
+    ) {
+      pushIssue(
+        issues,
+        `definitions.${definitionName}.localize`,
+        'Only Markdown and text files can be localized'
+      );
+    }
+  }
+
   if (
     definition.kind === 'collection' ||
     definition.kind === 'document' ||
@@ -329,6 +356,14 @@ function validateFieldSchema(
   issues: ValidationIssue[],
   schema: SchemaDocument
 ) {
+  if (field.localize === true && !isLocalizableLeaf(field)) {
+    pushIssue(
+      issues,
+      `${path}.localize`,
+      'Only string and MDX leaf fields can be localized'
+    );
+  }
+
   if (field.kind === 'reference' && !schema.definitions[field.target]) {
     pushIssue(issues, path, `Reference target "${field.target}" does not exist`);
   }
@@ -360,12 +395,61 @@ function validateFieldSchema(
       validateFieldSchema(childField, `${path}.${childName}`, issues, schema);
     }
   } else if (field.kind === 'array') {
+    if (
+      hasLocalizedDescendant(field.items) &&
+      field.items.kind === 'object'
+    ) {
+      const identityField = field.identityField;
+      const identity = identityField
+        ? field.items.fields[identityField]
+        : undefined;
+      if (!identityField) {
+        pushIssue(
+          issues,
+          `${path}.identityField`,
+          'Arrays of objects with localized descendants require identityField'
+        );
+      } else if (
+        !identity ||
+        identity.kind !== 'scalar' ||
+        identity.localize === true
+      ) {
+        pushIssue(
+          issues,
+          `${path}.identityField`,
+          'identityField must reference a non-localized scalar field'
+        );
+      }
+    }
     validateFieldSchema(field.items, `${path}[]`, issues, schema);
   } else if (field.kind === 'union') {
     field.variants.forEach((variant, index) => {
       validateFieldSchema(variant, `${path}|${index}`, issues, schema);
     });
   }
+}
+
+function isLocalizableLeaf(field: FieldDefinition): boolean {
+  return (
+    (field.kind === 'scalar' && field.scalar === 'string') ||
+    field.kind === 'mdx'
+  );
+}
+
+function hasLocalizedDescendant(field: FieldDefinition): boolean {
+  if (field.localize === true && isLocalizableLeaf(field)) {
+    return true;
+  }
+  if (field.kind === 'object') {
+    return Object.values(field.fields).some(hasLocalizedDescendant);
+  }
+  if (field.kind === 'array') {
+    return hasLocalizedDescendant(field.items);
+  }
+  if (field.kind === 'union') {
+    return field.variants.some(hasLocalizedDescendant);
+  }
+  return false;
 }
 
 function validateSubmissionSchema(

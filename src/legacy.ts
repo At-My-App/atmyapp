@@ -41,6 +41,8 @@ function legacyFieldToCanonical(
 
   const description =
     typeof schema.description === 'string' ? schema.description : undefined;
+  const localization =
+    typeof schema.localize === 'boolean' ? { localize: schema.localize } : {};
 
   // COMPAT(legacy-structure): support legacy __amatype markers while older
   // generated .structure payloads still rely on them.
@@ -50,6 +52,7 @@ function legacyFieldToCanonical(
       config: String(schema.mdxConfig || schema.mdx_config || 'default'),
       description,
       optional,
+      ...localization,
     };
   }
 
@@ -65,6 +68,7 @@ function legacyFieldToCanonical(
       multiple: false,
       description,
       optional,
+      ...localization,
       config:
         schema.config && typeof schema.config === 'object'
           ? schema.config
@@ -94,6 +98,7 @@ function legacyFieldToCanonical(
       items: item,
       description,
       optional,
+      ...localization,
       minItems:
         typeof schema.minItems === 'number' ? schema.minItems : undefined,
       maxItems:
@@ -102,6 +107,11 @@ function legacyFieldToCanonical(
         typeof schema.uniqueItems === 'boolean'
           ? schema.uniqueItems
           : undefined,
+      identityField:
+        typeof schema.identityField === 'string'
+          ? schema.identityField
+          : undefined,
+      ...localization,
     };
   }
 
@@ -113,6 +123,7 @@ function legacyFieldToCanonical(
       ),
       description,
       optional,
+      ...localization,
     };
   }
 
@@ -134,6 +145,7 @@ function legacyFieldToCanonical(
       description,
       optional,
       default: schema.default,
+      ...localization,
     };
   }
 
@@ -163,6 +175,7 @@ function legacyFieldToCanonical(
           ? schema.additionalProperties
           : undefined,
       default: schema.default,
+      ...localization,
     };
   }
 
@@ -181,6 +194,7 @@ function legacyFieldToCanonical(
         typeof schema.source === 'string' ? schema.source : undefined,
       updatePolicy:
         schema.updatePolicy === 'on_change' ? 'on_change' : 'immutable',
+      ...localization,
     };
   }
 
@@ -208,6 +222,7 @@ function legacyFieldToCanonical(
       accept: Array.isArray(schema.accept)
         ? schema.accept.filter((entry: unknown): entry is string => typeof entry === 'string')
         : undefined,
+      ...localization,
     };
   }
 
@@ -231,6 +246,7 @@ function legacyFieldToCanonical(
           : schema.onDelete === 'restrict'
           ? 'restrict'
           : undefined,
+      ...localization,
     };
   }
 
@@ -257,6 +273,7 @@ function legacyFieldToCanonical(
     maximum: typeof schema.maximum === 'number' ? schema.maximum : undefined,
     pattern: typeof schema.pattern === 'string' ? schema.pattern : undefined,
     format: typeof schema.format === 'string' ? schema.format : undefined,
+    ...localization,
   };
 
   return scalar;
@@ -269,6 +286,9 @@ function canonicalFieldToLegacy(field: FieldDefinition): any {
   }
   if (field.default !== undefined) {
     base['default'] = field.default;
+  }
+  if (typeof field.localize === 'boolean') {
+    base['localize'] = field.localize;
   }
 
   switch (field.kind) {
@@ -323,6 +343,7 @@ function canonicalFieldToLegacy(field: FieldDefinition): any {
         ...(field.uniqueItems !== undefined
           ? { uniqueItems: field.uniqueItems }
           : {}),
+        ...(field.identityField ? { identityField: field.identityField } : {}),
       };
     case 'union':
       return {
@@ -511,6 +532,7 @@ function compileLegacyDefinition(
           : typeof structure.description === 'string'
           ? structure.description
           : undefined,
+      localize: definition.localize,
       fields,
       indexes: Array.isArray(structure.indexes)
         ? structure.indexes.filter(
@@ -579,6 +601,7 @@ function compileLegacyDefinition(
             : typeof structure.description === 'string'
             ? structure.description
             : undefined,
+        localize: definition.localize,
         fields,
       };
     }
@@ -593,6 +616,7 @@ function compileLegacyDefinition(
           : typeof structure.description === 'string'
           ? structure.description
           : undefined,
+      localize: definition.localize,
       fields,
     };
   }
@@ -602,6 +626,7 @@ function compileLegacyDefinition(
     name,
     path: normalizePath(name),
     description: definition.description,
+    localize: definition.localize,
     config:
       definition.structure && typeof definition.structure === 'object'
         ? definition.structure
@@ -634,6 +659,10 @@ export function compileLegacyStructure(
   return {
     version: 1,
     description: raw.description,
+    localization:
+      raw.localization && typeof raw.localization === 'object'
+        ? { enabled: raw.localization.enabled === true }
+        : { enabled: false },
     definitions,
     events,
     args:
@@ -682,6 +711,7 @@ export function toLegacyStructure(
       }
       definitions[name] = {
         type: 'collection',
+        localize: definition.localize,
         description: definition.description,
         structure: {
           description: definition.description || '',
@@ -708,6 +738,7 @@ export function toLegacyStructure(
         const systemConfig = definition as SystemConfigDefinition;
         definitions[name] = {
           type: 'system_config',
+          localize: systemConfig.localize,
           description: systemConfig.description,
           framework: systemConfig.framework,
           systemKey: systemConfig.systemKey,
@@ -726,6 +757,7 @@ export function toLegacyStructure(
         // `jsonx` during rollout so existing services and projects keep working.
         definitions[name] = {
           type: 'jsonx',
+          localize: definition.localize,
           description: definition.description,
           structure: {
             type: 'object',
@@ -740,6 +772,7 @@ export function toLegacyStructure(
 
     definitions[name] = {
       type: definition.kind,
+      localize: definition.localize,
       description: definition.description,
       structure:
         definition.config && typeof definition.config === 'object'
@@ -763,6 +796,7 @@ export function toLegacyStructure(
 
   return {
     description: schema.description,
+    localization: schema.localization,
     definitions,
     events,
     args: schema.args || {},

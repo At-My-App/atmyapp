@@ -105,6 +105,7 @@ export type SubmissionInputDefinition =
 export interface FieldBase {
   kind: FieldKind;
   description?: string;
+  localize?: boolean;
   optional?: boolean;
   required?: boolean;
   unique?: boolean;
@@ -164,6 +165,7 @@ export interface ObjectFieldDefinition extends FieldBase {
 export interface ArrayFieldDefinition extends FieldBase {
   kind: 'array';
   items: FieldDefinition;
+  identityField?: string;
   minItems?: number;
   maxItems?: number;
   uniqueItems?: boolean;
@@ -240,6 +242,7 @@ export interface DefinitionBase {
   kind: DefinitionKind;
   name?: string;
   description?: string;
+  localize?: boolean;
   systemFields?: Partial<Record<SystemFieldName, SystemFieldInput>>;
 }
 
@@ -280,6 +283,9 @@ export type Definition =
 export interface SchemaDocument {
   version: 1;
   description?: string;
+  localization?: {
+    enabled: boolean;
+  };
   definitions: Record<string, Definition>;
   events?: Record<string, EventDefinition>;
   args?: Record<string, unknown>;
@@ -336,6 +342,10 @@ export interface MigrationChange {
     | 'field_removed'
     | 'field_type_changed'
     | 'field_unique_changed'
+    | 'localization_changed'
+    | 'definition_localize_changed'
+    | 'field_localize_changed'
+    | 'array_identity_field_changed'
     | 'system_field_changed'
     | 'index_added'
     | 'index_removed';
@@ -371,6 +381,7 @@ export interface MigrationPlan {
 
 export interface LegacySingleDefinition {
   type: LegacyDefinitionType;
+  localize?: boolean;
   structure?: any;
   description?: string;
   framework?: string;
@@ -382,6 +393,9 @@ export interface LegacySingleDefinition {
 
 export interface LegacyStructureDocument {
   description?: string;
+  localization?: {
+    enabled: boolean;
+  };
   definitions: Record<string, LegacySingleDefinition>;
   events?: Record<string, EventDefinition>;
   args?: Record<string, unknown>;

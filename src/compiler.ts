@@ -246,6 +246,10 @@ export function normalizeSchema(input: SchemaDocument): SchemaDocument {
   return {
     version: 1,
     description: input.description,
+    localization:
+      input.localization && typeof input.localization === 'object'
+        ? { enabled: input.localization.enabled === true }
+        : { enabled: false },
     definitions,
     events,
     args:
