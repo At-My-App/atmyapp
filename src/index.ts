@@ -25,6 +25,11 @@ export type {
   LocalDataSource,
   LocalDataSourceEntry,
   LocalStorageOptions,
+  LocaleStatus,
+  LocalizationStatus,
+  CollectionLocalizationSummary,
+  LocalizationDiscovery,
+  LocalizationClient,
 } from "./client/clientTypes";
 export type {
   SystemConfigClient,

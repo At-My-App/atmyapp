@@ -261,4 +261,30 @@ describe("Storage client", () => {
       "Request failed"
     );
   });
+
+  it("propagates locale defaults and per-call overrides", async () => {
+    const urls: URL[] = [];
+    server.use(
+      http.get(`${API_BASE_URL}/storage/f/content/site.json`, ({ request }) => {
+        urls.push(new URL(request.url));
+        return HttpResponse.json({ theme: "sunrise", retries: 5 });
+      }),
+    );
+
+    const client = createAtMyAppClient({
+      apiKey: "k",
+      baseUrl: API_BASE_URL,
+      schema,
+      locale: "pl",
+    });
+
+    await client.storage.getValue("settings");
+    await client.storage.getValue("settings", { locale: "de" });
+
+    expect(urls[0].searchParams.get("locale")).toBe("pl");
+    expect(urls[1].searchParams.get("locale")).toBe("de");
+    await expect(client.storage.getStaticUrl("assets/logo.png")).rejects.toThrow(
+      "Locale-specific static URLs are not supported",
+    );
+  });
 });

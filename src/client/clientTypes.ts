@@ -244,10 +244,12 @@ export type AtMyAppClient<
   collections: CollectionsClient<TSchema>;
   submissions: SubmissionsClient<TSchema>;
   systemConfig: SystemConfigClient;
+  localization: LocalizationClient;
 };
 
 export type StorageGetOptions = {
   previewKey?: string;
+  locale?: string;
 };
 
 type StorageDefinition = DocumentDefinition | FileDefinition;
@@ -438,6 +440,7 @@ export type AtMyAppClientOptions = {
   schema?: CanonicalSchemaInput;
   customFetch?: typeof fetch;
   previewKey?: string;
+  locale?: string;
   plugins?: string[];
   /**
    * Controls how collection and storage reads behave when a request fails or data is missing.
@@ -621,6 +624,7 @@ export type CollectionsListOptions<Format extends CollectionsFormat = "data"> =
     filter?: CollectionsFilterExpr;
     previewKey?: string;
     plugins?: string[];
+    locale?: string;
     format?: Format;
   };
 
@@ -628,6 +632,43 @@ export type CollectionsResponse<Row = any> = {
   success: boolean;
   data?: Row[];
   error?: string;
+};
+
+export type LocaleStatus =
+  | "missing"
+  | "incomplete"
+  | "current"
+  | "outdated";
+
+export type LocalizationStatus = {
+  locale: string;
+  status: LocaleStatus;
+  missingPathCount: number;
+  outdatedPathCount: number;
+};
+
+export type CollectionLocalizationSummary = {
+  locale: string;
+  total: number;
+  incomplete: number;
+  current: number;
+  outdated: number;
+};
+
+export type LocalizationDiscovery<T> = {
+  defaultLocale: string | null;
+  locales: T[];
+};
+
+export type LocalizationClient = {
+  getStorageLocales(path: string): Promise<LocalizationDiscovery<LocalizationStatus>>;
+  getCollectionLocales(
+    collection: string,
+  ): Promise<LocalizationDiscovery<CollectionLocalizationSummary>>;
+  getCollectionEntryLocales(
+    collection: string,
+    entryId: string | number,
+  ): Promise<LocalizationDiscovery<LocalizationStatus>>;
 };
 
 export type CollectionsResponseRaw<Row = any> = {

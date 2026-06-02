@@ -162,6 +162,10 @@ export const createCollectionsClient = <TSchema = unknown>(
     if (previewKey) {
       query["amaPreviewKey"] = previewKey;
     }
+    const locale = options?.locale || clientOptions.locale;
+    if (locale) {
+      query["locale"] = locale;
+    }
 
     // In online mode, just fetch from API
     if (clientMode === "online") {

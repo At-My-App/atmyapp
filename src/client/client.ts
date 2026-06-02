@@ -9,6 +9,7 @@ import { createAnalyticsClient } from "./analytics";
 import { createCollectionsClient } from "./collections";
 import { createSystemConfigClient } from "./systemConfig";
 import { createSubmissionsClient } from "./submissions";
+import { createLocalizationClient } from "./localization";
 
 export function createAtMyAppClient<const TSchema extends CanonicalSchemaInput>(
   options: Omit<AtMyAppClientOptions, "schema"> & { schema: TSchema },
@@ -25,5 +26,6 @@ export function createAtMyAppClient<TSchema = unknown>(
     collections: createCollectionsClient<TSchema>(options),
     submissions: createSubmissionsClient<TSchema>(options),
     systemConfig: createSystemConfigClient(options),
+    localization: createLocalizationClient(options),
   } as AtMyAppClient<TSchema, boolean>;
 }

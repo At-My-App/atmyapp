@@ -129,6 +129,30 @@ describe("Collections client", () => {
     expect(requestUrl?.searchParams.get("limit")).toBe("1");
   });
 
+  it("propagates locale defaults and per-call overrides", async () => {
+    const urls: URL[] = [];
+    server.use(
+      http.get(`${API_BASE_URL}/collections/:collection/entries`, ({ request }) => {
+        urls.push(new URL(request.url));
+        return HttpResponse.json({
+          success: true,
+          data: { entries: [], total: 0 },
+        });
+      }),
+    );
+
+    const client = createAtMyAppClient({
+      apiKey: "k",
+      baseUrl: API_BASE_URL,
+      locale: "pl",
+    });
+    await client.collections.list("orders");
+    await client.collections.list("orders", { locale: "de" });
+
+    expect(urls[0].searchParams.get("locale")).toBe("pl");
+    expect(urls[1].searchParams.get("locale")).toBe("de");
+  });
+
   it("rejects AND inside OR with a clear error", async () => {
     const client = createAtMyAppClient({ apiKey: "k", baseUrl: API_BASE_URL });
     await expect(

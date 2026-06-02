@@ -291,6 +291,10 @@ export const createStorageClient = (
     if (previewKey) {
       query.amaPreviewKey = previewKey;
     }
+    const locale = options?.locale || clientOptions.locale;
+    if (locale) {
+      query.locale = locale;
+    }
 
     // In online mode, just fetch from API
     if (clientMode === "online") {
@@ -578,6 +582,9 @@ export const createStorageClient = (
   };
 
   const getStaticUrl = async (path: string, options?: StorageGetOptions) => {
+    if (options?.locale || clientOptions.locale) {
+      throw new Error("Locale-specific static URLs are not supported");
+    }
     // In local mode, return file:// URL
     if (clientMode === "local") {
       try {
