@@ -156,6 +156,40 @@ describe("CLI runtime canonical APIs", () => {
     });
   });
 
+  it("preserves project localization in generated and uploaded structure output", async () => {
+    const result = compileCanonicalSource({
+      filename: "atmyapp.schema.ts",
+      code: `
+        import { defineSchema } from "@atmyapp/structure";
+
+        export default defineSchema({
+          definitions: {},
+          localization: {
+            enabled: true,
+          },
+        });
+      `,
+    });
+
+    expect(result.output?.localization).toEqual({ enabled: true });
+
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await uploadStructure({
+      output: result.output!,
+      url: "https://edge.atmyapp.test",
+      fetchImplementation: fetchMock as unknown as typeof fetch,
+    });
+
+    const request = fetchMock.mock.calls[0][1];
+    const body = JSON.parse(request.body);
+    expect(JSON.parse(body.content).localization).toEqual({ enabled: true });
+  });
+
   it("parses destructive migration conflicts from upload responses", async () => {
     const result = await uploadStructure({
       output: {

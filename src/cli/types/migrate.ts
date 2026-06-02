@@ -19,6 +19,9 @@ export interface SubmissionConfig {
 
 export interface OutputDefinition {
   description: string;
+  localization?: {
+    enabled: boolean;
+  };
   definitions: Record<string, { structure: any; type?: string; description?: string }>;
   events: Record<string, EventConfig>;
   args: Record<string, unknown>;

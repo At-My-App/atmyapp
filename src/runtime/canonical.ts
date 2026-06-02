@@ -139,28 +139,30 @@ export function generateLegacyOutput(
   config: Record<string, unknown> = {},
 ): OutputDefinition {
   const compiled = compileSchema(schema);
+  const legacyStructure = compiled.legacyStructure;
   const output: OutputDefinition = {
+    ...legacyStructure,
     description:
-      compiled.legacyStructure.description ||
+      legacyStructure.description ||
       (typeof config.description === "string"
         ? config.description
         : "AMA Definitions"),
     definitions:
-      compiled.legacyStructure.definitions as OutputDefinition["definitions"],
-    events: ((((compiled.legacyStructure as any).events ||
+      legacyStructure.definitions as OutputDefinition["definitions"],
+    events: ((((legacyStructure as any).events ||
       (schema as any).events) ??
       {}) as OutputDefinition["events"]),
-    args: (compiled.legacyStructure.args || {}) as Record<string, unknown>,
-    ...(compiled.legacyStructure.mdx
-      ? { mdx: compiled.legacyStructure.mdx as OutputDefinition["mdx"] }
+    args: (legacyStructure.args || {}) as Record<string, unknown>,
+    ...(legacyStructure.mdx
+      ? { mdx: legacyStructure.mdx as OutputDefinition["mdx"] }
       : {}),
-    ...(compiled.legacyStructure.submissions
+    ...(legacyStructure.submissions
       ? {
           submissions:
-            compiled.legacyStructure.submissions as OutputDefinition["submissions"],
+            legacyStructure.submissions as OutputDefinition["submissions"],
         }
       : {}),
-  };
+  } as OutputDefinition;
 
   output.metadata = buildMetadata(output, config);
 
