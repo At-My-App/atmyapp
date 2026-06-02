@@ -157,16 +157,6 @@ function validateProjectConfig(
       throw new Error(`Invalid \"args\" in ${configPath}. Expected object.`);
     }
 
-    if (
-      "usesAtMyAppHeadConfig" in value.args &&
-      value.args.usesAtMyAppHeadConfig !== undefined &&
-      typeof value.args.usesAtMyAppHeadConfig !== "boolean"
-    ) {
-      throw new Error(
-        `Invalid \"args.usesAtMyAppHeadConfig\" in ${configPath}. Expected boolean.`,
-      );
-    }
-
     config.args = value.args;
   }
 

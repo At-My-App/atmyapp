@@ -174,7 +174,7 @@ Supported fields:
 export default {
   description: "Marketing site schema",
   args: {
-    usesAtMyAppHeadConfig: true,
+    locale: "en",
   },
   metadata: {
     source: "cli",

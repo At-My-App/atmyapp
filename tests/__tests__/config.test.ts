@@ -39,12 +39,12 @@ describe("project configuration loading", () => {
     const projectRoot = createTempProject();
     writeFileSync(
       path.join(projectRoot, "atmyapp.config.js"),
-      "module.exports = { args: { usesAtMyAppHeadConfig: true } };\n"
+      "module.exports = { args: { locale: 'en' } };\n"
     );
 
     const config = loadProjectConfig(projectRoot);
 
-    expect(config.args).toEqual({ usesAtMyAppHeadConfig: true });
+    expect(config.args).toEqual({ locale: "en" });
   });
 
   it("loads a .ts project config", () => {
@@ -54,7 +54,7 @@ describe("project configuration loading", () => {
       [
         "const config = {",
         "  description: 'From TS',",
-        "  args: { usesAtMyAppHeadConfig: true }",
+        "  args: { locale: 'en' }",
         "};",
         "export default config;",
       ].join("\n")
@@ -63,7 +63,7 @@ describe("project configuration loading", () => {
     const config = loadProjectConfig(projectRoot);
 
     expect(config.description).toBe("From TS");
-    expect(config.args).toEqual({ usesAtMyAppHeadConfig: true });
+    expect(config.args).toEqual({ locale: "en" });
   });
 
   it("merges migration fields from project config with session values", () => {
@@ -99,7 +99,7 @@ describe("project configuration loading", () => {
       [
         "module.exports = {",
         "  description: 'Project description',",
-        "  args: { usesAtMyAppHeadConfig: true, conflictKey: 'project' },",
+        "  args: { locale: 'en', conflictKey: 'project' },",
         "  metadata: { source: 'project', extra: true }",
         "};",
       ].join("\n")
@@ -115,7 +115,7 @@ describe("project configuration loading", () => {
 
     expect(merged.args).toEqual({
       legacyOnly: true,
-      usesAtMyAppHeadConfig: true,
+      locale: "en",
       conflictKey: "project",
     });
 
