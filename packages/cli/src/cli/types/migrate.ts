@@ -1,0 +1,51 @@
+export interface Content {
+  path: string;
+  structure: any;
+  type?: string;
+}
+
+export interface EventConfig {
+  columns: string[];
+  description?: string;
+}
+
+export interface SubmissionConfig {
+  description?: string;
+  fields: Record<string, unknown>;
+  requiresCaptcha?: boolean;
+  captchaProvider?: string;
+  hcaptchaSecret?: string;
+}
+
+export interface OutputDefinition {
+  description: string;
+  localization?: {
+    enabled: boolean;
+  };
+  definitions: Record<string, { structure: any; type?: string; description?: string }>;
+  events: Record<string, EventConfig>;
+  args: Record<string, unknown>;
+  submissions?: Record<string, SubmissionConfig>;
+  metadata?: any;
+  mdx?: Record<
+    string,
+    { components: Record<string, { props?: Record<string, string> }> }
+  >;
+}
+
+export interface MigrateOptions {
+  dryRun: boolean;
+  verbose: boolean;
+}
+
+export interface TypeTransformer {
+  canTransform: (obj: any) => boolean;
+  transform: (obj: any) => any;
+}
+
+export interface ProcessingResult {
+  contents: Content[];
+  errors: string[];
+  successCount: number;
+  failureCount: number;
+}
