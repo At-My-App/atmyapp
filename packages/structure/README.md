@@ -1,0 +1,453 @@
+# AtMyApp Structure
+
+[![npm version](https://badge.fury.io/js/%40atmyapp%2Fstructure.svg)](https://badge.fury.io/js/%40atmyapp%2Fstructure)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
+
+Canonical schema toolkit for AtMyApp. `@atmyapp/structure` is the single runtime package that owns schema parsing, normalization, validation, introspection, migration planning, and legacy `.structure.json` compatibility.
+
+## What it solves
+
+- One canonical schema model for collections, documents, files, and images
+- Runtime-agnostic authoring with both TypeScript DSL and neutral JSON input
+- Shared validation across CLI, server, dashboard, and assistant flows
+- First-class system fields such as `id`, `createdAt`, `updatedAt`, and `slug`
+- First-class asset fields for associated files and images
+- First-class analytics event definitions with ordered columns
+- First-class submission definitions with typed fields and captcha config
+- Shared migration planning with actionable change prompts
+- Legacy `.structure.json` generation and parsing during rollout
+
+## Installation
+
+```bash
+# npm
+npm install @atmyapp/structure
+
+# yarn
+yarn add @atmyapp/structure
+
+# pnpm
+pnpm add @atmyapp/structure
+```
+
+## Rollout status
+
+`@atmyapp/structure` is the canonical runtime schema package today.
+
+- authoring should target canonical schema inputs such as `ama.schema.ts` or `ama.schema.json`
+- runtime consumers should use compiled schema APIs from this package
+- `.structure.json` is still supported as the persisted/generated compatibility artifact during rollout
+- legacy labels such as `jsonx` and legacy markers such as `__amatype` are accepted only for compatibility with older projects and older CLI outputs
+
+## Core concepts
+
+- `collection`: multi-entry structured data with indexes, query semantics, and system fields
+- `document`: single path-backed structured file, replacing the old `jsonx` concept
+- `asset` fields: first-class associated files such as `image`, `file`, and `gallery`
+- `systemFields`: reserved fields that can be enabled and configured but not declared as normal fields
+- fields are required by default; use `optional: true` to make a field optional
+- `description`: supported at schema, definition, field, MDX config, and MDX component levels for assistant-facing context
+- `events`: top-level analytics/event definitions with assistant-facing descriptions and ordered columns
+- `submissions`: top-level form submission definitions with typed fields and optional captcha config
+
+## TypeScript DSL
+
+```ts
+import {
+  compileSchema,
+  defineCollection,
+  defineEvent,
+  defineDocument,
+  defineSubmission,
+  defineSchema,
+  s,
+} from "@atmyapp/structure";
+
+const schema = defineSchema({
+  description: "Marketing site schema",
+  mdx: {
+    blog: {
+      description: "Blog content components",
+      components: {
+        Callout: {
+          description: "Highlighted message block",
+          props: {
+            title: "string",
+          },
+        },
+      },
+    },
+  },
+  events: {
+    page_view: defineEvent(["page", "referrer", "timestamp"], {
+      description: "Tracked page view analytics event",
+    }),
+  },
+  submissions: {
+    contact: defineSubmission({
+      description: "Main contact form",
+      fields: {
+        name: s.string(),
+        email: s.email(),
+        message: s.longText({
+          optional: true,
+        }),
+        resume: s.file({
+          optional: true,
+        }),
+      },
+      captcha: {
+        required: true,
+        provider: "hcaptcha",
+      },
+    }),
+  },
+  definitions: {
+    posts: defineCollection({
+      description: "Blog posts",
+      fields: {
+        title: s.string({
+          description: "Public title shown on the page",
+        }),
+        cover: s.image({
+          description: "Associated hero image for the post",
+          config: {
+            optimizeFormat: "webp",
+            maxSize: {
+              width: 1920,
+              height: 1080,
+            },
+          },
+        }),
+        body: s.mdx({
+          config: "blog",
+          description: "Long-form article body",
+        }),
+        author: s.reference({
+          target: "authors",
+          description: "Linked author profile",
+          by: "slug",
+        }),
+        seo: s.object({
+          description: "SEO metadata",
+          fields: {
+            title: s.string(),
+            socialImages: s.array({
+              optional: true,
+              description: "Nested list of social preview images",
+              items: s.image({
+                description: "Image used for social previews",
+              }),
+            }),
+          },
+        }),
+      },
+      systemFields: {
+        slug: {
+          enabled: true,
+          source: "title",
+        },
+      },
+      indexes: ["title"],
+    }),
+    settings: defineDocument({
+      description: "Single site settings file",
+      fields: {
+        theme: s.string({
+          description: "Theme identifier used by the UI",
+        }),
+        accent: s.string({
+          description: "Optional accent color",
+          optional: true,
+        }),
+      },
+    }),
+  },
+});
+
+const compiled = compileSchema(schema);
+```
+
+`defineDocument()` does not need a `path` by default. If the key is `settings`, both `settings` and `settings.json` resolve to the same document automatically.
+
+## Neutral JSON input
+
+The same canonical model can be authored without TypeScript:
+
+```json
+{
+  "version": 1,
+  "description": "Marketing site schema",
+  "definitions": {
+    "settings": {
+      "kind": "document",
+      "description": "Single site settings file",
+      "path": "settings.json",
+      "fields": {
+        "theme": {
+          "kind": "scalar",
+          "scalar": "string",
+          "description": "Theme identifier used by the UI"
+        }
+      }
+    }
+  }
+}
+```
+
+## Main APIs
+
+### Compiler
+
+```ts
+import { compileSchema, parseSchema, normalizeSchema } from "@atmyapp/structure";
+```
+
+- `parseSchema(input)`: parses canonical JSON or legacy `.structure.json`
+- `normalizeSchema(schema)`: normalizes definitions, paths, and defaults
+- `compileSchema(input)`: builds the compiled schema with precomputed indexes
+
+### Introspection
+
+```ts
+import {
+  getDefinition,
+  getCollection,
+  getDocument,
+  getField,
+  listAssetFields,
+  listConfigs,
+  listReferences,
+  listSystemFields,
+  resolveDefinitionForPath,
+} from "@atmyapp/structure";
+```
+
+Use these helpers instead of manually traversing raw `.structure` objects.
+
+## Events
+
+Analytics events are modeled as a top-level schema concern and preserved through canonical and legacy compilation:
+
+```ts
+import { defineBasicEvent, defineEvent, defineSchema } from "@atmyapp/structure";
+
+const schema = defineSchema({
+  events: {
+    page_view: defineEvent(["page", "referrer", "timestamp"], {
+      description: "Ordered columns for page view analytics",
+    }),
+    session_start: defineBasicEvent({
+      description: "Marker event with dynamic payload",
+    }),
+  },
+  definitions: {},
+});
+```
+
+The compiled schema exposes these under `compiled.events`, and legacy `.structure.json` compatibility output preserves them under top-level `events`.
+
+## Submissions
+
+Submissions are modeled as a first-class top-level schema concern:
+
+```ts
+import {
+  defineSchema,
+  defineSubmission,
+  s,
+  type InferSubmission,
+} from "@atmyapp/structure";
+
+const schema = defineSchema({
+  definitions: {},
+  submissions: {
+    contact: defineSubmission({
+      description: "Marketing contact form",
+      fields: {
+        name: s.string(),
+        email: s.email(),
+        message: s.longText({
+          optional: true,
+        }),
+        resume: s.file({
+          optional: true,
+        }),
+      },
+      captcha: {
+        required: true,
+        provider: "hcaptcha",
+      },
+    }),
+  },
+});
+
+type ContactSubmission = InferSubmission<"contact", typeof schema>;
+```
+
+Notes:
+
+- `acceptingResponses` is intentionally not part of the schema; that stays dashboard-managed
+- submission fields use the same field DSL as collections and documents
+- `InferSubmission` is input-oriented, so asset fields infer upload values rather than stored CDN URLs
+- legacy compatibility output keeps captcha settings under `requiresCaptcha`, `captchaProvider`, and `hcaptchaSecret`
+
+## References
+
+References store string values by default, but the schema can describe how those strings should resolve:
+
+```ts
+s.reference({
+  target: "authors",
+  by: "id",
+});
+
+s.reference({
+  target: "posts",
+  by: "slug",
+});
+
+s.reference({
+  target: "settings",
+  by: "path",
+});
+```
+
+- `target`: the referenced definition name
+- `by: "id"`: default for collection-style identity
+- `by: "slug"`: requires the target to expose a slug
+- `by: "path"`: useful for document-style references
+- `multiple: true`: stores an array of references
+- `onDelete`: optional lifecycle hint for downstream consumers
+
+The current runtime value shape is a string or string array. That keeps references easy to store, easy to index, and easy to migrate while still carrying explicit semantics in the schema.
+
+## Nested types and lists
+
+Nested objects and arrays are first-class in the canonical schema model:
+
+```ts
+const article = defineDocument({
+  fields: {
+    title: s.string(),
+    seo: s.object({
+      description: "SEO metadata",
+      fields: {
+        title: s.string(),
+        summary: s.string({ optional: true }),
+      },
+    }),
+    gallery: s.array({
+      optional: true,
+      items: s.image({
+        config: {
+          optimizeFormat: "webp",
+        },
+      }),
+    }),
+  },
+});
+```
+
+Notes:
+
+- all nested fields are required unless marked with `optional: true`
+- composite fields use the object-input style: `s.object({ fields, optional, description })`, `s.array({ items, optional, description })`, `s.reference({ target, ... })`, and `s.mdx({ config, ... })`
+- `s.array({ items: s.image() })` works for image lists
+- `s.gallery()` is still available when you want a semantic “multiple images” asset field
+- nested field descriptions are preserved in the compiled schema and legacy output
+
+## Images and asset config
+
+Image fields support config aligned with existing `@atmyapp/core` and `@atmyapp/cli` image definitions:
+
+```ts
+s.image({
+  config: {
+    optimizeFormat: "webp",
+    optimizeLoad: "progressive",
+    ratioHint: { x: 16, y: 9 },
+    maxSize: { width: 1920, height: 1080 },
+  },
+});
+```
+
+That config is preserved through canonical compilation and legacy `.structure.json` emission.
+
+### Validation
+
+```ts
+import {
+  validateSchemaDocument,
+  validateContent,
+  validateContentAtPath,
+} from "@atmyapp/structure";
+```
+
+- `validateSchemaDocument(input)`: validates authored schema documents
+- `validateContent(compiled, definitionName, data)`: validates parsed content objects
+- `validateContentAtPath(compiled, path, content, mimeType?)`: validates raw file content against the resolved definition
+
+### Migrations
+
+```ts
+import {
+  diffSchemas,
+  planMigration,
+  renderMigrationPrompts,
+} from "@atmyapp/structure";
+```
+
+Migration planning classifies changes as compatible, safe auto-convert, confirmable convert, or incompatible. The planner produces executable actions such as:
+
+- `confirm_convert`
+- `require_union`
+- `backfill_generated_field`
+- `create_unique_index`
+- `drop_field`
+- `drop_definition`
+
+## Legacy `.structure.json` compatibility
+
+The package can compile existing `.structure.json` files and also emit legacy-compatible output:
+
+```ts
+import { compileSchema, toLegacyStructure } from "@atmyapp/structure";
+
+const compiled = compileSchema(existingStructureJson);
+const legacy = toLegacyStructure(compiled.document);
+```
+
+This keeps old projects working while runtime consumers migrate to the canonical schema model.
+
+## Development
+
+```bash
+npm ci
+npm test
+npm run build
+npm pack --dry-run
+```
+
+## Publishing
+
+The repository includes manual release workflows similar to the `@atmyapp/core` package:
+
+- run tests before release
+- verify the version was bumped
+- build the package
+- create a GitHub release
+- publish to npm with provenance
+
+Before publishing:
+
+1. Update the version in `package.json`.
+2. Run `npm test`.
+3. Run `npm run build`.
+4. Run `npm pack --dry-run`.
+5. Trigger the GitHub release workflow.
+
+## License
+
+ISC

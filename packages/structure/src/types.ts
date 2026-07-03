@@ -1,0 +1,404 @@
+export type DefinitionKind =
+  | 'collection'
+  | 'document'
+  | 'file'
+  | 'image'
+  | 'system_config';
+export type FieldKind =
+  | 'scalar'
+  | 'object'
+  | 'array'
+  | 'enum'
+  | 'union'
+  | 'asset'
+  | 'reference'
+  | 'mdx'
+  | 'slug';
+export type ScalarType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'null'
+  | 'date'
+  | 'datetime'
+  | 'timestamp';
+export type StringFieldFormat =
+  | 'short'
+  | 'long'
+  | 'markdown'
+  | 'email'
+  | 'url'
+  | 'slug'
+  | 'code'
+  | 'textarea'
+  | 'date'
+  | 'datetime'
+  | 'timestamp';
+export type NumberFieldFormat = 'integer' | 'percent' | 'currency';
+export type AssetKind = 'image' | 'file' | 'gallery';
+export type SystemFieldName = 'id' | 'createdAt' | 'updatedAt' | 'slug';
+export type ReferenceResolveBy = 'id' | 'slug' | 'path';
+export type LegacyDefinitionType =
+  | 'collection'
+  | 'document'
+  | 'system_config'
+  | 'jsonx'
+  | 'file'
+  | 'image';
+export type MigrationCompatibilityClass =
+  | 'safe_auto_convert'
+  | 'confirmable_convert'
+  | 'incompatible'
+  | 'compatible';
+export type MigrationActionType =
+  | 'auto_convert'
+  | 'confirm_convert'
+  | 'require_union'
+  | 'require_clear'
+  | 'require_manual_migration'
+  | 'backfill_generated_field'
+  | 'create_unique_index'
+  | 'drop_definition'
+  | 'drop_field';
+
+export interface MdxComponentConfig {
+  description?: string;
+  props?: Record<string, string>;
+}
+
+export interface MdxConfigDefinition {
+  description?: string;
+  components: Record<string, MdxComponentConfig>;
+}
+
+export interface EventDefinition {
+  description?: string;
+  columns: string[];
+}
+
+export type SubmissionCaptchaProvider = 'hcaptcha' | (string & {});
+
+export interface SubmissionCaptchaConfig {
+  required?: boolean;
+  provider?: SubmissionCaptchaProvider;
+  secret?: string;
+}
+
+export interface SubmissionDefinition {
+  description?: string;
+  fields: Record<string, FieldDefinition>;
+  captcha?: SubmissionCaptchaConfig;
+}
+
+export interface LegacySubmissionDefinition {
+  description?: string;
+  fields?: Record<string, FieldDefinition>;
+  requiresCaptcha?: boolean;
+  captchaProvider?: SubmissionCaptchaProvider;
+  hcaptchaSecret?: string;
+}
+
+export type SubmissionInputDefinition =
+  | SubmissionDefinition
+  | LegacySubmissionDefinition;
+
+export interface FieldBase {
+  kind: FieldKind;
+  description?: string;
+  localize?: boolean;
+  optional?: boolean;
+  required?: boolean;
+  unique?: boolean;
+  default?: unknown;
+  legacy?: Record<string, unknown>;
+  storage?: Record<string, unknown>;
+  ui?: Record<string, unknown>;
+}
+
+export interface ImageAssetConfig {
+  optimizeFormat?: 'webp' | 'none';
+  optimizeLoad?: 'progressive' | 'none';
+  ratioHint?: {
+    x: number;
+    y: number;
+  };
+  maxSize?: {
+    width: number;
+    height: number;
+  };
+}
+
+export interface FileAssetConfig {
+  contentType?: string;
+}
+
+export interface ScalarFieldDefinition extends FieldBase {
+  kind: 'scalar';
+  scalar: ScalarType;
+  min?: number;
+  max?: number;
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
+  preferredLength?: number;
+  step?: number;
+  pattern?: string;
+  enumValues?: Array<string | number | boolean | null>;
+  format?: StringFieldFormat | NumberFieldFormat | (string & {});
+  placeholder?: string;
+  examples?: Array<string | number | boolean | null>;
+  integer?: boolean;
+}
+
+export interface EnumFieldDefinition extends FieldBase {
+  kind: 'enum';
+  values: Array<string | number | boolean | null>;
+}
+
+export interface ObjectFieldDefinition extends FieldBase {
+  kind: 'object';
+  fields: Record<string, FieldDefinition>;
+  additionalProperties?: boolean;
+}
+
+export interface ArrayFieldDefinition extends FieldBase {
+  kind: 'array';
+  items: FieldDefinition;
+  identityField?: string;
+  minItems?: number;
+  maxItems?: number;
+  uniqueItems?: boolean;
+}
+
+export interface UnionFieldDefinition extends FieldBase {
+  kind: 'union';
+  variants: FieldDefinition[];
+}
+
+export interface AssetFieldDefinition extends FieldBase {
+  kind: 'asset';
+  assetKind: AssetKind;
+  multiple?: boolean;
+  accept?: string[];
+  config?: ImageAssetConfig | FileAssetConfig | Record<string, unknown>;
+  imageOptions?: Record<string, unknown>;
+  deletePolicy?: 'detach' | 'delete';
+  orphanPolicy?: 'allow' | 'delete';
+}
+
+export interface ReferenceFieldDefinition extends FieldBase {
+  kind: 'reference';
+  target: string;
+  multiple?: boolean;
+  by?: ReferenceResolveBy;
+  targetField?: string;
+  onDelete?: 'restrict' | 'nullify' | 'cascade';
+}
+
+export interface MdxFieldDefinition extends FieldBase {
+  kind: 'mdx';
+  config: string;
+}
+
+export interface SlugFieldDefinition extends FieldBase {
+  kind: 'slug';
+  source?: string;
+  generated?: boolean;
+  immutable?: boolean;
+  updatePolicy?: 'immutable' | 'on_change';
+}
+
+export type FieldDefinition =
+  | ScalarFieldDefinition
+  | EnumFieldDefinition
+  | ObjectFieldDefinition
+  | ArrayFieldDefinition
+  | UnionFieldDefinition
+  | AssetFieldDefinition
+  | ReferenceFieldDefinition
+  | MdxFieldDefinition
+  | SlugFieldDefinition;
+
+export interface SystemFieldDefinition {
+  name: SystemFieldName;
+  enabled: boolean;
+  readable: boolean;
+  queryable: boolean;
+  generated: boolean;
+  immutable: boolean;
+  unique: boolean;
+  settable: boolean;
+  requiredInStoredShape: boolean;
+  source?: string;
+  updatePolicy?: 'immutable' | 'on_change';
+}
+
+export type SystemFieldInput =
+  | boolean
+  | Partial<Omit<SystemFieldDefinition, 'name'>>;
+
+export interface DefinitionBase {
+  kind: DefinitionKind;
+  name?: string;
+  description?: string;
+  localize?: boolean;
+  systemFields?: Partial<Record<SystemFieldName, SystemFieldInput>>;
+}
+
+export interface CollectionDefinition extends DefinitionBase {
+  kind: 'collection';
+  fields: Record<string, FieldDefinition>;
+  indexes?: Array<string | string[]>;
+}
+
+export interface DocumentDefinition extends DefinitionBase {
+  kind: 'document';
+  path?: string;
+  fields: Record<string, FieldDefinition>;
+}
+
+export interface SystemConfigDefinition extends DefinitionBase {
+  kind: 'system_config';
+  framework: string;
+  systemKey: string;
+  displayName: string;
+  path: string;
+  fields: Record<string, FieldDefinition>;
+  managedBy: 'framework_preset' | (string & {});
+}
+
+export interface FileDefinition extends DefinitionBase {
+  kind: 'file' | 'image';
+  path: string;
+  config?: Record<string, unknown>;
+}
+
+export type Definition =
+  | CollectionDefinition
+  | DocumentDefinition
+  | SystemConfigDefinition
+  | FileDefinition;
+
+export interface SchemaDocument {
+  version: 1;
+  description?: string;
+  localization?: {
+    enabled: boolean;
+  };
+  definitions: Record<string, Definition>;
+  events?: Record<string, EventDefinition>;
+  args?: Record<string, unknown>;
+  mdx?: Record<string, MdxConfigDefinition>;
+  submissions?: Record<string, SubmissionInputDefinition>;
+}
+
+export interface CompiledField {
+  definitionName: string;
+  path: string;
+  field: FieldDefinition;
+  description?: string;
+}
+
+export interface CompiledDefinition<TDefinition extends Definition = Definition> {
+  definition: TDefinition;
+  name: string;
+  kind: DefinitionKind;
+  pathAliases: string[];
+  systemFields: SystemFieldDefinition[];
+  description?: string;
+}
+
+export interface CompiledSchema {
+  document: SchemaDocument;
+  legacyStructure: LegacyStructureDocument;
+  definitionsByName: Record<string, CompiledDefinition>;
+  definitionsByPath: Record<string, CompiledDefinition>;
+  definitionKindsByPath: Record<string, DefinitionKind>;
+  fieldsByPath: Record<string, CompiledField>;
+  referenceFields: CompiledField[];
+  assetFields: CompiledField[];
+  events: Record<string, EventDefinition>;
+  submissions: Record<string, SubmissionDefinition>;
+  configs: Record<string, MdxConfigDefinition>;
+}
+
+export interface ValidationIssue {
+  path: string;
+  message: string;
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  issues: ValidationIssue[];
+}
+
+export interface MigrationChange {
+  kind:
+    | 'definition_added'
+    | 'definition_removed'
+    | 'definition_kind_changed'
+    | 'field_added'
+    | 'field_removed'
+    | 'field_type_changed'
+    | 'field_unique_changed'
+    | 'localization_changed'
+    | 'definition_localize_changed'
+    | 'field_localize_changed'
+    | 'array_identity_field_changed'
+    | 'system_field_changed'
+    | 'index_added'
+    | 'index_removed';
+  definitionName: string;
+  fieldPath?: string;
+  fromType?: string;
+  toType?: string;
+  compatibility: MigrationCompatibilityClass;
+}
+
+export interface MigrationAction {
+  type: MigrationActionType;
+  definitionName: string;
+  fieldPath?: string;
+  message: string;
+  compatibility: MigrationCompatibilityClass;
+}
+
+export interface MigrationPrompt {
+  title: string;
+  message: string;
+  actionType: MigrationActionType;
+  definitionName: string;
+  fieldPath?: string;
+}
+
+export interface MigrationPlan {
+  changes: MigrationChange[];
+  actions: MigrationAction[];
+  prompts: MigrationPrompt[];
+  blocking: boolean;
+}
+
+export interface LegacySingleDefinition {
+  type: LegacyDefinitionType;
+  localize?: boolean;
+  structure?: any;
+  description?: string;
+  framework?: string;
+  systemKey?: string;
+  displayName?: string;
+  path?: string;
+  managedBy?: string;
+}
+
+export interface LegacyStructureDocument {
+  description?: string;
+  localization?: {
+    enabled: boolean;
+  };
+  definitions: Record<string, LegacySingleDefinition>;
+  events?: Record<string, EventDefinition>;
+  args?: Record<string, unknown>;
+  mdx?: Record<string, MdxConfigDefinition>;
+  submissions?: Record<string, SubmissionInputDefinition>;
+}
