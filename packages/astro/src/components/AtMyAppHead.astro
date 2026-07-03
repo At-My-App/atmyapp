@@ -1,0 +1,142 @@
+---
+// @ts-nocheck
+import { createAtMyAppClient, type AtMyAppHeadConfig } from "../coreBridge";
+import { fetchHeadConfigOnce } from "../fetchOnce";
+
+export type ConflictStrategy = "atmyapp-wins" | "local-wins" | "merge";
+
+export interface Props extends Partial<AtMyAppHeadConfig> {
+  conflictStrategy?: ConflictStrategy;
+  trackPageView?: boolean;
+}
+
+const props = Astro.props as Props;
+const localMeta = props as Partial<AtMyAppHeadConfig>;
+const conflictStrategy: ConflictStrategy = props.conflictStrategy ?? "atmyapp-wins";
+const trackPageView = props.trackPageView ?? false;
+
+const apiKey = import.meta.env.ATMYAPP_API_KEY ?? "";
+const baseUrl = import.meta.env.ATMYAPP_BASE_URL ?? "https://api.atmyapp.com";
+const siteId = import.meta.env.ATMYAPP_SITE_ID ?? "";
+
+const devModeValue = String(import.meta.env.DEV_MODE ?? (import.meta.env.DEV ? "1" : "0"));
+const shouldFetchHeadConfig = devModeValue === "0";
+
+if (shouldFetchHeadConfig && (!apiKey || !siteId)) {
+  throw new Error(
+    "AtMyApp: missing required env vars: " +
+      [!apiKey && "ATMYAPP_API_KEY", !siteId && "ATMYAPP_SITE_ID"]
+        .filter(Boolean)
+        .join(", ") +
+      " must be set when DEV_MODE=0."
+  );
+}
+
+if (!shouldFetchHeadConfig && import.meta.env.DEV && (!apiKey || !siteId)) {
+  console.warn(
+    "[AtMyApp] ATMYAPP_API_KEY or ATMYAPP_SITE_ID not set. Skipping build-time head config fetch in dev mode."
+  );
+}
+
+const config =
+  shouldFetchHeadConfig && apiKey && siteId
+    ? await fetchHeadConfigOnce(
+        createAtMyAppClient({ apiKey, baseUrl }),
+        siteId,
+        baseUrl
+      )
+    : null;
+
+const mergeJsonLd = (
+  remote: Record<string, unknown> | undefined,
+  local: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined => {
+  if (!remote && !local) return undefined;
+  return {
+    ...(remote ?? {}),
+    ...(local ?? {}),
+  };
+};
+
+const resolveField = <Field extends keyof AtMyAppHeadConfig>(
+  field: Field
+): AtMyAppHeadConfig[Field] | undefined => {
+  const remoteValue = config?.[field];
+  const localValue = localMeta[field];
+
+  if (conflictStrategy === "local-wins") {
+    return localValue ?? remoteValue;
+  }
+
+  if (conflictStrategy === "merge") {
+    if (field === "jsonLd") {
+      return mergeJsonLd(
+        remoteValue as Record<string, unknown> | undefined,
+        localValue as Record<string, unknown> | undefined
+      ) as AtMyAppHeadConfig[Field];
+    }
+    return localValue ?? remoteValue;
+  }
+
+  return remoteValue ?? localValue;
+};
+
+const resolved = {
+  title: resolveField("title"),
+  description: resolveField("description"),
+  robots: resolveField("robots"),
+  canonical: resolveField("canonical"),
+  sitemap: resolveField("sitemap"),
+  ogTitle: resolveField("ogTitle"),
+  ogDescription: resolveField("ogDescription"),
+  ogImage: resolveField("ogImage"),
+  ogType: resolveField("ogType"),
+  twitterCard: resolveField("twitterCard"),
+  favicon: resolveField("favicon"),
+  appleTouchIcon: resolveField("appleTouchIcon"),
+  themeColor: resolveField("themeColor"),
+  googleSiteVerification: resolveField("googleSiteVerification"),
+  jsonLd: resolveField("jsonLd"),
+  analyticsId: resolveField("analyticsId"),
+  analyticsUrl: resolveField("analyticsUrl"),
+};
+
+const finalOgType =
+  resolved.ogType ??
+  (resolved.ogTitle || resolved.ogDescription || resolved.ogImage ? "website" : undefined);
+const finalTwitterCard =
+  resolved.twitterCard ?? (resolved.ogImage ? "summary_large_image" : undefined);
+const shouldTrackPageView = trackPageView;
+---
+
+<script define:vars={{ apiKey, baseUrl, siteId }}>
+  window.__ATMYAPP__ = { apiKey, baseUrl, siteId };
+</script>
+
+{resolved.title && <title>{resolved.title}</title>}
+{resolved.description && <meta name="description" content={resolved.description} />}
+{resolved.robots && <meta name="robots" content={resolved.robots} />}
+{resolved.canonical && <link rel="canonical" href={resolved.canonical} />}
+{resolved.sitemap && <link rel="sitemap" type="application/xml" href={resolved.sitemap} />}
+{resolved.ogTitle && <meta property="og:title" content={resolved.ogTitle} />}
+{resolved.ogDescription && <meta property="og:description" content={resolved.ogDescription} />}
+{resolved.ogImage && <meta property="og:image" content={resolved.ogImage} />}
+{finalOgType && <meta property="og:type" content={finalOgType} />}
+{finalTwitterCard && <meta name="twitter:card" content={finalTwitterCard} />}
+{resolved.favicon && <link rel="icon" href={resolved.favicon} />}
+{resolved.appleTouchIcon && <link rel="apple-touch-icon" href={resolved.appleTouchIcon} />}
+{resolved.themeColor && <meta name="theme-color" content={resolved.themeColor} />}
+{resolved.googleSiteVerification && (
+  <meta name="google-site-verification" content={resolved.googleSiteVerification} />
+)}
+{resolved.jsonLd && (
+  <script type="application/ld+json" set:html={JSON.stringify(resolved.jsonLd)} />
+)}
+
+{shouldTrackPageView && (
+  <script>
+    import { getClient } from "@atmyapp/astro/client";
+
+    getClient().analytics.trackEvent("page_view").catch(() => {});
+  </script>
+)}
