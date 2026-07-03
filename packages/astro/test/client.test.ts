@@ -33,7 +33,6 @@ describe("getClient", () => {
       __ATMYAPP__: {
         apiKey: "ama_pk_test",
         baseUrl: "http://localhost:8585",
-        siteId: "site-1",
       },
     };
 
@@ -42,6 +41,6 @@ describe("getClient", () => {
 
     expect(first).toBe(second);
     expect(typeof first.analytics.trackEvent).toBe("function");
-    expect(typeof first.meta.getHeadConfig).toBe("function");
+    expect(typeof first.systemConfig.get).toBe("function");
   });
 });

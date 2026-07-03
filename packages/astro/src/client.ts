@@ -3,7 +3,6 @@ import { createAtMyAppClient, type AtMyAppClient } from "@atmyapp/core";
 export type AtMyAppWindowConfig = {
   apiKey: string;
   baseUrl: string;
-  siteId: string;
 };
 
 declare global {

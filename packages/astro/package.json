@@ -6,14 +6,15 @@
   "types": "dist/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/At-My-App/astro.git"
+    "url": "git+https://github.com/At-My-App/atmyapp.git",
+    "directory": "packages/astro"
   },
   "publishConfig": {
     "access": "public"
   },
   "files": [
     "dist",
-    "src/components",
+    "src",
     "README.md"
   ],
   "scripts": {
@@ -42,7 +43,7 @@
     "astro": ">=4.0.0"
   },
   "dependencies": {
-    "@atmyapp/core": "^0.0.18"
+    "@atmyapp/core": "workspace:^"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

@@ -14,7 +14,6 @@ npm install @atmyapp/astro
 
 ```env
 ATMYAPP_API_KEY=your-public-api-key
-ATMYAPP_SITE_ID=your-site-id
 ATMYAPP_BASE_URL=https://api.atmyapp.com
 ```
 
@@ -55,11 +54,10 @@ await getClient().analytics.trackCustomEvent("form_submit", {
 ## Environment variables
 
 - `ATMYAPP_API_KEY` (required in build mode)
-- `ATMYAPP_SITE_ID` (required in build mode)
 - `ATMYAPP_BASE_URL` (optional, defaults to `https://api.atmyapp.com`)
 - `DEV_MODE` (`0` enables build-time head fetch; any other value skips it)
 
-You can find your Site ID in the AtMyApp dashboard under your site/project settings.
+The Astro integration reads the framework-managed `website.metadata` System Configuration File from the configured AtMyApp project API URL.
 
 ## Dev mode behavior
 
@@ -69,4 +67,4 @@ You can find your Site ID in the AtMyApp dashboard under your site/project setti
 
 ## Head configuration source of truth
 
-After setup, all SEO and head metadata can be managed from the AtMyApp dashboard. No additional code changes are needed for normal metadata updates.
+After setup, all SEO and head metadata can be managed from Storage content in the AtMyApp dashboard through `Website Configuration - Astro Metadata`. No additional code changes are needed for normal metadata updates.

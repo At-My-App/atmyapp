@@ -1,7 +1,8 @@
 ---
 // @ts-nocheck
 import { createAtMyAppClient, type AtMyAppHeadConfig } from "../coreBridge";
-import { fetchHeadConfigOnce } from "../fetchOnce";
+import { fetchWebsiteMetadataOnce } from "../websiteMetadata";
+import { hasHeadValue, normalizeHeadValue } from "../headConfig";
 
 export type ConflictStrategy = "atmyapp-wins" | "local-wins" | "merge";
 
@@ -17,32 +18,28 @@ const trackPageView = props.trackPageView ?? false;
 
 const apiKey = import.meta.env.ATMYAPP_API_KEY ?? "";
 const baseUrl = import.meta.env.ATMYAPP_BASE_URL ?? "https://api.atmyapp.com";
-const siteId = import.meta.env.ATMYAPP_SITE_ID ?? "";
 
 const devModeValue = String(import.meta.env.DEV_MODE ?? (import.meta.env.DEV ? "1" : "0"));
-const shouldFetchHeadConfig = devModeValue === "0";
+const shouldFetchWebsiteMetadata = devModeValue === "0";
 
-if (shouldFetchHeadConfig && (!apiKey || !siteId)) {
+if (shouldFetchWebsiteMetadata && !apiKey) {
   throw new Error(
     "AtMyApp: missing required env vars: " +
-      [!apiKey && "ATMYAPP_API_KEY", !siteId && "ATMYAPP_SITE_ID"]
-        .filter(Boolean)
-        .join(", ") +
+      "ATMYAPP_API_KEY" +
       " must be set when DEV_MODE=0."
   );
 }
 
-if (!shouldFetchHeadConfig && import.meta.env.DEV && (!apiKey || !siteId)) {
+if (!shouldFetchWebsiteMetadata && import.meta.env.DEV && !apiKey) {
   console.warn(
-    "[AtMyApp] ATMYAPP_API_KEY or ATMYAPP_SITE_ID not set. Skipping build-time head config fetch in dev mode."
+    "[AtMyApp] ATMYAPP_API_KEY not set. Skipping build-time head config fetch in dev mode."
   );
 }
 
 const config =
-  shouldFetchHeadConfig && apiKey && siteId
-    ? await fetchHeadConfigOnce(
+  shouldFetchWebsiteMetadata && apiKey
+    ? await fetchWebsiteMetadataOnce(
         createAtMyAppClient({ apiKey, baseUrl }),
-        siteId,
         baseUrl
       )
     : null;
@@ -61,8 +58,8 @@ const mergeJsonLd = (
 const resolveField = <Field extends keyof AtMyAppHeadConfig>(
   field: Field
 ): AtMyAppHeadConfig[Field] | undefined => {
-  const remoteValue = config?.[field];
-  const localValue = localMeta[field];
+  const remoteValue = normalizeHeadValue(config?.[field]);
+  const localValue = normalizeHeadValue(localMeta[field]);
 
   if (conflictStrategy === "local-wins") {
     return localValue ?? remoteValue;
@@ -102,34 +99,34 @@ const resolved = {
 };
 
 const finalOgType =
-  resolved.ogType ??
+  normalizeHeadValue(resolved.ogType) ??
   (resolved.ogTitle || resolved.ogDescription || resolved.ogImage ? "website" : undefined);
 const finalTwitterCard =
-  resolved.twitterCard ?? (resolved.ogImage ? "summary_large_image" : undefined);
+  normalizeHeadValue(resolved.twitterCard) ?? (resolved.ogImage ? "summary_large_image" : undefined);
 const shouldTrackPageView = trackPageView;
 ---
 
-<script define:vars={{ apiKey, baseUrl, siteId }}>
-  window.__ATMYAPP__ = { apiKey, baseUrl, siteId };
+<script define:vars={{ apiKey, baseUrl }}>
+  window.__ATMYAPP__ = { apiKey, baseUrl };
 </script>
 
-{resolved.title && <title>{resolved.title}</title>}
-{resolved.description && <meta name="description" content={resolved.description} />}
-{resolved.robots && <meta name="robots" content={resolved.robots} />}
-{resolved.canonical && <link rel="canonical" href={resolved.canonical} />}
-{resolved.sitemap && <link rel="sitemap" type="application/xml" href={resolved.sitemap} />}
-{resolved.ogTitle && <meta property="og:title" content={resolved.ogTitle} />}
-{resolved.ogDescription && <meta property="og:description" content={resolved.ogDescription} />}
-{resolved.ogImage && <meta property="og:image" content={resolved.ogImage} />}
-{finalOgType && <meta property="og:type" content={finalOgType} />}
-{finalTwitterCard && <meta name="twitter:card" content={finalTwitterCard} />}
-{resolved.favicon && <link rel="icon" href={resolved.favicon} />}
-{resolved.appleTouchIcon && <link rel="apple-touch-icon" href={resolved.appleTouchIcon} />}
-{resolved.themeColor && <meta name="theme-color" content={resolved.themeColor} />}
-{resolved.googleSiteVerification && (
+{hasHeadValue(resolved.title) && <title>{resolved.title}</title>}
+{hasHeadValue(resolved.description) && <meta name="description" content={resolved.description} />}
+{hasHeadValue(resolved.robots) && <meta name="robots" content={resolved.robots} />}
+{hasHeadValue(resolved.canonical) && <link rel="canonical" href={resolved.canonical} />}
+{hasHeadValue(resolved.sitemap) && <link rel="sitemap" type="application/xml" href={resolved.sitemap} />}
+{hasHeadValue(resolved.ogTitle) && <meta property="og:title" content={resolved.ogTitle} />}
+{hasHeadValue(resolved.ogDescription) && <meta property="og:description" content={resolved.ogDescription} />}
+{hasHeadValue(resolved.ogImage) && <meta property="og:image" content={resolved.ogImage} />}
+{hasHeadValue(finalOgType) && <meta property="og:type" content={finalOgType} />}
+{hasHeadValue(finalTwitterCard) && <meta name="twitter:card" content={finalTwitterCard} />}
+{hasHeadValue(resolved.favicon) && <link rel="icon" href={resolved.favicon} />}
+{hasHeadValue(resolved.appleTouchIcon) && <link rel="apple-touch-icon" href={resolved.appleTouchIcon} />}
+{hasHeadValue(resolved.themeColor) && <meta name="theme-color" content={resolved.themeColor} />}
+{hasHeadValue(resolved.googleSiteVerification) && (
   <meta name="google-site-verification" content={resolved.googleSiteVerification} />
 )}
-{resolved.jsonLd && (
+{hasHeadValue(resolved.jsonLd) && (
   <script type="application/ld+json" set:html={JSON.stringify(resolved.jsonLd)} />
 )}
 

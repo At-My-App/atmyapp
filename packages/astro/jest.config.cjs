@@ -13,6 +13,9 @@ module.exports = {
       }
     ]
   },
+  moduleNameMapper: {
+    "^@atmyapp/core$": "<rootDir>/../core/dist/index.js"
+  },
   testMatch: ["**/test/**/*.test.ts", "**/?(*.)+(spec|test).ts"],
   collectCoverageFrom: ["src/**/*.ts", "!src/**/*.d.ts"]
 };
