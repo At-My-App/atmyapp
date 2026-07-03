@@ -12,7 +12,7 @@
     "ci": "pnpm lint && pnpm build && pnpm test",
     "changeset": "changeset",
     "changeset:version": "changeset version && pnpm install --lockfile-only",
-    "release:publish": "pnpm publish -r --access public --provenance"
+    "release:publish": "changeset publish"
   },
   "devDependencies": {
     "@changesets/cli": "2.31.0",
