@@ -1,0 +1,36 @@
+---
+title: CLI Reference
+description: Curated reference for @atmyapp/cli commands and package entrypoints.
+---
+
+`@atmyapp/cli` publishes the `atmyapp` binary.
+
+## Install
+
+```bash
+npm install -g @atmyapp/cli
+```
+
+## Binary
+
+```bash
+atmyapp --help
+```
+
+## Commands
+
+- `atmyapp use` authenticates a local workspace.
+- `atmyapp init` creates starter schema and client files.
+- `atmyapp migrate` compiles and uploads schema definitions.
+- `atmyapp upload` uploads local files to project storage.
+- `atmyapp generate` creates a placeholder file for a storage path.
+- `atmyapp snapshot` works with project snapshots.
+
+## Programmatic exports
+
+The package exposes:
+
+- `@atmyapp/cli`
+- `@atmyapp/cli/browser`
+
+These exports are primarily for shared implementation and tooling scenarios. Most projects should use the `atmyapp` binary.

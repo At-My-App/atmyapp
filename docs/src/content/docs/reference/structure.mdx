@@ -1,0 +1,42 @@
+---
+title: Structure Reference
+description: Curated reference for @atmyapp/structure.
+---
+
+`@atmyapp/structure` owns the canonical schema system.
+
+## Install
+
+```bash
+pnpm add @atmyapp/structure
+```
+
+## Main exports
+
+- `defineSchema()` creates the top-level schema object.
+- `defineCollection()` creates repeatable content definitions.
+- `defineDocument()` creates singleton content definitions.
+- `defineSubmission()` creates form or user-submitted data definitions.
+- `s` exposes field builders.
+- Compiler, validation, migration, and introspection helpers support the CLI and advanced tooling.
+
+## Example
+
+```ts
+import { defineCollection, defineSchema, s } from "@atmyapp/structure";
+
+export default defineSchema({
+  definitions: {
+    posts: defineCollection({
+      fields: {
+        title: s.string(),
+        slug: s.string({ format: "short" }),
+      },
+    }),
+  },
+});
+```
+
+## When to use it
+
+Use `@atmyapp/structure` directly when building schemas, tests, generators, migration tooling, or framework integrations.

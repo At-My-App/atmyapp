@@ -1,0 +1,60 @@
+---
+title: CLI Guide
+description: Use the AtMyApp CLI to initialize schemas, authenticate projects, migrate definitions, and manage files.
+---
+
+`@atmyapp/cli` is the command-line workflow for local AtMyApp projects.
+
+## Install
+
+```bash
+npm install -g @atmyapp/cli
+```
+
+## `atmyapp use`
+
+Stores the project URL and CLI token for the current workspace.
+
+```bash
+atmyapp use --token cli_... --url https://edge.atmyapp.com/projects/your-project-id
+```
+
+## `atmyapp init`
+
+Creates starter project files. The default output is `atmyapp.schema.ts`.
+
+```bash
+atmyapp init
+atmyapp init --template empty
+atmyapp init --template minimal
+atmyapp init --template blog
+atmyapp init --path atmyapp.schema.json
+atmyapp init --force
+```
+
+The `minimal` and `blog` templates can also help create a project API key and print environment variables for runtime access.
+
+## `atmyapp migrate`
+
+Finds a canonical schema file, validates it, generates `.ama/definitions.json`, and uploads it unless `--dry-run` is set.
+
+```bash
+atmyapp migrate
+atmyapp migrate --dry-run --verbose
+```
+
+The CLI looks for `atmyapp.schema.*` and `ama.schema.*`. If both exist, `atmyapp.schema.*` wins.
+
+## File commands
+
+Upload local files to project storage:
+
+```bash
+atmyapp upload "content/**/*" --base-path content --commit "Update content"
+```
+
+Generate a placeholder file for a project storage path:
+
+```bash
+atmyapp generate --path content/settings.json
+```

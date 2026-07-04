@@ -1,0 +1,46 @@
+---
+title: Core Reference
+description: Curated reference for @atmyapp/core.
+---
+
+`@atmyapp/core` is the JavaScript and TypeScript runtime client package. It also re-exports the canonical schema helpers from `@atmyapp/structure`.
+
+## Install
+
+```bash
+pnpm add @atmyapp/core
+```
+
+## Main responsibilities
+
+- Create AtMyApp clients for runtime data access.
+- Read content from project storage.
+- Track analytics events.
+- Work with submissions.
+- Use legacy AMA definition types where needed.
+- Re-export canonical schema helpers during the migration to the shared schema model.
+
+## Schema helpers
+
+```ts
+import {
+  defineCollection,
+  defineDocument,
+  defineSchema,
+  defineSubmission,
+  s,
+} from "@atmyapp/core";
+```
+
+Prefer `@atmyapp/structure` for direct schema authoring in new tooling code. Use the `@atmyapp/core` re-exports when application code already depends on the core package.
+
+## Client usage
+
+```ts
+import { createAtMyAppClient } from "@atmyapp/core";
+
+const client = createAtMyAppClient({
+  apiKey: process.env.ATMYAPP_API_KEY,
+  baseUrl: process.env.ATMYAPP_URL,
+});
+```

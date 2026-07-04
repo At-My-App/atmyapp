@@ -1,0 +1,64 @@
+---
+title: Examples
+description: Practical AtMyApp examples for common project shapes.
+---
+
+Use these examples as starting points for real projects.
+
+## Minimal site settings
+
+```ts
+import { defineDocument, defineSchema, s } from "@atmyapp/structure";
+
+export default defineSchema({
+  definitions: {
+    settings: defineDocument({
+      fields: {
+        siteTitle: s.string({ default: "My Website" }),
+        supportEmail: s.string({ format: "email" }),
+      },
+    }),
+  },
+});
+```
+
+## Blog collection
+
+```ts
+import { defineCollection, defineDocument, defineSchema, s } from "@atmyapp/structure";
+
+export default defineSchema({
+  definitions: {
+    authors: defineCollection({
+      fields: {
+        name: s.string(),
+        avatar: s.image({ optional: true }),
+      },
+    }),
+    posts: defineCollection({
+      fields: {
+        title: s.string({ min: 3 }),
+        slug: s.string({ format: "short" }),
+        excerpt: s.string({ format: "long", default: "" }),
+        cover: s.image({ optional: true }),
+        publishedAt: s.date({ optional: true }),
+      },
+    }),
+    home: defineDocument({
+      fields: {
+        headline: s.string(),
+        intro: s.string({ format: "long" }),
+      },
+    }),
+  },
+});
+```
+
+## CLI workflow
+
+```bash
+atmyapp use --token cli_... --url https://edge.atmyapp.com/projects/your-project-id
+atmyapp init --template blog
+atmyapp migrate --dry-run --verbose
+atmyapp migrate
+```

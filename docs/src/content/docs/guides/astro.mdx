@@ -1,0 +1,37 @@
+---
+title: Astro Guide
+description: Add AtMyApp helpers to Astro projects.
+---
+
+`@atmyapp/astro` contains Astro-specific helpers for projects that use AtMyApp content.
+
+## Install
+
+```bash
+pnpm add @atmyapp/astro @atmyapp/core
+```
+
+The package declares Astro as a peer dependency.
+
+## Exports
+
+The package exposes:
+
+- `@atmyapp/astro` for the main integration helpers.
+- `@atmyapp/astro/client` for client-specific utilities.
+- `@atmyapp/astro/components` for the `AtMyAppHead.astro` component.
+
+## Configuration
+
+Keep your runtime values in environment variables:
+
+```bash
+ATMYAPP_URL=https://edge.atmyapp.com/projects/your-project-id
+ATMYAPP_API_KEY=ama_...
+```
+
+Use the generated client from `atmyapp init --template minimal` or `atmyapp init --template blog` as the starting point for fetching content.
+
+## Head metadata
+
+Use the Astro package when you want AtMyApp-managed metadata and website configuration to participate in the Astro render lifecycle.

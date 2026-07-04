@@ -1,0 +1,54 @@
+---
+title: Quick Start
+description: Install AtMyApp, create a starter schema, and upload it to your project.
+---
+
+AtMyApp starts with a project token, a canonical schema file, and the CLI.
+
+## Install the CLI
+
+```bash
+npm install -g @atmyapp/cli
+```
+
+You can also run it through your preferred package manager if you do not want a global install.
+
+## Authenticate the workspace
+
+```bash
+atmyapp use --token cli_... --url https://edge.atmyapp.com/projects/your-project-id
+```
+
+This stores local project session data in `.ama/session.json`.
+
+## Generate a starter schema
+
+```bash
+atmyapp init --template minimal
+```
+
+The CLI writes an `atmyapp.schema.ts` file and, for starter templates, can help create an API key for runtime access.
+
+## Upload the schema
+
+```bash
+atmyapp migrate
+```
+
+Use `--dry-run --verbose` when you want to preview the generated payload without uploading it:
+
+```bash
+atmyapp migrate --dry-run --verbose
+```
+
+## Install runtime packages
+
+```bash
+pnpm add @atmyapp/core @atmyapp/structure
+```
+
+Add `@atmyapp/astro` when building an Astro site:
+
+```bash
+pnpm add @atmyapp/astro
+```

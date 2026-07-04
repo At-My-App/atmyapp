@@ -5,6 +5,7 @@ export default [
     ignores: [
       "**/coverage/**",
       "**/dist/**",
+      "**/.astro/**",
       "**/node_modules/**",
     ],
   },

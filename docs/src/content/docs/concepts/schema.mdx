@@ -1,0 +1,58 @@
+---
+title: Schema Model
+description: Learn how AtMyApp models content using canonical TypeScript schemas.
+---
+
+The canonical schema model lives in `@atmyapp/structure` and is re-exported from `@atmyapp/core`.
+
+Use schemas to describe what clients can edit, what data your app can read, and what the platform should validate before publishing.
+
+## Definitions
+
+AtMyApp supports two main content definition shapes:
+
+- `defineCollection()` for repeatable content such as posts, authors, products, or case studies.
+- `defineDocument()` for singletons such as home page copy, navigation, settings, or SEO defaults.
+
+```ts
+import {
+  defineCollection,
+  defineDocument,
+  defineSchema,
+  s,
+} from "@atmyapp/structure";
+
+export default defineSchema({
+  definitions: {
+    posts: defineCollection({
+      fields: {
+        title: s.string({ min: 3 }),
+        slug: s.string({ format: "short" }),
+        cover: s.image({ optional: true }),
+        publishedAt: s.date({ optional: true }),
+      },
+    }),
+    settings: defineDocument({
+      fields: {
+        theme: s.string({ default: "light" }),
+        supportEmail: s.string({ format: "email" }),
+      },
+    }),
+  },
+});
+```
+
+## Fields
+
+Fields describe validation, editor behavior, and generated platform payloads. Common field types include strings, dates, images, objects, and references.
+
+## Compilation
+
+The CLI finds `atmyapp.schema.*`, validates it, compiles it with `@atmyapp/structure`, writes `.ama/definitions.json`, and uploads it during `atmyapp migrate`.
+
+## Package roles
+
+- `@atmyapp/structure` owns schema authoring, compilation, validation, and introspection.
+- `@atmyapp/core` owns runtime client access and re-exports schema helpers.
+- `@atmyapp/cli` connects local schemas to the hosted AtMyApp platform.
+- `@atmyapp/astro` provides Astro-specific helpers.
