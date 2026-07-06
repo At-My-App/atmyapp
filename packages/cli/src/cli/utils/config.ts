@@ -17,6 +17,10 @@ export type AmaProjectConfig = Pick<
   "description" | "args" | "metadata"
 >;
 
+interface MigrateConfigOptions {
+  allowMissingSession?: boolean;
+}
+
 const PROJECT_CONFIG_CANDIDATES = [
   "atmyapp.config.ts",
   "atmyapp.config.js",
@@ -112,8 +116,13 @@ export function loadProjectConfig(
   }
 }
 
-export function getMigrateConfig(cwd: string = process.cwd()): AmaConfig {
-  const sessionConfig = getConfig(cwd);
+export function getMigrateConfig(
+  cwd: string = process.cwd(),
+  options: MigrateConfigOptions = {},
+): AmaConfig {
+  const { configPath } = getSessionPaths(cwd);
+  const sessionConfig =
+    options.allowMissingSession && !existsSync(configPath) ? {} : getConfig(cwd);
   const projectConfig = loadProjectConfig(cwd);
 
   return {

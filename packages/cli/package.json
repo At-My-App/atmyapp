@@ -11,6 +11,10 @@
     "./browser": {
       "types": "./dist/browser.d.ts",
       "default": "./dist/browser.js"
+    },
+    "./create": {
+      "types": "./dist/create.d.ts",
+      "default": "./dist/create.js"
     }
   },
   "scripts": {
@@ -30,6 +34,7 @@
   },
   "files": [
     "dist",
+    "templates",
     "README.md"
   ],
   "bin": {

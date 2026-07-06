@@ -1,0 +1,44 @@
+---
+import MobileTableOfContents from "virtual:starlight/components/MobileTableOfContents";
+import TableOfContents from "virtual:starlight/components/TableOfContents";
+import ShellIcon from "./ShellIcon.astro";
+
+const hasToc = Boolean(Astro.locals.starlightRoute.toc);
+---
+
+<div class="ama-mobile-toc">
+  {hasToc && <MobileTableOfContents />}
+</div>
+
+<aside class="ama-right-rail">
+  {hasToc && (
+    <section class="ama-right-section ama-toc-section">
+      <TableOfContents />
+    </section>
+  )}
+
+  <section class="ama-right-card ama-changelog-card">
+    <span class="ama-pill">New</span>
+    <h2>Changelog</h2>
+    <p>See what’s new in AtMyApp.</p>
+    <a href="/changelog/">View changes <ShellIcon name="arrow" /></a>
+  </section>
+
+  <section class="ama-right-section">
+    <h2>Resources</h2>
+    <a class="ama-resource-link" href="/reference/core/"><ShellIcon name="file" /> API Reference</a>
+    <a class="ama-resource-link" href="/examples/"><ShellIcon name="code" /> Examples</a>
+    <a class="ama-resource-link" href="/quick-start/"><ShellIcon name="download" /> SDK Downloads</a>
+    <a class="ama-resource-link" href="https://github.com/At-My-App/atmyapp/discussions"><ShellIcon name="message" /> Community</a>
+  </section>
+
+  <section class="ama-promo-card">
+    <h2>Build smarter.<br />Ship faster.</h2>
+    <p>AtMyApp handles the complexity so you can focus on building great products.</p>
+    <a href="https://atmyapp.com">Go to AtMyApp <ShellIcon name="arrow" /></a>
+    <div class="ama-promo-mark" aria-hidden="true">
+      <ShellIcon name="bolt" />
+    </div>
+  </section>
+</aside>
+

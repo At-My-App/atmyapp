@@ -1,0 +1,25 @@
+---
+import CopyMarkdown from "@wave-rf/starlight-llm-tools/components/CopyMarkdown.astro";
+import LlmDropdown from "@wave-rf/starlight-llm-tools/components/LlmDropdown.astro";
+
+const { entry } = Astro.locals.starlightRoute;
+const isHome = Astro.url.pathname === "/";
+const slug = Astro.url.pathname.replace(/^\/|\/$/g, "") || "index";
+const showLlmTools = !isHome && Boolean(slug);
+---
+
+{
+  isHome ? (
+    <span id="_top" class="sr-only">{entry.data.title}</span>
+  ) : (
+    <>
+      {showLlmTools && (
+        <div class="ama-page-tools">
+          <CopyMarkdown slug={slug} />
+          <LlmDropdown />
+        </div>
+      )}
+      <h1 id="_top">{entry.data.title}</h1>
+    </>
+  )
+}

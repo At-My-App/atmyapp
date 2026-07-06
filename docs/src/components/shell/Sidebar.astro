@@ -1,0 +1,57 @@
+---
+import Search from "virtual:starlight/components/Search";
+import ThemeSelect from "virtual:starlight/components/ThemeSelect";
+import ShellIcon from "./ShellIcon.astro";
+
+const currentPath = Astro.url.pathname.replace(/\/$/, "") || "/";
+
+const navItems = [
+  { label: "Introduction", href: "/", icon: "home" },
+  { label: "Quick Start", href: "/quick-start/", icon: "bolt" },
+  { label: "Core Concepts", href: "/concepts/schema/", icon: "layers" },
+  { label: "SDK Guides", href: "/guides/cli/", icon: "code" },
+  { label: "Integrations", href: "/integrations/", icon: "link" },
+  { label: "AI Assistant", href: "/ai-assistant/", icon: "sparkles" },
+  { label: "Deployment", href: "/deployment/", icon: "cloud" },
+  { label: "Account & Billing", href: "/account/", icon: "user" },
+  { label: "Troubleshooting", href: "/troubleshooting/", icon: "life" },
+  { label: "Changelog", href: "/changelog/", icon: "file" },
+] as const;
+
+const isActive = (href: string) => {
+  const normalized = href.replace(/\/$/, "") || "/";
+  return normalized === "/" ? currentPath === "/" : currentPath.startsWith(normalized);
+};
+---
+
+<div class="ama-sidebar-shell">
+  <div class="ama-sidebar-search">
+    <Search />
+  </div>
+
+  <nav class="ama-sidebar-nav" aria-label="Docs sections">
+    {navItems.map((item) => (
+      <a class:list={["ama-sidebar-link", { active: isActive(item.href) }]} href={item.href}>
+        <ShellIcon name={item.icon} />
+        <span>{item.label}</span>
+        {["Core Concepts", "SDK Guides", "Integrations", "AI Assistant", "Deployment", "Account & Billing", "Troubleshooting"].includes(item.label) && (
+          <span class="ama-sidebar-chevron">›</span>
+        )}
+      </a>
+    ))}
+  </nav>
+
+  <aside class="ama-help-card">
+    <span class="ama-help-icon"><ShellIcon name="sparkles" /></span>
+    <h2>Need help?</h2>
+    <p>Join our community or contact support.</p>
+    <a href="https://github.com/At-My-App/atmyapp/discussions">Join GitHub Discussions ↗</a>
+    <a href="mailto:contact@atmyapp.com">Contact Support ↗</a>
+  </aside>
+
+  <div class="ama-sidebar-footer">
+    <span>© 2026 AtMyApp. All rights reserved.</span>
+    <div class="ama-sidebar-theme"><ThemeSelect /></div>
+  </div>
+</div>
+

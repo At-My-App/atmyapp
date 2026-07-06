@@ -1,0 +1,32 @@
+---
+import type { Joke } from "../data/jokes";
+
+interface Props {
+  joke: Joke;
+  featured?: boolean;
+}
+
+const { joke, featured = false } = Astro.props;
+---
+
+<article class:list={["joke-card", featured && "joke-card-featured"]}>
+  <div class="joke-content">
+    <p class="joke-kicker">Joke #{joke.number}</p>
+    <h1 class={featured ? "joke-title-large" : "joke-title"}>{joke.setup}</h1>
+    <p class="joke-punchline">{joke.punchline}</p>
+    <time class="joke-date" datetime={joke.publishedAt}>
+      {new Date(joke.publishedAt).toLocaleDateString("en", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })}
+    </time>
+  </div>
+  {
+    joke.image && (
+      <div class="joke-image-wrap">
+        <img src={joke.image} alt="" loading={featured ? "eager" : "lazy"} />
+      </div>
+    )
+  }
+</article>

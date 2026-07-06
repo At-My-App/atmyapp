@@ -1,0 +1,38 @@
+---
+import Search from "virtual:starlight/components/Search";
+import ThemeSelect from "virtual:starlight/components/ThemeSelect";
+import ShellIcon from "./ShellIcon.astro";
+import logo from "../../assets/logo.png";
+---
+
+<div class="ama-topbar">
+  <a class="ama-brand" href="/" aria-label="AtMyApp Docs home">
+    <img src={logo.src} alt="" />
+    <span>AtMyApp Docs</span>
+  </a>
+
+  <nav class="ama-topnav" aria-label="Primary">
+    <a class="active" href="/">Documentation</a>
+    <a href="/reference/core/">API Reference</a>
+    <a href="/examples/">Examples</a>
+    <a href="/changelog/">Changelog</a>
+  </nav>
+
+  <div class="ama-header-actions">
+    <div class="ama-mobile-search">
+      <Search />
+    </div>
+    <a class="ama-icon-button" href="https://github.com/At-My-App/atmyapp" aria-label="GitHub repository">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M12 .5a12 12 0 0 0-3.8 23c.6.1.8-.2.8-.6v-2.1c-3.3.7-4-1.4-4-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .4.2.7.8.6A12 12 0 0 0 12 .5Z" />
+      </svg>
+    </a>
+    <div class="ama-theme-wrap">
+      <ThemeSelect />
+    </div>
+    <a class="ama-cta" href="https://atmyapp.com">
+      <span>Go to AtMyApp</span>
+      <ShellIcon name="arrow" />
+    </a>
+  </div>
+</div>

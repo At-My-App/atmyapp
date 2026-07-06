@@ -115,4 +115,19 @@ describe("migrate command conflict resolution", () => {
     });
     expect(logMigrationConflictGuidance).not.toHaveBeenCalled();
   });
+
+  it("allows missing session config for dry-run migrations", async () => {
+    const command = migrateCommand();
+    await command.parseAsync(["node", "migrate", "--dry-run"]);
+
+    expect(getMigrateConfig).toHaveBeenCalledWith(process.cwd(), {
+      allowMissingSession: true,
+    });
+    expect(runCanonicalMigrate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dryRun: true,
+        upload: false,
+      }),
+    );
+  });
 });

@@ -1,0 +1,53 @@
+---
+import AtMyAppHead from "@atmyapp/astro/components";
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = "Joke of the Day",
+  description = "A tiny static Astro site with an AtMyApp-ready content model.",
+} = Astro.props;
+
+const hasAtMyAppCredentials = Boolean(import.meta.env.ATMYAPP_API_KEY);
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {
+      hasAtMyAppCredentials ? (
+        <AtMyAppHead title={title} description={description} trackPageView />
+      ) : (
+        <>
+          <title>{title}</title>
+          <meta name="description" content={description} />
+          <meta name="theme-color" content="#f8fafc" />
+        </>
+      )
+    }
+  </head>
+  <body class="min-h-screen bg-[var(--ama-bg)] text-[var(--ama-ink)] antialiased">
+    <div class="site-grid min-h-screen">
+      <header class="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-6 sm:px-8">
+        <a href="/" class="flex items-center gap-3 font-semibold tracking-normal text-[var(--ama-ink)]">
+          <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--ama-ink)] text-sm font-bold text-white shadow-sm">
+            A
+          </span>
+          <span>AtMyApp Starter</span>
+        </a>
+        <nav class="flex items-center gap-2 text-sm font-medium text-[var(--ama-muted)]">
+          <a class="nav-link" href="/">Today</a>
+          <a class="nav-link" href="/archive/">Archive</a>
+        </nav>
+      </header>
+      <main>
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

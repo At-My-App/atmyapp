@@ -6,6 +6,7 @@ import { useCommand } from "./commands/use";
 import { uploadCommand } from "./commands/upload";
 import { generateCommand } from "./commands/generate";
 import { snapshotCommand } from "./commands/snapshot";
+import { createCommand } from "./commands/create";
 
 const program = new Command()
   .name("atmyapp")
@@ -13,6 +14,7 @@ const program = new Command()
   .version("0.1.0");
 
 program.addCommand(initCommand());
+program.addCommand(createCommand());
 program.addCommand(useCommand());
 program.addCommand(migrateCommand());
 program.addCommand(uploadCommand());

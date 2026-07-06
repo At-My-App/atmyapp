@@ -19,6 +19,20 @@ npm install -g @atmyapp/cli
 
 ## Quick Start
 
+Create a new Astro + Tailwind + AtMyApp project:
+
+```bash
+npm create atmyapp@latest
+```
+
+Or, if the CLI is already installed:
+
+```bash
+atmyapp create
+```
+
+Work with AtMyApp inside an existing project:
+
 ```bash
 # 1. Authenticate this workspace
 atmyapp use --token your-cli-token --url https://edge.atmyapp.com/projects/your-project-id
@@ -76,6 +90,26 @@ The CLI accepts either:
 - a named `schema` export
 
 ## Commands
+
+### `atmyapp create`
+
+Creates a new project from an AtMyApp template.
+
+```bash
+atmyapp create
+atmyapp create my-site
+atmyapp create my-site --template astro-tailwind --pm pnpm
+atmyapp create my-site --no-install --no-git
+atmyapp create my-site --yes
+```
+
+The `astro-tailwind` template creates a static Astro site with Tailwind CSS, a root `atmyapp.schema.ts`, two starter pages, sample joke content, and package scripts for development, builds, previews, checks, and AtMyApp migrations.
+
+For the public initializer flow, use:
+
+```bash
+npm create atmyapp@latest
+```
 
 ### `atmyapp init`
 

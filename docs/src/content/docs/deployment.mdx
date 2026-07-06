@@ -1,0 +1,17 @@
+---
+title: Deployment
+description: Prepare an AtMyApp project for production.
+---
+
+Deployment docs will collect the production checklist for AtMyApp-powered sites.
+
+## Production checklist
+
+- Keep runtime credentials in environment variables.
+- Run `atmyapp migrate --dry-run --verbose` before uploading schema changes.
+- Commit schema changes with the application code that depends on them.
+- Confirm the target project URL before running a migration.
+
+## Recommended next step
+
+Use the [Quick Start](/quick-start/) to verify the local workflow, then add deployment-specific checks to your app pipeline.

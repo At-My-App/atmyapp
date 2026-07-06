@@ -1,0 +1,27 @@
+{
+  "name": "__PROJECT_PACKAGE_NAME__",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "atmyapp:migrate": "atmyapp migrate",
+    "atmyapp:dry-run": "atmyapp migrate --dry-run --verbose"
+  },
+  "dependencies": {
+    "@atmyapp/astro": "^0.0.2",
+    "@atmyapp/core": "^0.1.4",
+    "astro": "^7.0.6"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "@atmyapp/cli": "__ATMYAPP_CLI_VERSION__",
+    "@atmyapp/structure": "^0.1.4",
+    "@tailwindcss/vite": "^4.3.2",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^5.8.3"
+  }
+}

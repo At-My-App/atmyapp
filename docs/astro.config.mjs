@@ -15,6 +15,14 @@ export default defineConfig({
         alt: "AtMyApp",
       },
       customCss: ["./src/styles/custom.css"],
+      components: {
+        Header: "./src/components/shell/Header.astro",
+        PageFrame: "./src/components/shell/PageFrame.astro",
+        PageSidebar: "./src/components/shell/PageSidebar.astro",
+        PageTitle: "./src/components/shell/PageTitle.astro",
+        Sidebar: "./src/components/shell/Sidebar.astro",
+        TwoColumnContent: "./src/components/shell/TwoColumnContent.astro",
+      },
       favicon: "/favicon.svg",
       social: [
         {
@@ -37,21 +45,19 @@ export default defineConfig({
       ],
       sidebar: [
         {
-          label: "Get started",
+          label: "Documentation",
           items: [
             { label: "Introduction", slug: "index" },
             { label: "Quick Start", slug: "quick-start" },
-          ],
-        },
-        {
-          label: "Core Concepts",
-          items: [{ label: "Schema Model", slug: "concepts/schema" }],
-        },
-        {
-          label: "SDK Guides",
-          items: [
+            { label: "Core Concepts", slug: "concepts/schema" },
             { label: "CLI", slug: "guides/cli" },
             { label: "Astro", slug: "guides/astro" },
+            { label: "Integrations", slug: "integrations" },
+            { label: "AI Assistant", slug: "ai-assistant" },
+            { label: "Deployment", slug: "deployment" },
+            { label: "Account & Billing", slug: "account" },
+            { label: "Troubleshooting", slug: "troubleshooting" },
+            { label: "Changelog", slug: "changelog" },
           ],
         },
         {
@@ -76,6 +82,7 @@ export default defineConfig({
           title: "AtMyApp Docs",
           description:
             "Documentation for AtMyApp packages, schemas, CLI workflows, and framework integrations.",
+          injectInto: false,
         }),
       ],
     }),

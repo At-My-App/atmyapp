@@ -21,7 +21,7 @@ ATMYAPP_BASE_URL=https://api.atmyapp.com
 
 ```astro
 ---
-import { AtMyAppHead } from "@atmyapp/astro/components";
+import AtMyAppHead from "@atmyapp/astro/components";
 ---
 
 <html>

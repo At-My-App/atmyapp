@@ -1,0 +1,29 @@
+{
+  "name": "create-atmyapp",
+  "version": "0.1.0",
+  "description": "Create a new AtMyApp project.",
+  "license": "ISC",
+  "author": "Maciej Gamrot",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/At-My-App/atmyapp.git",
+    "directory": "packages/create-atmyapp"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "bin": {
+    "create-atmyapp": "./index.js"
+  },
+  "scripts": {
+    "build": "node --check index.js",
+    "test": "node --check index.js"
+  },
+  "dependencies": {
+    "@atmyapp/cli": "workspace:^"
+  }
+}

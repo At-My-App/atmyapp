@@ -71,7 +71,9 @@ export function migrateCommand(): Command {
           );
         }
 
-        const config = getMigrateConfig();
+        const config = getMigrateConfig(process.cwd(), {
+          allowMissingSession: options.dryRun,
+        });
         ensureAmaDirectory(logger);
 
         const canonicalSchemaFile = await findCanonicalSchemaFile(logger);

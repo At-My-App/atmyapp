@@ -1,0 +1,83 @@
+---
+import Search from "virtual:starlight/components/Search";
+import ShellIcon from "../shell/ShellIcon.astro";
+
+const cards = [
+  {
+    title: "Quick Start",
+    description: "Set up AtMyApp in minutes and add it to your website.",
+    href: "/quick-start/",
+    action: "Start now",
+    icon: "bolt",
+    tone: "violet",
+  },
+  {
+    title: "Core Concepts",
+    description: "Understand the building blocks of AtMyApp.",
+    href: "/concepts/schema/",
+    action: "Explore concepts",
+    icon: "layers",
+    tone: "teal",
+  },
+  {
+    title: "SDK Guides",
+    description: "Learn how to integrate AtMyApp step by step.",
+    href: "/guides/cli/",
+    action: "View guides",
+    icon: "code",
+    tone: "coral",
+  },
+] as const;
+
+const guides = [
+  { title: "Authenticate your project", description: "Learn how authentication works in AtMyApp.", href: "/quick-start/", icon: "lock", tone: "violet" },
+  { title: "Add the AI Assistant", description: "Let your users edit content using natural language.", href: "/ai-assistant/", icon: "sparkles", tone: "teal" },
+  { title: "Manage content collections", description: "Structure and organize your content efficiently.", href: "/concepts/schema/", icon: "layers", tone: "coral" },
+  { title: "Deploy to production", description: "Best practices for a smooth launch.", href: "/deployment/", icon: "cloud", tone: "blue" },
+] as const;
+---
+
+<section class="ama-home-hero">
+  <h1>Build better websites.<br /><span>Give control</span> to your clients.</h1>
+  <p>
+    AtMyApp helps developers add AI-powered content management to any website.
+    This docs will help you integrate, customize, and scale with confidence.
+  </p>
+  <div class="ama-home-search">
+    <Search />
+  </div>
+</section>
+
+<section class="ama-home-section">
+  <div class="ama-section-heading">
+    <h2>Get started</h2>
+    <p>New to AtMyApp? Start here.</p>
+  </div>
+  <div class="ama-home-cards">
+    {cards.map((card) => (
+      <a class:list={["ama-home-card", `tone-${card.tone}`]} href={card.href}>
+        <span class="ama-home-card-icon"><ShellIcon name={card.icon} /></span>
+        <h3>{card.title}</h3>
+        <p>{card.description}</p>
+        <span>{card.action} <ShellIcon name="arrow" /></span>
+      </a>
+    ))}
+  </div>
+</section>
+
+<section class="ama-home-section">
+  <div class="ama-section-heading compact">
+    <h2>Popular guides</h2>
+  </div>
+  <div class="ama-guide-table">
+    {guides.map((guide) => (
+      <a class:list={["ama-guide-item", `tone-${guide.tone}`]} href={guide.href}>
+        <span class="ama-guide-icon"><ShellIcon name={guide.icon} /></span>
+        <strong>{guide.title}</strong>
+        <span>{guide.description}</span>
+        <ShellIcon name="arrow" />
+      </a>
+    ))}
+  </div>
+</section>
+
