@@ -1,15 +1,12 @@
-# @atmyapp/astro
+# create-atmyapp
 
-## 0.0.3
+## 0.2.0
 
-### Patch Changes
+### Minor Changes
 
 - 83e59fc: Add the AtMyApp project creator with an Astro, Tailwind CSS, and AtMyApp starter template. Also allow `atmyapp migrate --dry-run` to run before a project session is configured.
 
-## 0.0.2
-
 ### Patch Changes
 
-- 8803c37: Move AtMyApp packages into the public monorepo release pipeline.
-- Updated dependencies [8803c37]
-  - @atmyapp/core@0.1.4
+- Updated dependencies [83e59fc]
+  - @atmyapp/cli@0.2.0
