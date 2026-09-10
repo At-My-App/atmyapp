@@ -9,63 +9,71 @@ import type {
   SchemaDocument,
   SubmissionDefinition,
   SubmissionInputDefinition,
-} from './types';
-import { compileLegacyStructure, materializeSystemFields, toLegacyStructure } from './legacy';
-import { ensureDocumentPath, normalizePath, stripExtension } from './utils';
+} from "./types";
+import {
+  compileLegacyStructure,
+  materializeSystemFields,
+  toLegacyStructure,
+} from "./legacy";
+import { ensureDocumentPath, normalizePath, stripExtension } from "./utils";
 
 function isLegacyStructure(input: any): input is LegacyStructureDocument {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
     return false;
   }
   const definitions = input.definitions;
-  if (!definitions || typeof definitions !== 'object') {
+  if (!definitions || typeof definitions !== "object") {
     return false;
   }
   return Object.values(definitions).every((definition) => {
-    return Boolean(definition && typeof definition === 'object' && 'type' in (definition as Record<string, unknown>));
+    return Boolean(
+      definition &&
+      typeof definition === "object" &&
+      "type" in (definition as Record<string, unknown>),
+    );
   });
 }
 
 function normalizeField(field: FieldDefinition): FieldDefinition {
   const normalizedOptional =
-    typeof field.optional === 'boolean'
+    typeof field.optional === "boolean"
       ? field.optional
-      : typeof field.required === 'boolean'
-      ? !field.required
-      : false;
+      : typeof field.required === "boolean"
+        ? !field.required
+        : false;
 
   switch (field.kind) {
-    case 'scalar':
+    case "scalar":
       return {
         ...field,
         optional: normalizedOptional,
         required: undefined,
         minLength:
-          field.scalar === 'string'
+          field.scalar === "string"
             ? (field.minLength ?? field.min)
             : field.minLength,
         maxLength:
-          field.scalar === 'string'
+          field.scalar === "string"
             ? (field.maxLength ?? field.max)
             : field.maxLength,
         minimum:
-          field.scalar === 'number'
+          field.scalar === "number"
             ? (field.minimum ?? field.min)
             : field.minimum,
         maximum:
-          field.scalar === 'number'
+          field.scalar === "number"
             ? (field.maximum ?? field.max)
             : field.maximum,
         format:
-          field.scalar === 'number' && field.integer === true
-            ? (field.format ?? 'integer')
+          field.scalar === "number" && field.integer === true
+            ? (field.format ?? "integer")
             : field.format,
         step:
-          field.scalar === 'number' && field.integer === true
+          field.scalar === "number" && field.integer === true
             ? (field.step ?? 1)
             : field.step,
       };
-    case 'object': {
+    case "object": {
       const fields: Record<string, FieldDefinition> = {};
       for (const [name, child] of Object.entries(field.fields)) {
         fields[name] = normalizeField(child);
@@ -77,26 +85,26 @@ function normalizeField(field: FieldDefinition): FieldDefinition {
         fields,
       };
     }
-    case 'array':
+    case "array":
       return {
         ...field,
         optional: normalizedOptional,
         required: undefined,
         items: normalizeField(field.items),
       };
-    case 'union':
+    case "union":
       return {
         ...field,
         optional: normalizedOptional,
         required: undefined,
         variants: field.variants.map(normalizeField),
       };
-    case 'reference':
+    case "reference":
       return {
         ...field,
         optional: normalizedOptional,
         required: undefined,
-        by: field.by || 'id',
+        by: field.by || "id",
       };
     default:
       return {
@@ -108,10 +116,41 @@ function normalizeField(field: FieldDefinition): FieldDefinition {
 }
 
 function normalizeDefinition(name: string, definition: Definition): Definition {
-  if (definition.kind === 'collection') {
+  if (definition.kind === "collection") {
     const fields: Record<string, FieldDefinition> = {};
     for (const [fieldName, field] of Object.entries(definition.fields || {})) {
       fields[fieldName] = normalizeField(field);
+    }
+    const slug = definition.systemFields?.slug;
+    if (slug && (slug === true || slug.enabled !== false)) {
+      if (fields.slug && fields.slug.kind !== "slug")
+        throw new Error(
+          "Declare slug once using s.slug(), not both a string and a system field",
+        );
+      const source = slug === true ? undefined : slug.source;
+      if (
+        fields.slug?.kind === "slug" &&
+        source &&
+        fields.slug.source &&
+        fields.slug.source !== source
+      )
+        throw new Error("Conflicting slug sources");
+      if (
+        slug !== true &&
+        (slug.unique === false ||
+          slug.immutable === false ||
+          slug.updatePolicy === "on_change")
+      )
+        throw new Error("Slugs must be unique and immutable");
+      fields.slug = normalizeField({
+        source,
+        ...fields.slug,
+        kind: "slug",
+        unique: true,
+        immutable: true,
+        generated: true,
+        updatePolicy: "immutable",
+      });
     }
     return {
       ...definition,
@@ -121,13 +160,13 @@ function normalizeDefinition(name: string, definition: Definition): Definition {
     };
   }
 
-  if (definition.kind === 'document' || definition.kind === 'system_config') {
+  if (definition.kind === "document" || definition.kind === "system_config") {
     const fields: Record<string, FieldDefinition> = {};
     for (const [fieldName, field] of Object.entries(definition.fields || {})) {
       fields[fieldName] = normalizeField(field);
     }
     const path =
-      definition.kind === 'system_config'
+      definition.kind === "system_config"
         ? normalizePath(definition.path || name)
         : ensureDocumentPath(definition.path || name);
     return {
@@ -146,9 +185,13 @@ function normalizeDefinition(name: string, definition: Definition): Definition {
 }
 
 function normalizeSubmission(
-  submission: SubmissionInputDefinition | unknown
+  submission: SubmissionInputDefinition | unknown,
 ): SubmissionDefinition {
-  if (!submission || typeof submission !== 'object' || Array.isArray(submission)) {
+  if (
+    !submission ||
+    typeof submission !== "object" ||
+    Array.isArray(submission)
+  ) {
     return {
       fields: {},
     };
@@ -156,7 +199,7 @@ function normalizeSubmission(
 
   const fields: Record<string, FieldDefinition> = {};
   for (const [name, field] of Object.entries(
-    (submission as SubmissionInputDefinition).fields || {}
+    (submission as SubmissionInputDefinition).fields || {},
   )) {
     fields[name] = normalizeField(field);
   }
@@ -177,20 +220,18 @@ function normalizeSubmission(
     submissionInput.requiresCaptcha ??
     false;
   const provider =
-    submissionInput.captcha?.provider ??
-    submissionInput.captchaProvider;
+    submissionInput.captcha?.provider ?? submissionInput.captchaProvider;
   const secret =
-    submissionInput.captcha?.secret ??
-    submissionInput.hcaptchaSecret;
+    submissionInput.captcha?.secret ?? submissionInput.hcaptchaSecret;
 
   const hasCaptcha =
     required === true ||
-    typeof provider === 'string' ||
-    typeof secret === 'string';
+    typeof provider === "string" ||
+    typeof secret === "string";
 
   return {
     description:
-      typeof (submission as SubmissionInputDefinition).description === 'string'
+      typeof (submission as SubmissionInputDefinition).description === "string"
         ? (submission as SubmissionInputDefinition).description
         : undefined,
     fields,
@@ -198,17 +239,19 @@ function normalizeSubmission(
       ? {
           captcha: {
             required,
-            ...(typeof provider === 'string' ? { provider } : {}),
-            ...(typeof secret === 'string' ? { secret } : {}),
+            ...(typeof provider === "string" ? { provider } : {}),
+            ...(typeof secret === "string" ? { secret } : {}),
           },
         }
       : {}),
   };
 }
 
-export function parseSchema(input: string | SchemaDocument | LegacyStructureDocument): SchemaDocument {
+export function parseSchema(
+  input: string | SchemaDocument | LegacyStructureDocument,
+): SchemaDocument {
   const parsed =
-    typeof input === 'string'
+    typeof input === "string"
       ? (JSON.parse(input) as SchemaDocument | LegacyStructureDocument)
       : input;
 
@@ -229,10 +272,10 @@ export function normalizeSchema(input: SchemaDocument): SchemaDocument {
   for (const [name, event] of Object.entries(input.events || {})) {
     events[name] = {
       description:
-        typeof event.description === 'string' ? event.description : undefined,
+        typeof event.description === "string" ? event.description : undefined,
       columns: Array.isArray(event.columns)
         ? event.columns.filter(
-            (entry: unknown): entry is string => typeof entry === 'string'
+            (entry: unknown): entry is string => typeof entry === "string",
           )
         : [],
     };
@@ -247,19 +290,13 @@ export function normalizeSchema(input: SchemaDocument): SchemaDocument {
     version: 1,
     description: input.description,
     localization:
-      input.localization && typeof input.localization === 'object'
+      input.localization && typeof input.localization === "object"
         ? { enabled: input.localization.enabled === true }
         : { enabled: false },
     definitions,
     events,
-    args:
-      input.args && typeof input.args === 'object'
-        ? input.args
-        : {},
-    mdx:
-      input.mdx && typeof input.mdx === 'object'
-        ? input.mdx
-        : {},
+    args: input.args && typeof input.args === "object" ? input.args : {},
+    mdx: input.mdx && typeof input.mdx === "object" ? input.mdx : {},
     submissions,
   };
 }
@@ -270,7 +307,7 @@ function collectFieldIndexes(
   field: FieldDefinition,
   fieldsByPath: Record<string, CompiledField>,
   referenceFields: CompiledField[],
-  assetFields: CompiledField[]
+  assetFields: CompiledField[],
 ) {
   const compiledField: CompiledField = {
     definitionName,
@@ -280,14 +317,14 @@ function collectFieldIndexes(
   };
   fieldsByPath[prefix] = compiledField;
 
-  if (field.kind === 'reference') {
+  if (field.kind === "reference") {
     referenceFields.push(compiledField);
   }
-  if (field.kind === 'asset') {
+  if (field.kind === "asset") {
     assetFields.push(compiledField);
   }
 
-  if (field.kind === 'object') {
+  if (field.kind === "object") {
     for (const [name, child] of Object.entries(field.fields)) {
       collectFieldIndexes(
         definitionName,
@@ -295,19 +332,19 @@ function collectFieldIndexes(
         child,
         fieldsByPath,
         referenceFields,
-        assetFields
+        assetFields,
       );
     }
-  } else if (field.kind === 'array') {
+  } else if (field.kind === "array") {
     collectFieldIndexes(
       definitionName,
       `${prefix}[]`,
       field.items,
       fieldsByPath,
       referenceFields,
-      assetFields
+      assetFields,
     );
-  } else if (field.kind === 'union') {
+  } else if (field.kind === "union") {
     field.variants.forEach((variant, index) => {
       collectFieldIndexes(
         definitionName,
@@ -315,7 +352,7 @@ function collectFieldIndexes(
         variant,
         fieldsByPath,
         referenceFields,
-        assetFields
+        assetFields,
       );
     });
   }
@@ -323,14 +360,14 @@ function collectFieldIndexes(
 
 function buildPathAliases(name: string, definition: Definition): string[] {
   const aliases = new Set<string>([normalizePath(name), stripExtension(name)]);
-  if (definition.kind === 'document') {
+  if (definition.kind === "document") {
     const documentPath = ensureDocumentPath(definition.path || name);
     aliases.add(normalizePath(documentPath));
     aliases.add(stripExtension(documentPath));
-  } else if (definition.kind === 'system_config') {
+  } else if (definition.kind === "system_config") {
     aliases.add(normalizePath(definition.path));
     aliases.add(stripExtension(definition.path));
-  } else if (definition.kind === 'file' || definition.kind === 'image') {
+  } else if (definition.kind === "file" || definition.kind === "image") {
     aliases.add(normalizePath(definition.path));
     aliases.add(stripExtension(definition.path));
   } else {
@@ -340,13 +377,16 @@ function buildPathAliases(name: string, definition: Definition): string[] {
 }
 
 export function compileSchema(
-  input: string | SchemaDocument | LegacyStructureDocument
+  input: string | SchemaDocument | LegacyStructureDocument,
 ): CompiledSchema {
   const document = parseSchema(input);
   const legacyStructure = toLegacyStructure(document);
   const definitionsByName: Record<string, CompiledDefinition> = {};
   const definitionsByPath: Record<string, CompiledDefinition> = {};
-  const definitionKindsByPath: Record<string, CompiledSchema['definitionKindsByPath'][string]> = {};
+  const definitionKindsByPath: Record<
+    string,
+    CompiledSchema["definitionKindsByPath"][string]
+  > = {};
   const fieldsByPath: Record<string, CompiledField> = {};
   const referenceFields: CompiledField[] = [];
   const assetFields: CompiledField[] = [];
@@ -369,9 +409,9 @@ export function compileSchema(
     }
 
     if (
-      definition.kind === 'collection' ||
-      definition.kind === 'document' ||
-      definition.kind === 'system_config'
+      definition.kind === "collection" ||
+      definition.kind === "document" ||
+      definition.kind === "system_config"
     ) {
       for (const [fieldName, field] of Object.entries(definition.fields)) {
         collectFieldIndexes(
@@ -380,7 +420,7 @@ export function compileSchema(
           field,
           fieldsByPath,
           referenceFields,
-          assetFields
+          assetFields,
         );
       }
     }

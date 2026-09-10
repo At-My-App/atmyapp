@@ -17,7 +17,8 @@ declare module "@atmyapp/structure" {
     | "asset"
     | "reference"
     | "mdx"
-    | "slug";
+    | "slug"
+    | "order";
   export type ScalarType =
     | "string"
     | "number"
@@ -132,7 +133,9 @@ declare module "@atmyapp/structure" {
     updatePolicy?: "immutable" | "on_change";
   }
 
+  export interface OrderFieldDefinition extends FieldBase { kind: "order"; groupBy?: string; }
   export type FieldDefinition =
+    | OrderFieldDefinition
     | ScalarFieldDefinition
     | EnumFieldDefinition
     | ObjectFieldDefinition
@@ -369,6 +372,7 @@ declare module "@atmyapp/structure" {
     gallery<const TOptions extends AssetFieldOptions = {}>(
       options?: TOptions,
     ): Simplify<{ kind: "asset"; assetKind: "gallery"; multiple: true } & TOptions>;
+    reference<const TTarget extends string, const TOptions extends ReferenceFieldOptions = {}>(target: TTarget, options?: TOptions): Simplify<{ kind: "reference"; target: TTarget } & TOptions>;
     reference<
       const TTarget extends string,
       const TInput extends ReferenceFieldInput<TTarget>,
@@ -381,6 +385,7 @@ declare module "@atmyapp/structure" {
     >(
       input: TInput,
     ): Simplify<{ kind: "mdx"; config: TConfig } & Omit<TInput, "config">>;
+    order<const TOptions extends Partial<Omit<OrderFieldDefinition, "kind">> = {}>(options?: TOptions): Simplify<{ kind: "order" } & TOptions>;
     slug<const TOptions extends SlugFieldOptions = {}>(
       options?: TOptions,
     ): Simplify<{ kind: "slug"; unique: true; generated: true; immutable: true; updatePolicy: "immutable" } & TOptions>;
@@ -516,7 +521,7 @@ declare module "@atmyapp/structure" {
     : {};
 
   export type FieldValue<TField extends FieldDefinition> =
-    TField extends ScalarFieldDefinition
+    TField extends { kind: "order" } ? number : TField extends ScalarFieldDefinition
       ? ScalarValue<TField>
       : TField extends EnumFieldDefinition
       ? EnumValue<TField>
@@ -548,7 +553,7 @@ declare module "@atmyapp/structure" {
   >;
 
   export type SubmissionFieldValue<TField extends FieldDefinition> =
-    TField extends ScalarFieldDefinition
+    TField extends { kind: "order" } ? number : TField extends ScalarFieldDefinition
       ? ScalarValue<TField>
       : TField extends EnumFieldDefinition
       ? EnumValue<TField>

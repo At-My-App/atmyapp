@@ -1,7 +1,4 @@
-import type {
-  DocumentDefinition,
-  FieldDefinition,
-} from "@atmyapp/structure";
+import type { DocumentDefinition, FieldDefinition } from "@atmyapp/structure";
 
 const EMPTY_ASSET_VALUE = {
   url: "",
@@ -70,6 +67,8 @@ function buildFieldPlaceholder(
       return field.assetKind === "gallery" || field.multiple === true
         ? []
         : { ...EMPTY_ASSET_VALUE };
+    case "order":
+      return 0;
     case "reference":
       return field.multiple === true ? [] : "";
     case "mdx":

@@ -30,10 +30,11 @@ export type CanonicalSchemaInput =
   | { definitions: Record<string, Definition> }
   | Record<string, Definition>;
 
-type IsOptionalField<TField extends FieldBase> =
-  TField extends { optional: true }
-    ? true
-    : TField extends { required: false }
+type IsOptionalField<TField extends FieldBase> = TField extends {
+  optional: true;
+}
+  ? true
+  : TField extends { required: false }
     ? true
     : false;
 
@@ -41,10 +42,8 @@ type OptionalFieldKeys<TFields extends Record<string, FieldDefinition>> = {
   [K in keyof TFields]-?: IsOptionalField<TFields[K]> extends true ? K : never;
 }[keyof TFields];
 
-type RequiredFieldKeys<TFields extends Record<string, FieldDefinition>> = Exclude<
-  keyof TFields,
-  OptionalFieldKeys<TFields>
->;
+type RequiredFieldKeys<TFields extends Record<string, FieldDefinition>> =
+  Exclude<keyof TFields, OptionalFieldKeys<TFields>>;
 
 type StructuredObjectValue<TFields extends Record<string, FieldDefinition>> = {
   [K in RequiredFieldKeys<TFields>]: CanonicalFieldValue<TFields[K]>;
@@ -56,12 +55,12 @@ type ScalarValue<TField extends ScalarFieldDefinition> =
   TField["scalar"] extends "string"
     ? string
     : TField["scalar"] extends "number"
-    ? number
-    : TField["scalar"] extends "boolean"
-    ? boolean
-    : TField["scalar"] extends "null"
-    ? null
-    : string;
+      ? number
+      : TField["scalar"] extends "boolean"
+        ? boolean
+        : TField["scalar"] extends "null"
+          ? null
+          : string;
 
 type EnumValue<TField extends EnumFieldDefinition> = TField["values"][number];
 
@@ -89,79 +88,96 @@ type SubmissionAssetValue<TField extends AssetFieldDefinition> =
           }
       >
     : TField["multiple"] extends true
-    ? Array<
-        | SubmissionBinaryValue
+      ? Array<
+          | SubmissionBinaryValue
+          | {
+              file: SubmissionBinaryValue;
+              name?: string;
+              mimeType?: string;
+              alt?: TField["assetKind"] extends "image" ? string : never;
+            }
+        >
+      : | SubmissionBinaryValue
         | {
             file: SubmissionBinaryValue;
             name?: string;
             mimeType?: string;
             alt?: TField["assetKind"] extends "image" ? string : never;
-          }
-      >
-    : | SubmissionBinaryValue
-      | {
-          file: SubmissionBinaryValue;
-          name?: string;
-          mimeType?: string;
-          alt?: TField["assetKind"] extends "image" ? string : never;
-        };
+          };
 
-type AssetValue<TField extends AssetFieldDefinition> = TField["assetKind"] extends "gallery"
-  ? ImageAssetValue[]
-  : TField["multiple"] extends true
-  ? (TField["assetKind"] extends "image" ? ImageAssetValue : FileAssetValue)[]
-  : TField["assetKind"] extends "image"
-  ? ImageAssetValue
-  : FileAssetValue;
+type AssetValue<TField extends AssetFieldDefinition> =
+  TField["assetKind"] extends "gallery"
+    ? ImageAssetValue[]
+    : TField["multiple"] extends true
+      ? (TField["assetKind"] extends "image"
+          ? ImageAssetValue
+          : FileAssetValue)[]
+      : TField["assetKind"] extends "image"
+        ? ImageAssetValue
+        : FileAssetValue;
 
-type ReferenceValue<TField extends ReferenceFieldDefinition> = TField["multiple"] extends true
-  ? string[]
-  : string;
+type ReferenceValue<TField extends ReferenceFieldDefinition> =
+  TField["multiple"] extends true ? string[] : string;
 
 type GeneratedSystemFields<
   TDefinition extends CollectionDefinition | DocumentDefinition,
-> =
-  TDefinition extends { systemFields?: { slug?: infer TSlug } }
-    ? TSlug extends false | undefined | null
-      ? {}
-      : TSlug extends { enabled: false }
+> = TDefinition extends { systemFields?: { slug?: infer TSlug } }
+  ? TSlug extends false | undefined | null
+    ? {}
+    : TSlug extends { enabled: false }
       ? {}
       : { slug: string }
-    : {};
+  : {};
 
-type CanonicalFieldValue<TField extends FieldDefinition> = TField extends ScalarFieldDefinition
-  ? ScalarValue<TField>
-  : TField extends EnumFieldDefinition
-  ? EnumValue<TField>
-  : TField extends ObjectFieldDefinition
-  ? StructuredObjectValue<TField["fields"]>
-  : TField extends ArrayFieldDefinition
-  ? CanonicalFieldValue<TField["items"]>[]
-  : TField extends AssetFieldDefinition
-  ? AssetValue<TField>
-  : TField extends ReferenceFieldDefinition
-  ? ReferenceValue<TField>
-  : TField extends { kind: "union"; variants: infer TVariants extends FieldDefinition[] }
-  ? CanonicalFieldValue<TVariants[number]>
-  : string;
+type CanonicalFieldValue<TField extends FieldDefinition> = TField extends {
+  kind: "order";
+}
+  ? number
+  : TField extends ScalarFieldDefinition
+    ? ScalarValue<TField>
+    : TField extends EnumFieldDefinition
+      ? EnumValue<TField>
+      : TField extends ObjectFieldDefinition
+        ? StructuredObjectValue<TField["fields"]>
+        : TField extends ArrayFieldDefinition
+          ? CanonicalFieldValue<TField["items"]>[]
+          : TField extends AssetFieldDefinition
+            ? AssetValue<TField>
+            : TField extends ReferenceFieldDefinition
+              ? ReferenceValue<TField>
+              : TField extends {
+                    kind: "union";
+                    variants: infer TVariants extends FieldDefinition[];
+                  }
+                ? CanonicalFieldValue<TVariants[number]>
+                : string;
 
-type SubmissionFieldValue<TField extends FieldDefinition> = TField extends ScalarFieldDefinition
-  ? ScalarValue<TField>
-  : TField extends EnumFieldDefinition
-  ? EnumValue<TField>
-  : TField extends ObjectFieldDefinition
-  ? StructuredSubmissionObjectValue<TField["fields"]>
-  : TField extends ArrayFieldDefinition
-  ? SubmissionFieldValue<TField["items"]>[]
-  : TField extends AssetFieldDefinition
-  ? SubmissionAssetValue<TField>
-  : TField extends ReferenceFieldDefinition
-  ? ReferenceValue<TField>
-  : TField extends { kind: "union"; variants: infer TVariants extends FieldDefinition[] }
-  ? SubmissionFieldValue<TVariants[number]>
-  : string;
+type SubmissionFieldValue<TField extends FieldDefinition> = TField extends {
+  kind: "order";
+}
+  ? number
+  : TField extends ScalarFieldDefinition
+    ? ScalarValue<TField>
+    : TField extends EnumFieldDefinition
+      ? EnumValue<TField>
+      : TField extends ObjectFieldDefinition
+        ? StructuredSubmissionObjectValue<TField["fields"]>
+        : TField extends ArrayFieldDefinition
+          ? SubmissionFieldValue<TField["items"]>[]
+          : TField extends AssetFieldDefinition
+            ? SubmissionAssetValue<TField>
+            : TField extends ReferenceFieldDefinition
+              ? ReferenceValue<TField>
+              : TField extends {
+                    kind: "union";
+                    variants: infer TVariants extends FieldDefinition[];
+                  }
+                ? SubmissionFieldValue<TVariants[number]>
+                : string;
 
-type StructuredSubmissionObjectValue<TFields extends Record<string, FieldDefinition>> = {
+type StructuredSubmissionObjectValue<
+  TFields extends Record<string, FieldDefinition>,
+> = {
   [K in RequiredFieldKeys<TFields>]: SubmissionFieldValue<TFields[K]>;
 } & {
   [K in OptionalFieldKeys<TFields>]?: SubmissionFieldValue<TFields[K]>;
@@ -169,39 +185,46 @@ type StructuredSubmissionObjectValue<TFields extends Record<string, FieldDefinit
 
 type CanonicalEntryType<
   TDefinition extends CollectionDefinition | DocumentDefinition,
-> = StructuredObjectValue<TDefinition["fields"]> & GeneratedSystemFields<TDefinition>;
+> = StructuredObjectValue<TDefinition["fields"]> &
+  GeneratedSystemFields<TDefinition>;
 
-type ExtractDefinitions<TSchema> =
-  TSchema extends { definitions: infer TDefinitions }
-    ? TDefinitions extends Record<string, Definition>
-      ? TDefinitions
-      : {}
-    : TSchema extends Record<string, Definition>
+type ExtractDefinitions<TSchema> = TSchema extends {
+  definitions: infer TDefinitions;
+}
+  ? TDefinitions extends Record<string, Definition>
+    ? TDefinitions
+    : {}
+  : TSchema extends Record<string, Definition>
     ? TSchema
     : {};
 
-type ExtractEvents<TSchema> =
-  TSchema extends { events: infer TEvents }
-    ? TEvents extends Record<string, EventDefinition>
-      ? TEvents
-      : {}
-    : {};
+type ExtractEvents<TSchema> = TSchema extends { events: infer TEvents }
+  ? TEvents extends Record<string, EventDefinition>
+    ? TEvents
+    : {}
+  : {};
 
-type ExtractSubmissions<TSchema> =
-  TSchema extends { submissions: infer TSubmissions }
-    ? TSubmissions extends Record<string, { fields?: Record<string, FieldDefinition> }>
-      ? TSubmissions
-      : {}
-    : {};
+type ExtractSubmissions<TSchema> = TSchema extends {
+  submissions: infer TSubmissions;
+}
+  ? TSubmissions extends Record<
+      string,
+      { fields?: Record<string, FieldDefinition> }
+    >
+    ? TSubmissions
+    : {}
+  : {};
 
-type ExtractSubmissionFields<TSchema, TName extends SubmissionName<TSchema>> =
-  ExtractSubmissions<TSchema>[TName] extends {
-    fields: infer TFields;
-  }
-    ? TFields extends Record<string, FieldDefinition>
-      ? TFields
-      : {}
-    : {};
+type ExtractSubmissionFields<
+  TSchema,
+  TName extends SubmissionName<TSchema>,
+> = ExtractSubmissions<TSchema>[TName] extends {
+  fields: infer TFields;
+}
+  ? TFields extends Record<string, FieldDefinition>
+    ? TFields
+    : {}
+  : {};
 
 type SubmissionPayload<
   TSchema,
@@ -209,11 +232,13 @@ type SubmissionPayload<
 > = StructuredSubmissionObjectValue<ExtractSubmissionFields<TSchema, TName>>;
 
 type CollectionDefinitions<TSchema> = {
-  [K in keyof ExtractDefinitions<TSchema> as ExtractDefinitions<TSchema>[K] extends {
-    kind: "collection";
-  }
-    ? K
-    : never]: ExtractDefinitions<TSchema>[K];
+  [
+    K in keyof ExtractDefinitions<TSchema> as ExtractDefinitions<TSchema>[K] extends {
+      kind: "collection";
+    }
+      ? K
+      : never
+  ]: ExtractDefinitions<TSchema>[K];
 };
 
 type CollectionName<TSchema> = keyof CollectionDefinitions<TSchema> & string;
@@ -231,7 +256,9 @@ type SubmissionName<TSchema> = keyof ExtractSubmissions<TSchema> & string;
 type EventColumns<
   TSchema,
   TName extends EventName<TSchema>,
-> = ExtractEvents<TSchema>[TName] extends { columns: infer TColumns extends string[] }
+> = ExtractEvents<TSchema>[TName] extends {
+  columns: infer TColumns extends string[];
+}
   ? TColumns[number]
   : never;
 
@@ -255,11 +282,13 @@ export type StorageGetOptions = {
 type StorageDefinition = DocumentDefinition | FileDefinition;
 
 type StorageDefinitions<TSchema> = {
-  [K in keyof ExtractDefinitions<TSchema> as ExtractDefinitions<TSchema>[K] extends {
-    kind: "document" | "file" | "image";
-  }
-    ? K
-    : never]: ExtractDefinitions<TSchema>[K];
+  [
+    K in keyof ExtractDefinitions<TSchema> as ExtractDefinitions<TSchema>[K] extends {
+      kind: "document" | "file" | "image";
+    }
+      ? K
+      : never
+  ]: ExtractDefinitions<TSchema>[K];
 };
 
 type TrimLeadingSlash<T extends string> = T extends `/${infer Rest}`
@@ -279,9 +308,7 @@ type StripExtension<T extends string> = T extends `${infer Base}.${string}`
   : T;
 
 type EnsureDocumentPath<T extends string> = T extends
-  | `${string}.json`
-  | `${string}.jsonx`
-  | `${string}.md`
+  `${string}.json` | `${string}.jsonx` | `${string}.md`
   ? T
   : `${T}.json`;
 
@@ -300,34 +327,35 @@ type StorageDefinitionAliases<
   TName extends string,
   TDefinition extends StorageDefinition,
 > = TDefinition extends DocumentDefinition
-  ?
-      | NormalizeStoragePath<TName>
-      | StripExtension<NormalizeStoragePath<TName>>
-      | DocumentStoragePath<TName, TDefinition>
-      | StripExtension<DocumentStoragePath<TName, TDefinition>>
+  ? | NormalizeStoragePath<TName>
+    | StripExtension<NormalizeStoragePath<TName>>
+    | DocumentStoragePath<TName, TDefinition>
+    | StripExtension<DocumentStoragePath<TName, TDefinition>>
   : TDefinition extends FileDefinition
-  ?
-      | NormalizeStoragePath<TName>
+    ? | NormalizeStoragePath<TName>
       | StripExtension<NormalizeStoragePath<TName>>
       | FileStoragePath<TDefinition>
       | StripExtension<FileStoragePath<TDefinition>>
-  : never;
+    : never;
 
 type StorageDefinitionDescriptor<
   TName extends string,
   TDefinition extends StorageDefinition,
-> = StorageDefinitionAliases<TName, TDefinition> extends infer TAlias
-  ? TAlias extends string
-    ? {
-        key: TAlias;
-        name: TName;
-        definition: TDefinition;
-      }
-    : never
-  : never;
+> =
+  StorageDefinitionAliases<TName, TDefinition> extends infer TAlias
+    ? TAlias extends string
+      ? {
+          key: TAlias;
+          name: TName;
+          definition: TDefinition;
+        }
+      : never
+    : never;
 
 type StorageDefinitionDescriptors<TSchema> = {
-  [K in keyof StorageDefinitions<TSchema> & string]: StorageDefinitionDescriptor<
+  [
+    K in keyof StorageDefinitions<TSchema> & string
+  ]: StorageDefinitionDescriptor<
     K,
     Extract<StorageDefinitions<TSchema>[K], StorageDefinition>
   >;
@@ -349,8 +377,8 @@ type StorageWrapperValueForDefinition<TDefinition extends StorageDefinition> =
   TDefinition extends DocumentDefinition
     ? AmaContent<CanonicalEntryType<TDefinition>, any>
     : TDefinition extends { kind: "image" }
-    ? AmaImage<any>
-    : AmaFile<any>;
+      ? AmaImage<any>
+      : AmaFile<any>;
 
 type StorageRawValueForDefinition<TDefinition extends StorageDefinition> =
   TDefinition extends DocumentDefinition
@@ -372,7 +400,9 @@ type SchemaAwareStorageClient<TSchema> = {
   get<TKey extends SchemaStorageKey<TSchema>>(
     key: TKey,
     options?: StorageGetOptions,
-  ): Promise<StorageWrapperValueForDefinition<StorageDefinitionForKey<TSchema, TKey>>>;
+  ): Promise<
+    StorageWrapperValueForDefinition<StorageDefinitionForKey<TSchema, TKey>>
+  >;
   get<Ref extends BaseDef<string, unknown, string>>(
     path: Ref["path"],
     mode: Ref["type"],
@@ -381,7 +411,9 @@ type SchemaAwareStorageClient<TSchema> = {
   getValue<TKey extends SchemaStorageKey<TSchema>>(
     key: TKey,
     options?: StorageGetOptions,
-  ): Promise<StorageRawValueForDefinition<StorageDefinitionForKey<TSchema, TKey>>>;
+  ): Promise<
+    StorageRawValueForDefinition<StorageDefinitionForKey<TSchema, TKey>>
+  >;
   getStaticUrl: (path: string, options?: StorageGetOptions) => Promise<string>;
 };
 
@@ -483,8 +515,7 @@ export type AnalyticsClient<TSchema = unknown> = {
 };
 
 export type SubmissionFormEncType =
-  | "application/x-www-form-urlencoded"
-  | "multipart/form-data";
+  "application/x-www-form-urlencoded" | "multipart/form-data";
 
 export type SubmissionFormParams = {
   action: string;
@@ -634,11 +665,7 @@ export type CollectionsResponse<Row = any> = {
   error?: string;
 };
 
-export type LocaleStatus =
-  | "missing"
-  | "incomplete"
-  | "current"
-  | "outdated";
+export type LocaleStatus = "missing" | "incomplete" | "current" | "outdated";
 
 export type LocalizationStatus = {
   locale: string;
@@ -661,7 +688,9 @@ export type LocalizationDiscovery<T> = {
 };
 
 export type LocalizationClient = {
-  getStorageLocales(path: string): Promise<LocalizationDiscovery<LocalizationStatus>>;
+  getStorageLocales(
+    path: string,
+  ): Promise<LocalizationDiscovery<LocalizationStatus>>;
   getCollectionLocales(
     collection: string,
   ): Promise<LocalizationDiscovery<CollectionLocalizationSummary>>;
@@ -702,7 +731,10 @@ export type CollectionsClient<TSchema = unknown> = {
   ): Promise<CollectionsResponseRaw<Row>>;
 
   // list overloads (typed via AmaCollectionDef or generic Row)
-  list<Name extends CollectionName<TSchema>, Format extends CollectionsFormat = "data">(
+  list<
+    Name extends CollectionName<TSchema>,
+    Format extends CollectionsFormat = "data",
+  >(
     collection: Name,
     options?: CollectionsListOptions<Format>,
   ): Promise<CollectionsListResult<CollectionRow<TSchema, Name>, Format>>;
@@ -750,7 +782,10 @@ export type CollectionsClient<TSchema = unknown> = {
   ): Promise<CollectionsSingleResult<Row, Format>>;
 
   // Add: first helper
-  first<Name extends CollectionName<TSchema>, Format extends CollectionsFormat = "data">(
+  first<
+    Name extends CollectionName<TSchema>,
+    Format extends CollectionsFormat = "data",
+  >(
     collection: Name,
     options?: CollectionsListOptions<Format>,
   ): Promise<CollectionsSingleResult<CollectionRow<TSchema, Name>, Format>>;

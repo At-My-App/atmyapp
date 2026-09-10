@@ -9,90 +9,102 @@ import type {
   MigrationPrompt,
   SchemaDocument,
   SystemFieldDefinition,
-} from './types';
-import { compileSchema } from './compiler';
-import { stableKey } from './utils';
+} from "./types";
+import { compileSchema } from "./compiler";
+import { stableKey } from "./utils";
 
 function fieldIdentity(field: FieldDefinition): string {
   switch (field.kind) {
-    case 'scalar':
+    case "scalar":
       return `scalar:${field.scalar}`;
-    case 'enum':
-      return `enum:${field.values.map((value) => typeof value).join(',')}`;
-    case 'object':
-      return `object:${Object.keys(field.fields).sort().join(',')}`;
-    case 'array':
+    case "enum":
+      return `enum:${field.values.map((value) => typeof value).join(",")}`;
+    case "object":
+      return `object:${Object.keys(field.fields).sort().join(",")}`;
+    case "array":
       return `array:${fieldIdentity(field.items)}`;
-    case 'union':
-      return `union:${field.variants.map(fieldIdentity).sort().join('|')}`;
-    case 'asset':
-      return `asset:${field.assetKind}:${field.multiple ? 'many' : 'one'}`;
-    case 'reference':
-      return `reference:${field.target}:${field.multiple ? 'many' : 'one'}`;
-    case 'mdx':
+    case "union":
+      return `union:${field.variants.map(fieldIdentity).sort().join("|")}`;
+    case "asset":
+      return `asset:${field.assetKind}:${field.multiple ? "many" : "one"}`;
+    case "reference":
+      return `reference:${field.target}:${field.multiple ? "many" : "one"}`;
+    case "mdx":
       return `mdx:${field.config}`;
-    case 'slug':
-      return 'slug';
+    case "order":
+      return `order:${field.groupBy || ""}`;
+    case "slug":
+      return "slug";
   }
 }
 
 export function classifyTypeChange(
   fromField: FieldDefinition,
-  toField: FieldDefinition
+  toField: FieldDefinition,
 ): MigrationCompatibilityClass {
   const fromIdentity = fieldIdentity(fromField);
   const toIdentity = fieldIdentity(toField);
   if (fromIdentity === toIdentity) {
-    return 'compatible';
+    return "compatible";
   }
-
-  if (toField.kind === 'union' && toField.variants.some((variant) => fieldIdentity(variant) === fromIdentity)) {
-    return 'safe_auto_convert';
-  }
-
-  const fromScalar = fromField.kind === 'scalar' ? fromField.scalar : null;
-  const toScalar = toField.kind === 'scalar' ? toField.scalar : null;
 
   if (
-    (fromScalar === 'number' && toScalar === 'string') ||
-    (fromScalar === 'boolean' && toScalar === 'string') ||
-    (fromScalar === 'date' && toScalar === 'string') ||
-    (fromScalar === 'datetime' && toScalar === 'string') ||
-    (fromScalar === 'timestamp' && toScalar === 'string') ||
-    (fromScalar === 'string' &&
-      (toScalar === 'number' ||
-        toScalar === 'date' ||
-        toScalar === 'datetime' ||
-        toScalar === 'timestamp'))
+    toField.kind === "union" &&
+    toField.variants.some((variant) => fieldIdentity(variant) === fromIdentity)
   ) {
-    return 'confirmable_convert';
+    return "safe_auto_convert";
   }
 
-  return 'incompatible';
+  const fromScalar = fromField.kind === "scalar" ? fromField.scalar : null;
+  const toScalar = toField.kind === "scalar" ? toField.scalar : null;
+
+  if (
+    (fromScalar === "number" && toScalar === "string") ||
+    (fromScalar === "boolean" && toScalar === "string") ||
+    (fromScalar === "date" && toScalar === "string") ||
+    (fromScalar === "datetime" && toScalar === "string") ||
+    (fromScalar === "timestamp" && toScalar === "string") ||
+    (fromScalar === "string" &&
+      (toScalar === "number" ||
+        toScalar === "date" ||
+        toScalar === "datetime" ||
+        toScalar === "timestamp"))
+  ) {
+    return "confirmable_convert";
+  }
+
+  return "incompatible";
 }
 
 function compareSystemFields(
   definitionName: string,
   currentFields: SystemFieldDefinition[],
   nextFields: SystemFieldDefinition[],
-  changes: MigrationChange[]
+  changes: MigrationChange[],
 ) {
-  const currentByName = Object.fromEntries(currentFields.map((field) => [field.name, field]));
-  const nextByName = Object.fromEntries(nextFields.map((field) => [field.name, field]));
-  const names = new Set([...Object.keys(currentByName), ...Object.keys(nextByName)]);
+  const currentByName = Object.fromEntries(
+    currentFields.map((field) => [field.name, field]),
+  );
+  const nextByName = Object.fromEntries(
+    nextFields.map((field) => [field.name, field]),
+  );
+  const names = new Set([
+    ...Object.keys(currentByName),
+    ...Object.keys(nextByName),
+  ]);
 
   for (const name of names) {
     if (stableKey(currentByName[name]) === stableKey(nextByName[name])) {
       continue;
     }
     changes.push({
-      kind: 'system_field_changed',
+      kind: "system_field_changed",
       definitionName,
       fieldPath: name,
       compatibility:
-        name === 'slug' && nextByName[name]?.enabled
-          ? 'confirmable_convert'
-          : 'compatible',
+        name === "slug" && nextByName[name]?.enabled
+          ? "confirmable_convert"
+          : "compatible",
     });
   }
 }
@@ -101,17 +113,21 @@ function compareIndexes(
   definitionName: string,
   current: CollectionDefinition,
   next: CollectionDefinition,
-  changes: MigrationChange[]
+  changes: MigrationChange[],
 ) {
-  const currentIndexes = new Set((current.indexes || []).map((entry) => stableKey(entry)));
-  const nextIndexes = new Set((next.indexes || []).map((entry) => stableKey(entry)));
+  const currentIndexes = new Set(
+    (current.indexes || []).map((entry) => stableKey(entry)),
+  );
+  const nextIndexes = new Set(
+    (next.indexes || []).map((entry) => stableKey(entry)),
+  );
 
   for (const index of nextIndexes) {
     if (!currentIndexes.has(index)) {
       changes.push({
-        kind: 'index_added',
+        kind: "index_added",
         definitionName,
-        compatibility: 'compatible',
+        compatibility: "compatible",
       });
     }
   }
@@ -119,9 +135,9 @@ function compareIndexes(
   for (const index of currentIndexes) {
     if (!nextIndexes.has(index)) {
       changes.push({
-        kind: 'index_removed',
+        kind: "index_removed",
         definitionName,
-        compatibility: 'compatible',
+        compatibility: "compatible",
       });
     }
   }
@@ -132,9 +148,12 @@ function compareFields(
   currentFields: Record<string, FieldDefinition>,
   nextFields: Record<string, FieldDefinition>,
   changes: MigrationChange[],
-  pathPrefix: string = definitionName
+  pathPrefix: string = definitionName,
 ) {
-  const names = new Set([...Object.keys(currentFields), ...Object.keys(nextFields)]);
+  const names = new Set([
+    ...Object.keys(currentFields),
+    ...Object.keys(nextFields),
+  ]);
   for (const name of names) {
     const currentField = currentFields[name];
     const nextField = nextFields[name];
@@ -142,20 +161,20 @@ function compareFields(
 
     if (!currentField && nextField) {
       changes.push({
-        kind: 'field_added',
+        kind: "field_added",
         definitionName,
         fieldPath,
-        compatibility: 'compatible',
+        compatibility: "compatible",
       });
       continue;
     }
 
     if (currentField && !nextField) {
       changes.push({
-        kind: 'field_removed',
+        kind: "field_removed",
         definitionName,
         fieldPath,
-        compatibility: 'incompatible',
+        compatibility: "incompatible",
       });
       continue;
     }
@@ -165,9 +184,9 @@ function compareFields(
     }
 
     const compatibility = classifyTypeChange(currentField, nextField);
-    if (compatibility !== 'compatible') {
+    if (compatibility !== "compatible") {
       changes.push({
-        kind: 'field_type_changed',
+        kind: "field_type_changed",
         definitionName,
         fieldPath,
         fromType: fieldIdentity(currentField),
@@ -178,57 +197,57 @@ function compareFields(
 
     if (Boolean(currentField.unique) !== Boolean(nextField.unique)) {
       changes.push({
-        kind: 'field_unique_changed',
+        kind: "field_unique_changed",
         definitionName,
         fieldPath,
-        compatibility: nextField.unique ? 'confirmable_convert' : 'compatible',
+        compatibility: nextField.unique ? "confirmable_convert" : "compatible",
       });
     }
 
     if (Boolean(currentField.localize) !== Boolean(nextField.localize)) {
       changes.push({
-        kind: 'field_localize_changed',
+        kind: "field_localize_changed",
         definitionName,
         fieldPath,
-        compatibility: 'incompatible',
+        compatibility: "incompatible",
       });
     }
 
     if (
-      currentField.kind === 'array' &&
-      nextField.kind === 'array' &&
+      currentField.kind === "array" &&
+      nextField.kind === "array" &&
       currentField.identityField !== nextField.identityField
     ) {
       changes.push({
-        kind: 'array_identity_field_changed',
+        kind: "array_identity_field_changed",
         definitionName,
         fieldPath,
-        compatibility: 'incompatible',
+        compatibility: "incompatible",
       });
     }
 
-    if (currentField.kind === 'object' && nextField.kind === 'object') {
+    if (currentField.kind === "object" && nextField.kind === "object") {
       compareFields(
         definitionName,
         currentField.fields,
         nextField.fields,
         changes,
-        fieldPath
+        fieldPath,
       );
     }
 
     if (
-      currentField.kind === 'array' &&
-      nextField.kind === 'array' &&
-      currentField.items.kind === 'object' &&
-      nextField.items.kind === 'object'
+      currentField.kind === "array" &&
+      nextField.kind === "array" &&
+      currentField.items.kind === "object" &&
+      nextField.items.kind === "object"
     ) {
       compareFields(
         definitionName,
         currentField.items.fields,
         nextField.items.fields,
         changes,
-        `${fieldPath}[]`
+        `${fieldPath}[]`,
       );
     }
   }
@@ -236,7 +255,7 @@ function compareFields(
 
 export function diffSchemas(
   currentInput: SchemaDocument | string,
-  nextInput: SchemaDocument | string
+  nextInput: SchemaDocument | string,
 ): MigrationChange[] {
   const current = compileSchema(currentInput).document;
   const next = compileSchema(nextInput).document;
@@ -249,9 +268,9 @@ export function diffSchemas(
     Boolean(next.localization?.enabled)
   ) {
     changes.push({
-      kind: 'localization_changed',
-      definitionName: '*',
-      compatibility: 'incompatible',
+      kind: "localization_changed",
+      definitionName: "*",
+      compatibility: "incompatible",
     });
   }
 
@@ -266,18 +285,18 @@ export function diffSchemas(
 
     if (!currentDefinition && nextDefinition) {
       changes.push({
-        kind: 'definition_added',
+        kind: "definition_added",
         definitionName: name,
-        compatibility: 'compatible',
+        compatibility: "compatible",
       });
       continue;
     }
 
     if (currentDefinition && !nextDefinition) {
       changes.push({
-        kind: 'definition_removed',
+        kind: "definition_removed",
         definitionName: name,
-        compatibility: 'incompatible',
+        compatibility: "incompatible",
       });
       continue;
     }
@@ -288,18 +307,20 @@ export function diffSchemas(
 
     if (currentDefinition.kind !== nextDefinition.kind) {
       changes.push({
-        kind: 'definition_kind_changed',
+        kind: "definition_kind_changed",
         definitionName: name,
-        compatibility: 'incompatible',
+        compatibility: "incompatible",
       });
       continue;
     }
 
-    if (Boolean(currentDefinition.localize) !== Boolean(nextDefinition.localize)) {
+    if (
+      Boolean(currentDefinition.localize) !== Boolean(nextDefinition.localize)
+    ) {
       changes.push({
-        kind: 'definition_localize_changed',
+        kind: "definition_localize_changed",
         definitionName: name,
-        compatibility: 'incompatible',
+        compatibility: "incompatible",
       });
     }
 
@@ -307,21 +328,29 @@ export function diffSchemas(
       name,
       currentCompiled.definitionsByName[name]?.systemFields || [],
       nextCompiled.definitionsByName[name]?.systemFields || [],
-      changes
+      changes,
     );
 
     if (
-      (currentDefinition.kind === 'collection' ||
-        currentDefinition.kind === 'document' ||
-        currentDefinition.kind === 'system_config') &&
-      (nextDefinition.kind === 'collection' ||
-        nextDefinition.kind === 'document' ||
-        nextDefinition.kind === 'system_config')
+      (currentDefinition.kind === "collection" ||
+        currentDefinition.kind === "document" ||
+        currentDefinition.kind === "system_config") &&
+      (nextDefinition.kind === "collection" ||
+        nextDefinition.kind === "document" ||
+        nextDefinition.kind === "system_config")
     ) {
-      compareFields(name, currentDefinition.fields, nextDefinition.fields, changes);
+      compareFields(
+        name,
+        currentDefinition.fields,
+        nextDefinition.fields,
+        changes,
+      );
     }
 
-    if (currentDefinition.kind === 'collection' && nextDefinition.kind === 'collection') {
+    if (
+      currentDefinition.kind === "collection" &&
+      nextDefinition.kind === "collection"
+    ) {
       compareIndexes(name, currentDefinition, nextDefinition, changes);
     }
   }
@@ -331,30 +360,30 @@ export function diffSchemas(
 
 function actionForChange(change: MigrationChange): MigrationAction[] {
   switch (change.kind) {
-    case 'definition_removed':
+    case "definition_removed":
       return [
         {
-          type: 'drop_definition',
+          type: "drop_definition",
           definitionName: change.definitionName,
           message: `Definition "${change.definitionName}" will be removed.`,
           compatibility: change.compatibility,
         },
       ];
-    case 'field_removed':
+    case "field_removed":
       return [
         {
-          type: 'drop_field',
+          type: "drop_field",
           definitionName: change.definitionName,
           fieldPath: change.fieldPath,
           message: `Field "${change.fieldPath}" will be removed.`,
           compatibility: change.compatibility,
         },
       ];
-    case 'field_type_changed':
-      if (change.compatibility === 'safe_auto_convert') {
+    case "field_type_changed":
+      if (change.compatibility === "safe_auto_convert") {
         return [
           {
-            type: 'auto_convert',
+            type: "auto_convert",
             definitionName: change.definitionName,
             fieldPath: change.fieldPath,
             message: `Field "${change.fieldPath}" will be converted automatically from ${change.fromType} to ${change.toType}.`,
@@ -362,10 +391,10 @@ function actionForChange(change: MigrationChange): MigrationAction[] {
           },
         ];
       }
-      if (change.compatibility === 'confirmable_convert') {
+      if (change.compatibility === "confirmable_convert") {
         return [
           {
-            type: 'confirm_convert',
+            type: "confirm_convert",
             definitionName: change.definitionName,
             fieldPath: change.fieldPath,
             message: `Field "${change.fieldPath}" can be converted from ${change.fromType} to ${change.toType} with confirmation.`,
@@ -375,18 +404,18 @@ function actionForChange(change: MigrationChange): MigrationAction[] {
       }
       return [
         {
-          type: 'require_union',
+          type: "require_union",
           definitionName: change.definitionName,
           fieldPath: change.fieldPath,
           message: `Field "${change.fieldPath}" changes from ${change.fromType} to ${change.toType} and requires a union or manual migration.`,
           compatibility: change.compatibility,
         },
       ];
-    case 'field_unique_changed':
-      return change.compatibility === 'confirmable_convert'
+    case "field_unique_changed":
+      return change.compatibility === "confirmable_convert"
         ? [
             {
-              type: 'create_unique_index',
+              type: "create_unique_index",
               definitionName: change.definitionName,
               fieldPath: change.fieldPath,
               message: `Field "${change.fieldPath}" is becoming unique and needs a uniqueness check/backfill.`,
@@ -394,18 +423,18 @@ function actionForChange(change: MigrationChange): MigrationAction[] {
             },
           ]
         : [];
-    case 'system_field_changed':
-      if (change.fieldPath === 'slug') {
+    case "system_field_changed":
+      if (change.fieldPath === "slug") {
         return [
           {
-            type: 'backfill_generated_field',
+            type: "backfill_generated_field",
             definitionName: change.definitionName,
             fieldPath: change.fieldPath,
             message: `System field "${change.definitionName}.slug" must be backfilled before activation.`,
             compatibility: change.compatibility,
           },
           {
-            type: 'create_unique_index',
+            type: "create_unique_index",
             definitionName: change.definitionName,
             fieldPath: change.fieldPath,
             message: `System field "${change.definitionName}.slug" requires a unique index.`,
@@ -414,13 +443,13 @@ function actionForChange(change: MigrationChange): MigrationAction[] {
         ];
       }
       return [];
-    case 'localization_changed':
-    case 'definition_localize_changed':
-    case 'field_localize_changed':
-    case 'array_identity_field_changed':
+    case "localization_changed":
+    case "definition_localize_changed":
+    case "field_localize_changed":
+    case "array_identity_field_changed":
       return [
         {
-          type: 'require_clear',
+          type: "require_clear",
           definitionName: change.definitionName,
           fieldPath: change.fieldPath,
           message: `Localized storage metadata changed for "${change.fieldPath || change.definitionName}" and scoped data must be cleared explicitly.`,
@@ -434,7 +463,7 @@ function actionForChange(change: MigrationChange): MigrationAction[] {
 
 export function renderMigrationPrompts(plan: MigrationPlan): MigrationPrompt[] {
   return plan.actions
-    .filter((action) => action.type !== 'auto_convert')
+    .filter((action) => action.type !== "auto_convert")
     .map((action) => ({
       title: action.fieldPath
         ? `Review ${action.fieldPath}`
@@ -448,7 +477,7 @@ export function renderMigrationPrompts(plan: MigrationPlan): MigrationPrompt[] {
 
 export function planMigration(
   currentInput: SchemaDocument | string,
-  nextInput: SchemaDocument | string
+  nextInput: SchemaDocument | string,
 ): MigrationPlan {
   const changes = diffSchemas(currentInput, nextInput);
   const actions = changes.flatMap(actionForChange);
@@ -459,7 +488,13 @@ export function planMigration(
     blocking: false,
   });
   const blocking = actions.some((action) =>
-    ['require_union', 'require_clear', 'require_manual_migration', 'drop_definition', 'drop_field'].includes(action.type)
+    [
+      "require_union",
+      "require_clear",
+      "require_manual_migration",
+      "drop_definition",
+      "drop_field",
+    ].includes(action.type),
   );
 
   return {

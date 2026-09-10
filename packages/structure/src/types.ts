@@ -1,65 +1,48 @@
 export type DefinitionKind =
-  | 'collection'
-  | 'document'
-  | 'file'
-  | 'image'
-  | 'system_config';
+  "collection" | "document" | "file" | "image" | "system_config";
 export type FieldKind =
-  | 'scalar'
-  | 'object'
-  | 'array'
-  | 'enum'
-  | 'union'
-  | 'asset'
-  | 'reference'
-  | 'mdx'
-  | 'slug';
+  | "scalar"
+  | "object"
+  | "array"
+  | "enum"
+  | "union"
+  | "asset"
+  | "reference"
+  | "mdx"
+  | "slug"
+  | "order";
 export type ScalarType =
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'null'
-  | 'date'
-  | 'datetime'
-  | 'timestamp';
+  "string" | "number" | "boolean" | "null" | "date" | "datetime" | "timestamp";
 export type StringFieldFormat =
-  | 'short'
-  | 'long'
-  | 'markdown'
-  | 'email'
-  | 'url'
-  | 'slug'
-  | 'code'
-  | 'textarea'
-  | 'date'
-  | 'datetime'
-  | 'timestamp';
-export type NumberFieldFormat = 'integer' | 'percent' | 'currency';
-export type AssetKind = 'image' | 'file' | 'gallery';
-export type SystemFieldName = 'id' | 'createdAt' | 'updatedAt' | 'slug';
-export type ReferenceResolveBy = 'id' | 'slug' | 'path';
+  | "short"
+  | "long"
+  | "markdown"
+  | "email"
+  | "url"
+  | "slug"
+  | "code"
+  | "textarea"
+  | "date"
+  | "datetime"
+  | "timestamp";
+export type NumberFieldFormat = "integer" | "percent" | "currency";
+export type AssetKind = "image" | "file" | "gallery";
+export type SystemFieldName = "id" | "createdAt" | "updatedAt" | "slug";
+export type ReferenceResolveBy = "id" | "slug" | "path";
 export type LegacyDefinitionType =
-  | 'collection'
-  | 'document'
-  | 'system_config'
-  | 'jsonx'
-  | 'file'
-  | 'image';
+  "collection" | "document" | "system_config" | "jsonx" | "file" | "image";
 export type MigrationCompatibilityClass =
-  | 'safe_auto_convert'
-  | 'confirmable_convert'
-  | 'incompatible'
-  | 'compatible';
+  "safe_auto_convert" | "confirmable_convert" | "incompatible" | "compatible";
 export type MigrationActionType =
-  | 'auto_convert'
-  | 'confirm_convert'
-  | 'require_union'
-  | 'require_clear'
-  | 'require_manual_migration'
-  | 'backfill_generated_field'
-  | 'create_unique_index'
-  | 'drop_definition'
-  | 'drop_field';
+  | "auto_convert"
+  | "confirm_convert"
+  | "require_union"
+  | "require_clear"
+  | "require_manual_migration"
+  | "backfill_generated_field"
+  | "create_unique_index"
+  | "drop_definition"
+  | "drop_field";
 
 export interface MdxComponentConfig {
   description?: string;
@@ -76,7 +59,7 @@ export interface EventDefinition {
   columns: string[];
 }
 
-export type SubmissionCaptchaProvider = 'hcaptcha' | (string & {});
+export type SubmissionCaptchaProvider = "hcaptcha" | (string & {});
 
 export interface SubmissionCaptchaConfig {
   required?: boolean;
@@ -99,8 +82,7 @@ export interface LegacySubmissionDefinition {
 }
 
 export type SubmissionInputDefinition =
-  | SubmissionDefinition
-  | LegacySubmissionDefinition;
+  SubmissionDefinition | LegacySubmissionDefinition;
 
 export interface FieldBase {
   kind: FieldKind;
@@ -116,8 +98,8 @@ export interface FieldBase {
 }
 
 export interface ImageAssetConfig {
-  optimizeFormat?: 'webp' | 'none';
-  optimizeLoad?: 'progressive' | 'none';
+  optimizeFormat?: "webp" | "none";
+  optimizeLoad?: "progressive" | "none";
   ratioHint?: {
     x: number;
     y: number;
@@ -133,7 +115,7 @@ export interface FileAssetConfig {
 }
 
 export interface ScalarFieldDefinition extends FieldBase {
-  kind: 'scalar';
+  kind: "scalar";
   scalar: ScalarType;
   min?: number;
   max?: number;
@@ -152,18 +134,18 @@ export interface ScalarFieldDefinition extends FieldBase {
 }
 
 export interface EnumFieldDefinition extends FieldBase {
-  kind: 'enum';
+  kind: "enum";
   values: Array<string | number | boolean | null>;
 }
 
 export interface ObjectFieldDefinition extends FieldBase {
-  kind: 'object';
+  kind: "object";
   fields: Record<string, FieldDefinition>;
   additionalProperties?: boolean;
 }
 
 export interface ArrayFieldDefinition extends FieldBase {
-  kind: 'array';
+  kind: "array";
   items: FieldDefinition;
   identityField?: string;
   minItems?: number;
@@ -172,44 +154,50 @@ export interface ArrayFieldDefinition extends FieldBase {
 }
 
 export interface UnionFieldDefinition extends FieldBase {
-  kind: 'union';
+  kind: "union";
   variants: FieldDefinition[];
 }
 
 export interface AssetFieldDefinition extends FieldBase {
-  kind: 'asset';
+  kind: "asset";
   assetKind: AssetKind;
   multiple?: boolean;
   accept?: string[];
   config?: ImageAssetConfig | FileAssetConfig | Record<string, unknown>;
   imageOptions?: Record<string, unknown>;
-  deletePolicy?: 'detach' | 'delete';
-  orphanPolicy?: 'allow' | 'delete';
+  deletePolicy?: "detach" | "delete";
+  orphanPolicy?: "allow" | "delete";
 }
 
 export interface ReferenceFieldDefinition extends FieldBase {
-  kind: 'reference';
+  kind: "reference";
   target: string;
   multiple?: boolean;
   by?: ReferenceResolveBy;
   targetField?: string;
-  onDelete?: 'restrict' | 'nullify' | 'cascade';
+  onDelete?: "restrict" | "nullify" | "cascade";
 }
 
 export interface MdxFieldDefinition extends FieldBase {
-  kind: 'mdx';
+  kind: "mdx";
   config: string;
 }
 
 export interface SlugFieldDefinition extends FieldBase {
-  kind: 'slug';
+  kind: "slug";
   source?: string;
   generated?: boolean;
   immutable?: boolean;
-  updatePolicy?: 'immutable' | 'on_change';
+  updatePolicy?: "immutable" | "on_change";
+}
+
+export interface OrderFieldDefinition extends FieldBase {
+  kind: "order";
+  groupBy?: string;
 }
 
 export type FieldDefinition =
+  | OrderFieldDefinition
   | ScalarFieldDefinition
   | EnumFieldDefinition
   | ObjectFieldDefinition
@@ -231,12 +219,11 @@ export interface SystemFieldDefinition {
   settable: boolean;
   requiredInStoredShape: boolean;
   source?: string;
-  updatePolicy?: 'immutable' | 'on_change';
+  updatePolicy?: "immutable" | "on_change";
 }
 
 export type SystemFieldInput =
-  | boolean
-  | Partial<Omit<SystemFieldDefinition, 'name'>>;
+  boolean | Partial<Omit<SystemFieldDefinition, "name">>;
 
 export interface DefinitionBase {
   kind: DefinitionKind;
@@ -247,29 +234,29 @@ export interface DefinitionBase {
 }
 
 export interface CollectionDefinition extends DefinitionBase {
-  kind: 'collection';
+  kind: "collection";
   fields: Record<string, FieldDefinition>;
   indexes?: Array<string | string[]>;
 }
 
 export interface DocumentDefinition extends DefinitionBase {
-  kind: 'document';
+  kind: "document";
   path?: string;
   fields: Record<string, FieldDefinition>;
 }
 
 export interface SystemConfigDefinition extends DefinitionBase {
-  kind: 'system_config';
+  kind: "system_config";
   framework: string;
   systemKey: string;
   displayName: string;
   path: string;
   fields: Record<string, FieldDefinition>;
-  managedBy: 'framework_preset' | (string & {});
+  managedBy: "framework_preset" | (string & {});
 }
 
 export interface FileDefinition extends DefinitionBase {
-  kind: 'file' | 'image';
+  kind: "file" | "image";
   path: string;
   config?: Record<string, unknown>;
 }
@@ -300,7 +287,9 @@ export interface CompiledField {
   description?: string;
 }
 
-export interface CompiledDefinition<TDefinition extends Definition = Definition> {
+export interface CompiledDefinition<
+  TDefinition extends Definition = Definition,
+> {
   definition: TDefinition;
   name: string;
   kind: DefinitionKind;
@@ -335,20 +324,20 @@ export interface ValidationResult {
 
 export interface MigrationChange {
   kind:
-    | 'definition_added'
-    | 'definition_removed'
-    | 'definition_kind_changed'
-    | 'field_added'
-    | 'field_removed'
-    | 'field_type_changed'
-    | 'field_unique_changed'
-    | 'localization_changed'
-    | 'definition_localize_changed'
-    | 'field_localize_changed'
-    | 'array_identity_field_changed'
-    | 'system_field_changed'
-    | 'index_added'
-    | 'index_removed';
+    | "definition_added"
+    | "definition_removed"
+    | "definition_kind_changed"
+    | "field_added"
+    | "field_removed"
+    | "field_type_changed"
+    | "field_unique_changed"
+    | "localization_changed"
+    | "definition_localize_changed"
+    | "field_localize_changed"
+    | "array_identity_field_changed"
+    | "system_field_changed"
+    | "index_added"
+    | "index_removed";
   definitionName: string;
   fieldPath?: string;
   fromType?: string;
