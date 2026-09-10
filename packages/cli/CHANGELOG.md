@@ -1,5 +1,13 @@
 # @atmyapp/cli
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [a742a81]
+  - @atmyapp/structure@0.2.0
+  - @atmyapp/core@0.2.0
+
 ## 0.2.0
 
 ### Minor Changes

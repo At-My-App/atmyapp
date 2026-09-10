@@ -1,5 +1,12 @@
 # @atmyapp/astro
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [a742a81]
+  - @atmyapp/core@0.2.0
+
 ## 0.0.3
 
 ### Patch Changes
