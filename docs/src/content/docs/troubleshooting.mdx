@@ -1,15 +1,38 @@
 ---
 title: Troubleshooting
-description: Fix common AtMyApp setup and migration issues.
+description: Diagnose configuration, content, preview, form, and documentation-search failures.
 ---
 
-This section will collect common errors and fixes for AtMyApp projects.
+Start with a known document and the exact project URL. Turn on `errorPolicy: 'throw'` while investigating storage or collection reads; the Core default can return empty values or placeholders on failure.
 
-## Common checks
+| Symptom                          | Check                                                       | Next action                                                          |
+| -------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------- |
+| API key rejected                 | Website key belongs to the selected project/environment     | Replace the key; do not substitute a CLI token                       |
+| Requests go to the wrong route   | `baseUrl` includes the full project API path                | Copy the URL from project configuration                              |
+| Document missing                 | Stored path, schema definition, and published content agree | Create/publish the content; migration alone does not fill every file |
+| `getValue` unavailable           | A runtime schema was passed to `createAtMyAppClient`        | Pass `schema`, not just a TypeScript generic                         |
+| Collection appears empty         | Error policy, filters, locale, and preview selection        | Try an unfiltered known collection with errors enabled               |
+| Static website shows old content | New content build was deployed                              | Inspect the build and hosting workflow                               |
+| Preview shows published content  | Dynamic rendering and per-request preview key               | Inspect the query, runtime mode, and cache policy                    |
+| Preview expired                  | Capability validity                                         | Reopen the preview; avoid published-content fallback                 |
+| Astro metadata missing           | Astro preset and `website.metadata` configuration           | Enable the preset and read the metadata guide                        |
+| Form is unavailable              | Submission open state and CAPTCHA requirements              | Check type status and widget configuration                           |
+| Upload fails                     | File field names, encoding, and submission configuration    | Use SDK-generated form parameters and multipart for files            |
 
-- Confirm you ran `atmyapp use` in the current workspace.
-- Confirm your schema file is named `atmyapp.schema.ts`, `atmyapp.schema.mts`, `atmyapp.schema.js`, `atmyapp.schema.mjs`, or `atmyapp.schema.json`.
-- Use `atmyapp migrate --dry-run --verbose` to inspect generated output without uploading it.
-- Make sure the project URL points at the expected AtMyApp project.
+## Schema and CLI failures
 
-If you are stuck, open a discussion in the [AtMyApp repository](https://github.com/At-My-App/atmyapp/discussions).
+Run the CLI from the connected workspace. Confirm `.ama/session.json` exists, check the selected project, and use `atmyapp migrate --dry-run --verbose`. Use a canonical `atmyapp.schema.ts` (or supported JS/JSON equivalent) and inspect the reported field path. [Field options](/reference/fields/) documents constraints such as immutable slugs and localized array identities.
+
+## Diagnostics
+
+[Optional diagnostics](/guides/diagnostics/) helps compare SDK versions, build metadata, connectivity, and preview state. A static report describes build time; its timestamp is not a continuously running health check. A successful connection report does not prove every content path or submission works.
+
+## Search in these docs
+
+Search uses a generated Pagefind index. In a local `astro dev` session, Starlight shows a development notice instead of search results. Build the docs and run `astro preview` to test real search. The deployed output must include the `pagefind` directory and `_astro` assets.
+
+If deployed search fails, check the browser network panel for missing Pagefind assets and confirm the HTML and search index were deployed together. You can also use the sidebar's complete guide and reference index.
+
+## Ask for help
+
+Send the affected page, the operation you tried, and a sanitized error or diagnostics report to [support](mailto:contact@atmyapp.com). Include whether it happens locally, during a build, or on the deployed site. Do not include CLI tokens or raw preview keys.

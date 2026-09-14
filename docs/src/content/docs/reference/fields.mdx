@@ -1,0 +1,214 @@
+---
+title: Field types and options
+description: Every field builder, its options, defaults, and current validation limits.
+---
+
+Import `s` from `@atmyapp/structure` (also re-exported by `@atmyapp/core`). Builders take an options object; nested builders take named `fields`, `items`, `values`, or `variants` properties.
+
+This reference describes the SDK source in this repository. An option can describe editor or storage behavior without being enforced by the local content validator. Do not treat display hints as validation guarantees.
+
+## Common options
+
+These options are available on every field. Use them only where their semantics apply.
+
+| Option        | Meaning and behavior                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------- |
+| `description` | Human-readable purpose, constraints, or writing guidance                                                |
+| `optional`    | `true` allows the field to be absent; default is required                                               |
+| `required`    | Alternative requiredness flag; `false` makes it optional. Prefer `optional` and avoid conflicting flags |
+| `default`     | Default/placeholder value of the expected shape; does not backfill all existing content                 |
+| `localize`    | Localize string or MDX leaves; invalid on other field kinds                                             |
+| `unique`      | Uniqueness declaration; cross-entry checks need platform context                                        |
+| `ui`          | Advanced editor metadata record; not a set of guaranteed portable controls                              |
+| `storage`     | Advanced storage metadata record                                                                        |
+| `legacy`      | Compatibility metadata for compilation; avoid in new schemas unless integrating legacy definitions      |
+
+Optional means missing, not automatically nullable. To accept explicit `null`, use a union with `s.enum({ values: [null] })`.
+
+## Text
+
+```ts
+s.string({ min: 1, max: 100, placeholder: "A clear headline" });
+s.shortText({ description: "A one-line summary" });
+s.longText({ max: 600 });
+s.markdown({ localize: false });
+s.email({ optional: true });
+s.url();
+```
+
+| Builder     | Defaults added to `s.string()`                                  |
+| ----------- | --------------------------------------------------------------- |
+| `string`    | No format or length default                                     |
+| `shortText` | `format: 'short'`, `preferredLength: 80`, `localize: true`      |
+| `longText`  | `format: 'long'`, `preferredLength: 280`, `localize: true`      |
+| `markdown`  | `format: 'markdown'`, `preferredLength: 1200`, `localize: true` |
+| `email`     | `format: 'email'`                                               |
+| `url`       | `format: 'url'`                                                 |
+
+| Option                    | Meaning                                                                                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `min`, `max`              | Aliases for minimum/maximum string length                                                                                                  |
+| `minLength`, `maxLength`  | Explicit lengths; take precedence over aliases                                                                                             |
+| `pattern`                 | Regular-expression source string, checked by local validation                                                                              |
+| `enumValues`              | Allowed scalar values; prefer `s.enum` for a dedicated choice field                                                                        |
+| `format`                  | `short`, `long`, `markdown`, `email`, `url`, `slug`, `code`, `textarea`, `date`, `datetime`, `timestamp`, or an integration-defined string |
+| `preferredLength`         | Writing/editor hint, not a hard limit                                                                                                      |
+| `placeholder`, `examples` | Input guidance; not stored default content                                                                                                 |
+
+The local scalar validator checks type, length, pattern, and `enumValues`. A format alone does not locally validate an email, URL, or Markdown document. Use `s.slug()` for managed URL identifiers rather than `format: 'slug'`. Render Markdown with your application's Markdown pipeline; plain strings are not trusted HTML.
+
+## Numbers
+
+```ts
+s.number({ min: 0, max: 100, step: 0.5 });
+s.integer({ min: 1, default: 1 });
+s.number({ format: "currency", description: "Price in EUR" });
+```
+
+`min`/`max` map to `minimum`/`maximum`; explicit bounds win. `integer: true` adds an integer format and step 1 unless overridden. `s.integer()` defaults to `integer: true`, `format: 'integer'`, and `step: 1`. Formats include `integer`, `percent`, and `currency`; specify units in the description.
+
+`step` and integer formatting are hints: the local numeric validator checks type and bounds, not divisibility or integrality. `enumValues` restricts allowed values. Scalar options such as `placeholder`, `examples`, and `preferredLength` exist in the shared type but do not add numeric validation.
+
+## Boolean and null
+
+```ts
+s.boolean({ default: false });
+s.enum({ values: [null] });
+s.union({ variants: [s.string(), s.enum({ values: [null] })] });
+```
+
+Use booleans for a real on/off choice. There is no dedicated `s.null()` builder; a single-value null enum accepts only null. Both support common options; extra scalar hints on boolean do not change its value type.
+
+## Dates and times
+
+```ts
+s.date({ optional: true });
+s.datetime();
+s.timestamp();
+```
+
+Each builder produces its corresponding scalar and format. Values are strings in the canonical validator and inferred SDK types, not JavaScript `Date` objects. Choose a consistent representation in your content, such as `2026-09-14` for a date and an ISO timestamp with a timezone for an instant. The local validator checks string type, not calendar validity or timezone interpretation. Bounds and formatting metadata do not implement a date-range validator.
+
+## Choices and unions
+
+```ts
+s.enum({ values: ["draft", "published"], default: "draft" });
+s.union({ variants: [s.string(), s.number()] });
+```
+
+`enum.values` accepts string, number, boolean, or null literals. `union.variants` is a list of field definitions; a value must match at least one variant. Keep choices understandable for editors. Both builders accept the common options.
+
+## Objects
+
+```ts
+s.object({
+  additionalProperties: false,
+  fields: { label: s.string(), href: s.url() },
+});
+```
+
+`fields` defines child properties. `additionalProperties: false` rejects undeclared properties during local validation; leaving it unset does not reject them. Optional children use their own `optional` option. Localize leaves, not the object.
+
+## Arrays
+
+```ts
+s.array({ items: s.string(), minItems: 1, maxItems: 5 });
+```
+
+| Option                 | Meaning                                                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| `items`                | Required field definition for each value                                                             |
+| `minItems`, `maxItems` | Bounds checked by local validation                                                                   |
+| `identityField`        | Stable non-localized scalar key in object items; required when objects contain localized descendants |
+| `uniqueItems`          | Uniqueness metadata; the local validator does not enforce duplicate removal                          |
+
+Use [localized array identities](/guides/structure/#localization) when applicable. Array order is its stored sequence; `s.order()` is for collection entries.
+
+## Images, files, and galleries
+
+```ts
+s.image({
+  config: { optimizeFormat: "webp", ratioHint: { x: 16, y: 9 } },
+});
+s.file({
+  accept: ["application/pdf"],
+  config: { contentType: "application/pdf" },
+});
+s.gallery({ optional: true });
+```
+
+`image` and `file` are single assets. `gallery` is a multiple-image asset. Stored canonical values are asset-reference strings, or arrays of strings for galleries; they are not binary file contents. Render through your media/storage integration. Submission uploads have separate binary handling in the Core SDK.
+
+| Option                  | Meaning                                        |
+| ----------------------- | ---------------------------------------------- |
+| `accept`                | Accepted media-type hints                      |
+| `config.optimizeFormat` | Image output preference: `webp` or `none`      |
+| `config.optimizeLoad`   | Image load preference: `progressive` or `none` |
+| `config.ratioHint`      | Suggested `{ x, y }` aspect ratio              |
+| `config.maxSize`        | Suggested `{ width, height }` dimensions       |
+| `config.contentType`    | File content-type configuration                |
+| `imageOptions`          | Advanced image configuration record            |
+| `deletePolicy`          | `detach` or `delete` asset lifecycle metadata  |
+| `orphanPolicy`          | `allow` or `delete` orphan lifecycle metadata  |
+
+These settings describe asset handling; the local string-shape validator does not resize images, inspect MIME bytes, or delete files. Confirm backend support before relying on lifecycle metadata for cleanup.
+
+## References
+
+```ts
+s.reference("authors");
+s.reference({ target: "posts", by: "slug", multiple: true, optional: true });
+```
+
+| Option        | Meaning                                                             |
+| ------------- | ------------------------------------------------------------------- |
+| `target`      | Required definition name in the same schema                         |
+| `multiple`    | Store multiple references instead of one                            |
+| `by`          | Defaults to `id`; collections support `id` or `slug`                |
+| `onDelete`    | Defaults to `restrict`; collections require `restrict`              |
+| `targetField` | Present in generic types, but unsupported for collection references |
+
+Slug references require the target to expose a field named `slug` built with `s.slug()`. Generic types also contain `by: 'path'` and deletion modes `nullify`/`cascade`; these are **not valid collection-reference configurations**. Local value validation checks strings; resolving targets and preventing broken links requires platform context. The SDK does not automatically expand references into related objects.
+
+## Slugs
+
+```ts
+s.slug({ source: "title" });
+```
+
+A slug is a stable URL identifier of at most 96 lowercase letters, numbers, and single hyphens. Defaults are `unique: true`, `generated: true`, `immutable: true`, and `updatePolicy: 'immutable'`.
+
+`source` identifies the source field used for generation. `generated` controls generation metadata. The generic types expose `immutable` and `updatePolicy`, but the schema validator rejects mutable slugs, `unique: false`, and `updatePolicy: 'on_change'`. Editing a title should not unexpectedly break an existing page URL.
+
+## Collection order
+
+```ts
+s.order();
+s.order({ groupBy: "category" });
+```
+
+Order fields must be top-level collection fields. `groupBy`, when set, must name a single-value reference field in that collection. Values are safe integer ranks. Use the platform's ordering operations instead of inventing concurrent rank updates in a public website.
+
+## MDX
+
+```ts
+s.mdx({ config: "article" });
+```
+
+`config` names a required entry in the schema's `mdx` map:
+
+```ts
+const mdx = {
+  article: {
+    description: "Article content with approved callouts.",
+    components: {
+      Callout: {
+        description: "A highlighted note.",
+        props: { tone: "string" },
+      },
+    },
+  },
+};
+```
+
+Pass that map as `mdx` to `defineSchema`. MDX values are strings. The configuration describes available components; your website must provide the renderer and implementations. Local validation checks the string and configuration reference, not arbitrary code safety. Only allow the components and execution behavior your application intends to support.

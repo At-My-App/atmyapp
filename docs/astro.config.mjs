@@ -34,55 +34,127 @@ export default defineConfig({
       editLink: {
         baseUrl: "https://github.com/At-My-App/atmyapp/edit/main/docs/",
       },
-      head: [
-        {
-          tag: "meta",
-          attrs: {
-            property: "og:image",
-            content: "https://docs.atmyapp.com/social-card.png",
-          },
-        },
-      ],
       sidebar: [
         {
-          label: "Documentation",
+          label: "Start here",
           items: [
-            { label: "Introduction", slug: "index" },
-            { label: "Quick Start", slug: "quick-start" },
-            { label: "Core Concepts", slug: "concepts/schema" },
-            { label: "CLI", slug: "guides/cli" },
             {
-              label: "Astro",
-              items: [
-                { label: "Quick start", slug: "guides/astro" },
-                { label: "Modes and previews", slug: "guides/astro-previews" },
-                { label: "Metadata", slug: "guides/astro-metadata" },
-                { label: "Forms", slug: "guides/astro-forms" },
-                { label: "Diagnostics", slug: "guides/diagnostics" },
-              ],
+              label: "Introduction",
+              slug: "index",
             },
-            { label: "Integrations", slug: "integrations" },
-            { label: "AI Assistant", slug: "ai-assistant" },
-            { label: "Deployment", slug: "deployment" },
-            { label: "Account & Billing", slug: "account" },
-            { label: "Troubleshooting", slug: "troubleshooting" },
-            { label: "Changelog", slug: "changelog" },
+            {
+              label: "JavaScript setup",
+              slug: "quick-start",
+            },
+            {
+              label: "How content works",
+              slug: "concepts/schema",
+            },
           ],
         },
         {
-          label: "API Reference",
+          label: "Model your content",
           items: [
-            { label: "Core", slug: "reference/core" },
-            { label: "Structure", slug: "reference/structure" },
-            { label: "CLI", slug: "reference/cli" },
-            { label: "Astro", slug: "reference/astro" },
+            {
+              label: "Define a schema",
+              slug: "guides/structure",
+            },
+            {
+              label: "Field types and options",
+              slug: "reference/fields",
+            },
+            {
+              label: "CLI workflow",
+              slug: "guides/cli",
+            },
+          ],
+        },
+        {
+          label: "Astro",
+          items: [
+            {
+              label: "Setup",
+              slug: "guides/astro",
+            },
+            {
+              label: "Modes and previews",
+              slug: "guides/astro-previews",
+            },
+            {
+              label: "Metadata and SEO",
+              slug: "guides/astro-metadata",
+            },
+            {
+              label: "Forms",
+              slug: "guides/astro-forms",
+            },
+          ],
+        },
+        {
+          label: "Ship and hand over",
+          items: [
+            {
+              label: "Forms with JavaScript",
+              slug: "guides/forms",
+            },
+            {
+              label: "Deployment",
+              slug: "deployment",
+            },
+            {
+              label: "Verify your integration",
+              slug: "guides/diagnostics",
+            },
+            {
+              label: "Client handoff",
+              slug: "ai-assistant",
+            },
+            {
+              label: "Troubleshooting",
+              slug: "troubleshooting",
+            },
+          ],
+        },
+        {
+          label: "API reference",
+          items: [
+            {
+              label: "Core SDK",
+              slug: "reference/core",
+            },
+            {
+              label: "Structure SDK",
+              slug: "reference/structure",
+            },
+            {
+              label: "Astro SDK",
+              slug: "reference/astro",
+            },
+            {
+              label: "CLI",
+              slug: "reference/cli",
+            },
           ],
         },
         {
           label: "Resources",
           items: [
-            { label: "Examples", slug: "examples" },
-            { label: "Changelog", slug: "changelog" },
+            {
+              label: "Examples",
+              slug: "examples",
+            },
+            {
+              label: "Integrations",
+              slug: "integrations",
+            },
+            {
+              label: "Account",
+              slug: "account",
+            },
+            {
+              label: "Changelog",
+              slug: "changelog",
+            },
           ],
         },
       ],

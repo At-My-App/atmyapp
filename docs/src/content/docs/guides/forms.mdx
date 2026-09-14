@@ -1,0 +1,74 @@
+---
+title: Forms on any JavaScript website
+description: Collect submissions from static websites with HTML forms or JavaScript.
+---
+
+Forms submit directly to AtMyApp. A static website does not need its own backend merely to collect responses. Astro projects can use [AtMyAppForm](/guides/astro-forms/).
+
+## 1. Define the submission
+
+Add this under the schema's `submissions` map, then run `atmyapp migrate`:
+
+```ts
+import { defineSubmission, s } from "@atmyapp/structure";
+
+const contact = defineSubmission({
+  description: "Messages from the website contact page.",
+  fields: {
+    email: s.email(),
+    message: s.string({ min: 1, max: 5000 }),
+    attachment: s.file({ optional: true }),
+  },
+});
+```
+
+The key in the map, such as `contact`, is the name passed to the SDK. Use input names that match the field names.
+
+## 2. Get form parameters
+
+Using the client from [JavaScript setup](/quick-start/):
+
+```ts
+const status = await ama.submissions.getTypeStatus("contact");
+const params = await ama.submissions.getFormParams("contact", {
+  returnTo: "https://www.example.com/contact/result/",
+});
+```
+
+Check status before rendering an enabled form. A closed form should show a clear unavailable message. If CAPTCHA is required, provide the configured provider's widget/token integration before allowing submission.
+
+For a static site, run these calls during the build and insert `params.action`, `params.method`, and `params.encType` into your template's corresponding HTML attributes. The values are not hard-coded endpoint guesses. A form can close after the site was built; the endpoint remains authoritative.
+
+## 3. Add HTML inputs
+
+Once your template has supplied the actual action and encoding, the form can submit without JavaScript:
+
+```html
+<!-- Replace ACTION_FROM_SDK with params.action during generation. -->
+<form action="ACTION_FROM_SDK" method="POST" enctype="multipart/form-data">
+  <label>Email <input name="email" type="email" required /></label>
+  <label
+    >Message <textarea name="message" required maxlength="5000"></textarea>
+  </label>
+  <label>Attachment <input name="attachment" type="file" /></label>
+  <button type="submit">Send message</button>
+</form>
+```
+
+Use the SDK's `encType` in your real template; multipart is necessary for file uploads. Client-side HTML constraints improve feedback but the submission service must still validate the request.
+
+## 4. Handle the result
+
+When using `returnTo`, the endpoint redirects to that page with `result=success` or `result=error`, plus `submissionId` or `error` where applicable. A static result page can read those query parameters with JavaScript and display a success or error message. Treat them as untrusted display input; they are not proof that a particular submission exists.
+
+Choose a return URL on your own production website. Avoid carrying preview keys into it. Without `returnTo`, the response is handled directly by the submission endpoint.
+
+## Optional JavaScript submission
+
+Use `ama.submissions.submit('contact', new FormData(form))` from your submit handler if you need inline feedback. Prevent the normal navigation, mark the form busy, prevent duplicate sends, catch errors, and only reset fields after success. Preserve input on failure and offer retry. The SDK accepts an `AbortSignal` in the third argument for cancellation.
+
+CAPTCHA tokens may need resetting after each attempt. Provider secrets belong in protected project configuration, never in browser code or a public schema bundle. No SDK helper automatically installs a CAPTCHA widget.
+
+## Preview behavior
+
+The Core submission API sends real submissions. Disable forms in your preview UI unless testing real submissions is intentional. Astro's form component does this by default and exposes an explicit opt-in.

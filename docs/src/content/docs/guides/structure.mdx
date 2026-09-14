@@ -1,0 +1,126 @@
+---
+title: Define your content schema
+description: Model documents, collections, media, submissions, and localized content.
+---
+
+Your schema is the contract between the website and its editors. Model the things clients need to change, give each field a useful description, and keep layout implementation in your code.
+
+## Choose a definition
+
+| Helper                       | Use it for                                  | Example                                               |
+| ---------------------------- | ------------------------------------------- | ----------------------------------------------------- |
+| `defineDocument`             | A single structured content file            | Homepage, navigation, contact information             |
+| `defineCollection`           | Repeated entries with individual identities | Articles, team members, services                      |
+| `defineFile` / `defineImage` | A managed asset at a fixed path             | Downloadable brochure, logo                           |
+| `defineSystemConfig`         | Framework-managed configuration             | Astro website metadata; prefer the framework preset   |
+| `defineSubmission`           | Incoming website responses                  | Contact or application form; goes under `submissions` |
+| `defineEvent`                | Analytics event columns                     | Custom interaction; goes under `events`               |
+
+## Build a complete schema
+
+```ts
+import {
+  defineSchema,
+  defineDocument,
+  defineCollection,
+  defineSubmission,
+  s,
+} from "@atmyapp/structure";
+
+export default defineSchema({
+  description: "A small agency website.",
+  definitions: {
+    home: defineDocument({
+      path: "home.json",
+      description: "Homepage copy.",
+      fields: {
+        headline: s.string({ min: 1, max: 100 }),
+        introduction: s.string({ format: "long", optional: true }),
+      },
+    }),
+    authors: defineCollection({
+      description: "People who write our articles.",
+      fields: { name: s.string(), avatar: s.image({ optional: true }) },
+    }),
+    posts: defineCollection({
+      fields: {
+        title: s.string({ min: 1 }),
+        slug: s.slug({ source: "title" }),
+        author: s.reference("authors"),
+        body: s.markdown({ localize: false }),
+        position: s.order(),
+      },
+    }),
+  },
+  submissions: {
+    contact: defineSubmission({
+      fields: { email: s.email(), message: s.string({ min: 1 }) },
+    }),
+  },
+});
+```
+
+A reference stores an identifier, not an embedded copy of the author. Fetch the related entry when rendering. An order field stores a rank; show editors meaningful positions such as “First” or “After another article.”
+
+## Definition options
+
+| Option         | Meaning                                                                           |
+| -------------- | --------------------------------------------------------------------------------- |
+| `fields`       | Required field-name-to-builder map for structured definitions                     |
+| `name`         | Optional definition name metadata; keep the schema map key stable                 |
+| `description`  | Explain the content's purpose to editors and tooling                              |
+| `localize`     | Definition-level localization configuration; localize supported leaves explicitly |
+| `systemFields` | Configure `id`, `createdAt`, `updatedAt`, and `slug` system metadata              |
+| `path`         | Document path, or required asset path; keep aligned with stored content           |
+| `indexes`      | Collection index declarations, a field name or list of field names                |
+
+A system-field value can be a boolean or an object with `enabled`, `readable`, `queryable`, `generated`, `immutable`, `unique`, `settable`, `requiredInStoredShape`, `source`, and `updatePolicy`. These are advanced storage-contract controls, not visual editor labels. Prefer normal generated identities and explicit `s.slug()` for editable content models.
+
+`defineSystemConfig` additionally requires `framework`, `systemKey`, `displayName`, `path`, and `managedBy`. Use the Astro preset to create its metadata definition instead of hand-authoring a competing one. Fixed file/image definitions take a `config` object for asset configuration.
+
+## Nested content
+
+Use an object for a cohesive section and an array for a bounded repeatable group within a document:
+
+```ts
+const hero = s.object({
+  additionalProperties: false,
+  fields: {
+    title: s.string(),
+    links: s.array({
+      maxItems: 3,
+      items: s.object({ fields: { label: s.string(), url: s.url() } }),
+    }),
+  },
+});
+```
+
+Use a collection instead when entries need their own pages, relationships, or independent editing. Do not make the entire site one enormous nested document.
+
+## Localization
+
+Enable `localization: { enabled: true }` on the schema and mark text or MDX leaves with `localize: true`. Do not mark numbers, references, assets, arrays, or objects themselves as localized. `shortText`, `longText`, and `markdown` default to localized text; pass `localize: false` when that is not wanted.
+
+Arrays of objects containing localized leaves need a stable, non-localized scalar `identityField`:
+
+```ts
+const features = s.array({
+  identityField: "key",
+  items: s.object({
+    fields: {
+      key: s.string({ localize: false }),
+      title: s.string({ localize: true }),
+    },
+  }),
+});
+```
+
+Keep `key` stable across translations and reordering. Pass `locale` to the runtime client or individual reads to select a language. Your website still owns locale routing and language navigation.
+
+## Validate and evolve
+
+Run `atmyapp migrate --dry-run --verbose` before uploading changes. Inspect the compiled payload, then run `atmyapp migrate` against the intended project. Adding a required field to existing entries needs content backfilling; a default is not a blanket migration of old documents. Renames can behave like removal plus addition, so plan how existing content moves before changing identifiers.
+
+Schema validation and content validation are different: `validateSchemaDocument()` checks definitions; `validateContent()` checks a document's value against a definition. Cross-entry uniqueness and reference integrity need platform context. A browser schema is not an authorization boundary.
+
+Continue with the [complete field reference](/reference/fields/) or [Structure API](/reference/structure/).

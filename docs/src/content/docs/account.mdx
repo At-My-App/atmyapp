@@ -1,15 +1,10 @@
 ---
-title: Account & Billing
-description: Account, access, and billing information for AtMyApp.
+title: Project access
+description: Separate public website configuration from administrative access.
 ---
 
-This section is a placeholder for account and billing documentation.
+Use a public website API key for the runtime SDK. Use a CLI token to connect the local workspace for administrative operations such as schema migration. They are different credentials with different purposes.
 
-## Planned topics
+Keep `.ama/session.json` out of source control. Keep CLI tokens in protected local or CI configuration. Confirm the target project before uploading schema or content changes. Preview keys belong to the specific preview, not permanent production configuration.
 
-- Project access
-- Team roles
-- API keys and CLI tokens
-- Billing and plan limits
-
-For account help today, contact [contact@atmyapp.com](mailto:contact@atmyapp.com).
+For project access and billing details, use your AtMyApp account or contact [contact@atmyapp.com](mailto:contact@atmyapp.com). These SDK docs do not define account plan limits or promise particular permissions.

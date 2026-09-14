@@ -1,19 +1,15 @@
 ---
-title: Integrations
-description: Connect AtMyApp to frameworks, apps, and content workflows.
+title: Choose your integration
+description: Pick Core for any framework or Astro for an integrated static-first workflow.
 ---
 
-AtMyApp integrations help you connect the schema workflow to the projects your team already builds.
+| Package              | Purpose                                                      | Start here                          |
+| -------------------- | ------------------------------------------------------------ | ----------------------------------- |
+| `@atmyapp/core`      | Framework-independent runtime reads, forms, and diagnostics  | [JavaScript setup](/quick-start/)   |
+| `@atmyapp/astro`     | Environment setup, shared clients, metadata, forms, previews | [Astro setup](/guides/astro/)       |
+| `@atmyapp/structure` | Canonical content definitions and validation                 | [Schema design](/guides/structure/) |
+| `@atmyapp/cli`       | Connect a project and upload schemas/content                 | [CLI workflow](/guides/cli/)        |
 
-## Available now
+For React, Vue, Svelte, or a custom server, use Core in your framework's loader or browser data layer. Your framework owns routing, rendering, environment access, and caching. Core does not automatically add routes or read preview query parameters.
 
-- Astro helpers via `@atmyapp/astro`
-- Runtime client access via `@atmyapp/core`
-- Schema tooling via `@atmyapp/structure`
-- CLI migrations via `@atmyapp/cli`
-
-## Coming next
-
-This section will grow into framework-specific guides, deployment examples, and integration recipes.
-
-For now, start with the [Astro guide](/guides/astro/) or the [CLI guide](/guides/cli/).
+For Astro, use its integration and server helper to keep content, metadata, and forms in the same preview context. Production can remain entirely static.

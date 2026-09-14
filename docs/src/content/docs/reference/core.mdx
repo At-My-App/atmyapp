@@ -1,46 +1,95 @@
 ---
-title: Core Reference
-description: Curated reference for @atmyapp/core.
+title: Core SDK
+description: Runtime configuration, content reads, collections, submissions, and diagnostics.
 ---
 
-`@atmyapp/core` is the JavaScript and TypeScript runtime client package. It also re-exports the canonical schema helpers from `@atmyapp/structure`.
+Install `@atmyapp/core` for JavaScript and TypeScript websites. Start with the [JavaScript walkthrough](/quick-start/) for a complete integration.
 
-## Install
-
-```bash
-pnpm add @atmyapp/core
-```
-
-## Main responsibilities
-
-- Create AtMyApp clients for runtime data access.
-- Read content from project storage.
-- Track analytics events.
-- Work with submissions.
-- Use legacy AMA definition types where needed.
-- Re-export canonical schema helpers during the migration to the shared schema model.
-
-## Schema helpers
-
-```ts
-import {
-  defineCollection,
-  defineDocument,
-  defineSchema,
-  defineSubmission,
-  s,
-} from "@atmyapp/core";
-```
-
-Prefer `@atmyapp/structure` for direct schema authoring in new tooling code. Use the `@atmyapp/core` re-exports when application code already depends on the core package.
-
-## Client usage
+## Create a client
 
 ```ts
 import { createAtMyAppClient } from "@atmyapp/core";
+import schema from "../atmyapp.schema";
 
-const client = createAtMyAppClient({
-  apiKey: process.env.ATMYAPP_API_KEY,
-  baseUrl: process.env.ATMYAPP_URL,
+const ama = createAtMyAppClient({
+  apiKey: "YOUR_PUBLIC_WEBSITE_API_KEY",
+  baseUrl: "YOUR_PROJECT_API_URL",
+  schema,
+  errorPolicy: "throw",
 });
 ```
+
+Core does not look up environment variables or query parameters automatically. Pass resolved values explicitly. Instantiate preview clients per request.
+
+| Option            | Meaning                                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
+| `apiKey`          | Required public website API key                                                                       |
+| `baseUrl`         | Required full project API URL                                                                         |
+| `schema`          | Runtime schema for inferred content names, shapes, and helpers                                        |
+| `previewKey`      | Optional preview capability for this client                                                           |
+| `locale`          | Default locale for localized reads                                                                    |
+| `mode`            | `client` for cached reads; `priority` for direct priority reads                                       |
+| `errorPolicy`     | Storage/collection failures: `quiet-empty` (default) or `throw`                                       |
+| `customFetch`     | Fetch implementation for transport customization                                                      |
+| `plugins`         | Optional content-processing plugin names                                                              |
+| `clientMode`      | `online` (default), `with-fallback`, or `local`                                                       |
+| `localStorage`    | Snapshot path (default `.ama/local`) and fallback `timeoutMs` (default 5000)                          |
+| `localDataSource` | Browser-compatible adapter with `readFile`, `readJson`, `listCollection`, and optional `getStaticUrl` |
+
+`mode` selects a request path; `clientMode` selects the online/local data strategy. They are independent. Core's filesystem snapshots need a suitable server runtime. Use `localDataSource` for a browser. Do not use stale local fallback to hide an invalid preview.
+
+## Storage
+
+```ts
+const home = await ama.storage.getValue("home");
+const wrappedHome = await ama.storage.get("home");
+const raw = await ama.storage.getFromPath("home.json");
+const imageUrl = await ama.storage.getStaticUrl("images/cover.jpg");
+```
+
+`getValue` requires a runtime schema and returns document data or an asset `{ url }`. `get` returns `AmaContent`, `AmaFile`, or `AmaImage` wrappers. `getFromPath` returns `unknown` and does not infer a shape from your path string. These methods accept per-read `previewKey` and `locale` where supported by their signatures.
+
+The older `get(path, type, options)` overload remains available for legacy definition types. Prefer schema-aware access in new sites. Inspect wrapper error state when using wrapper APIs; not every wrapper-returning read behaves like a thrown exception.
+
+## Collections
+
+```ts
+const posts = await ama.collections.list("posts", { limit: 12, offset: 0 });
+const post = await ama.collections.getById("posts", "ENTRY_ID");
+const firstPost = await ama.collections.first("posts");
+const selected = await ama.collections.getManyByIds("posts", [
+  "FIRST_ID",
+  "SECOND_ID",
+]);
+```
+
+The default result format is `data`: an array of values for lists, a value or null for a single result. Other formats are `raw` (entry metadata), `dictionary` (ID-keyed values), and `dataWithMeta` (values with total count). Use raw results when you need stable entry IDs.
+
+List options include `limit`, `offset`, `range`, `filter`, `select`, `order`, `format`, `previewKey`, `locale`, and `plugins`. The current `order` option supports system fields `id`, `created`, and `updated`, optionally suffixed with `.asc` or `.desc`; it is not an arbitrary content-field sort expression.
+
+## Forms and submissions
+
+- `submissions.getFormParams(name, { returnTo? })` returns `{ action, method, encType }` for an HTML form.
+- `submissions.getFormUrl(name, options?)` returns just the public action URL.
+- `submissions.getTypeStatus(name)` checks whether a type is accepting responses and requires CAPTCHA.
+- `submissions.isAcceptingResponses(name)` checks its open state.
+- `submissions.submit(name, data, { signal? })` submits typed data or `FormData` and returns the submission result.
+
+Submissions are real writes, including from preview pages. See [JavaScript forms](/guides/forms/) for status handling and static-site setup.
+
+## Framework configuration
+
+```ts
+const metadata = await ama.systemConfig.get({
+  framework: "astro",
+  systemKey: "website.metadata",
+});
+```
+
+The result includes `framework`, `systemKey`, `displayName`, `path`, and `config`. In Astro, prefer its head component, which handles metadata precedence and preview context.
+
+## Other client namespaces
+
+`analytics` provides event tracking, `localization` exposes locale discovery/status, and `diagnostics` provides an optional integration report. [Diagnostics](/guides/diagnostics/) explains report fields and mounting a route. Do not assume a successful diagnostics request proves every content path or form works.
+
+Schema helpers are re-exported from Core. Use [Structure](/reference/structure/) directly for schema tooling without the runtime client.

@@ -1,42 +1,41 @@
 ---
-title: Structure Reference
-description: Curated reference for @atmyapp/structure.
+title: Structure SDK
+description: Author, compile, inspect, and validate a canonical content schema.
 ---
 
-`@atmyapp/structure` owns the canonical schema system.
+`@atmyapp/structure` provides schema authoring and tooling. For examples, read [Define your content schema](/guides/structure/). For every builder option, use the [field reference](/reference/fields/).
 
-## Install
+## Authoring exports
 
-```bash
-pnpm add @atmyapp/structure
-```
+`defineSchema`, `defineCollection`, `defineDocument`, `defineFile`, `defineImage`, `defineSystemConfig`, `defineSubmission`, `defineEvent`, and `defineBasicEvent` construct canonical definitions. `s` contains the field builders.
 
-## Main exports
+A schema contains `definitions` and optional `description`, `localization`, `events`, `args`, `mdx`, and `submissions`. `defineSchema` supplies canonical version 1. `args` is application-specific metadata; it does not create an SDK environment-variable loader.
 
-- `defineSchema()` creates the top-level schema object.
-- `defineCollection()` creates repeatable content definitions.
-- `defineDocument()` creates singleton content definitions.
-- `defineSubmission()` creates form or user-submitted data definitions.
-- `s` exposes field builders.
-- Compiler, validation, migration, and introspection helpers support the CLI and advanced tooling.
-
-## Example
+## Compile and validate
 
 ```ts
-import { defineCollection, defineSchema, s } from "@atmyapp/structure";
+import {
+  compileSchema,
+  validateContent,
+  validateSchemaDocument,
+} from "@atmyapp/structure";
+import schema from "../atmyapp.schema";
 
-export default defineSchema({
-  definitions: {
-    posts: defineCollection({
-      fields: {
-        title: s.string(),
-        slug: s.string({ format: "short" }),
-      },
-    }),
-  },
-});
+const schemaResult = validateSchemaDocument(schema);
+if (!schemaResult.valid) {
+  throw new Error(JSON.stringify(schemaResult.issues));
+}
+const compiled = compileSchema(schema);
+const result = validateContent(compiled, "home", { headline: "Hello" });
+if (!result.valid) {
+  console.error(result.issues); // Each issue has a path and message.
+}
 ```
 
-## When to use it
+Compilation builds definition/path lookups, flattened field information, references, assets, system fields, and the legacy platform structure. It does not upload your content. The CLI performs compilation as part of migration.
 
-Use `@atmyapp/structure` directly when building schemas, tests, generators, migration tooling, or framework integrations.
+Local validation checks supported schema and value constraints. It is not a substitute for platform checks against existing entries, reference targets, or unique indexes. Read the field reference's validation limits before using a hint as a hard constraint.
+
+## Advanced tooling
+
+The package also exports inference types, introspection helpers, migration planning, framework presets, and legacy conversion utilities. Use these when building schema tooling; ordinary websites generally need the authoring helpers and Core's typed reads. Migration plans describe compatibility work rather than automatically completing every content transformation.

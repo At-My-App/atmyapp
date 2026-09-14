@@ -5,7 +5,11 @@ description: Build a static website with managed content, metadata, forms, and l
 
 AtMyApp renders your content and metadata into ordinary HTML during production builds. The same project runs dynamically for local development and AtMyApp previews. Contact forms submit directly to AtMyApp, so your published website does not need an application server.
 
-## Install and configure
+## 1. Prepare the project
+
+Create or select an AtMyApp project and copy its full project API URL and public website API key. If you are starting with empty content, complete [schema and content setup](/quick-start/#4-define-the-editable-content) first. The integration reads existing content; installing it does not create your homepage document.
+
+## 2. Install and configure
 
 Use Node 22.14+ and Astro 5+. Install the package in your Astro project:
 
@@ -35,16 +39,17 @@ export default defineConfig({
 
 Set `site` to the production website URL, including any hosting base path where applicable. Canonical links and form return URLs use it, never the temporary preview host. Diagnostics are optional; omit `diagnostics: true` to leave the endpoint unmounted.
 
-## Add a base layout
+## 3. Add a base layout
 
 Enable the Astro framework configuration in AtMyApp Project Setup so the `website.metadata` system configuration exists. Edit its website defaults in **Website Configuration - Astro Metadata**.
 
 ```astro
 ---
 // src/layouts/BaseLayout.astro
-import AtMyAppHead from '@atmyapp/astro/components';
+import AtMyAppHead from "@atmyapp/astro/components";
 const { title, description } = Astro.props;
 ---
+
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -57,15 +62,16 @@ const { title, description } = Astro.props;
 
 Use one head component per page. It owns the title, description, canonical and social tags; remove duplicate copies from your layout. It does not generate viewport or charset tags.
 
-## Read content
+## 4. Read content
 
 ```astro
 ---
-import { getAtMyApp } from '@atmyapp/astro/server';
-import BaseLayout from '../layouts/BaseLayout.astro';
+import { getAtMyApp } from "@atmyapp/astro/server";
+import BaseLayout from "../layouts/BaseLayout.astro";
 const ama = getAtMyApp(Astro);
-const content = await ama.storage.getFromPath('home.json');
+const content = await ama.storage.getFromPath("home.json");
 ---
+
 <BaseLayout title="Home">
   <pre>{JSON.stringify(content, null, 2)}</pre>
 </BaseLayout>
@@ -79,7 +85,7 @@ const ama = getAtMyApp(Astro, { schema });
 
 The schema retains the core SDK's inferred types. Keep a shared `clientOptions` object if you override the project, schema, locale or preview; pass it to the client, head and form components. Configuration overrides on one component do not mutate other clients.
 
-## Run locally and build
+## 5. Run locally and build
 
 ```sh
 npm run dev
@@ -92,11 +98,12 @@ Development defaults to dynamic; production builds default to static. `DEV_MODE=
 
 ```astro
 ---
-import AtMyAppForm from '@atmyapp/astro/form';
+import AtMyAppForm from "@atmyapp/astro/form";
 ---
+
 <AtMyAppForm submission="contact" returnTo="/thank-you">
   <label>Email <input name="email" type="email" required /></label>
-  <label>Message <textarea name="message" required /></label>
+  <label>Message <textarea name="message" required></textarea></label>
   <button type="submit">Send message</button>
 </AtMyAppForm>
 ```

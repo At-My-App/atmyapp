@@ -1,17 +1,30 @@
 ---
-title: AI Assistant
-description: Plan AI-powered content editing experiences with AtMyApp.
+title: Hand the website over to your client
+description: Design a clear editing experience and verify preview and publishing together.
 ---
 
-AtMyApp is designed around a simple handoff: developers define the structure, then clients edit content with AI assistance.
+The developer defines what can change and how it renders. The client uses AtMyApp to update content, review it, and publish it. Integrating the SDK does not automatically embed a chat interface into your website.
 
-## What this section will cover
+## Make the schema understandable
 
-- Content prompts and editing flows
-- Safe schema boundaries for client edits
-- Review and publishing workflows
-- Examples for common website sections
+Give documents and collections a concrete purpose: homepage, services, team members. Add field descriptions that explain where copy appears and what makes it useful. Use length limits for real layout constraints, optional fields for genuinely optional content, and references for shared information.
 
-## Start here
+Avoid asking clients to edit raw HTML, technical IDs, or configuration that can break the site. Render missing optional content cleanly. Keep implementation details in the website code.
 
-The AI Assistant works best when your schema is clear. Read [Schema Model](/concepts/schema/) before planning AI editing workflows.
+## Prepare representative content
+
+Populate the site with realistic text and media before handoff. Test long headings, missing images, empty collections, multiple entries, and mobile layouts. Check that each editable field actually changes something on the website; unused fields create confusing promises.
+
+## Walk through one complete edit
+
+1. Ask the client to update a headline or add a service in AtMyApp.
+2. Open its preview and confirm content and metadata reflect the change.
+3. Explain what is still unpublished and how to review the change.
+4. Publish it and confirm when the public website updates.
+5. Repeat with an image, a collection entry, and a form if the site uses them.
+
+For static hosting, explain that the public site updates after its new build is deployed. An expired preview should lead to reopening a preview, not guessing whether old content is current.
+
+## Leave a small handoff note
+
+Record the project and production URLs, where the client edits each section, how publishing reaches the website, who handles deployment failures, and where form responses are reviewed. Keep administrative credentials out of this note. Give the client a support contact and a clear way to report a page that did not update.

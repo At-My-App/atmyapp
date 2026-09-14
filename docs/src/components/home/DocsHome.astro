@@ -1,83 +1,88 @@
 ---
-import Search from "virtual:starlight/components/Search";
 import ShellIcon from "../shell/ShellIcon.astro";
-
 const cards = [
   {
-    title: "Quick Start",
-    description: "Set up AtMyApp in minutes and add it to your website.",
+    title: "Any JavaScript website",
+    description:
+      "Connect your project, define content, and render your first page. Works with any framework.",
     href: "/quick-start/",
-    action: "Start now",
-    icon: "bolt",
-    tone: "violet",
-  },
-  {
-    title: "Core Concepts",
-    description: "Understand the building blocks of AtMyApp.",
-    href: "/concepts/schema/",
-    action: "Explore concepts",
-    icon: "layers",
-    tone: "teal",
-  },
-  {
-    title: "SDK Guides",
-    description: "Learn how to integrate AtMyApp step by step.",
-    href: "/guides/cli/",
-    action: "View guides",
     icon: "code",
-    tone: "coral",
+    action: "Start integrating",
   },
-] as const;
-
-const guides = [
-  { title: "Authenticate your project", description: "Learn how authentication works in AtMyApp.", href: "/quick-start/", icon: "lock", tone: "violet" },
-  { title: "Add the AI Assistant", description: "Let your users edit content using natural language.", href: "/ai-assistant/", icon: "sparkles", tone: "teal" },
-  { title: "Manage content collections", description: "Structure and organize your content efficiently.", href: "/concepts/schema/", icon: "layers", tone: "coral" },
-  { title: "Deploy to production", description: "Best practices for a smooth launch.", href: "/deployment/", icon: "cloud", tone: "blue" },
+  {
+    title: "Built with Astro",
+    description:
+      "Start static. Add shared clients, live previews, metadata, and ordinary HTML forms.",
+    href: "/guides/astro/",
+    icon: "bolt",
+    action: "Set up Astro",
+  },
+  {
+    title: "Model your content",
+    description:
+      "Documents, collections, relationships, and every field option. Give editors clear boundaries.",
+    href: "/guides/structure/",
+    icon: "layers",
+    action: "Define your schema",
+  },
 ] as const;
 ---
 
-<section class="ama-home-hero">
-  <h1>Build better websites.<br /><span>Give control</span> to your clients.</h1>
-  <p>
-    AtMyApp helps developers add AI-powered content management to any website.
-    This docs will help you integrate, customize, and scale with confidence.
-  </p>
-  <div class="ama-home-search">
-    <Search />
-  </div>
-</section>
-
-<section class="ama-home-section">
-  <div class="ama-section-heading">
-    <h2>Get started</h2>
-    <p>New to AtMyApp? Start here.</p>
-  </div>
-  <div class="ama-home-cards">
-    {cards.map((card) => (
-      <a class:list={["ama-home-card", `tone-${card.tone}`]} href={card.href}>
-        <span class="ama-home-card-icon"><ShellIcon name={card.icon} /></span>
-        <h3>{card.title}</h3>
-        <p>{card.description}</p>
-        <span>{card.action} <ShellIcon name="arrow" /></span>
-      </a>
-    ))}
-  </div>
-</section>
-
-<section class="ama-home-section">
-  <div class="ama-section-heading compact">
-    <h2>Popular guides</h2>
-  </div>
-  <div class="ama-guide-table">
-    {guides.map((guide) => (
-      <a class:list={["ama-guide-item", `tone-${guide.tone}`]} href={guide.href}>
-        <span class="ama-guide-icon"><ShellIcon name={guide.icon} /></span>
-        <strong>{guide.title}</strong>
-        <span>{guide.description}</span>
-        <ShellIcon name="arrow" />
-      </a>
-    ))}
-  </div>
-</section>
-
+<div class="not-content">
+  <section class="ama-home-hero">
+    <p class="ama-eyebrow">ATMYAPP FOR DEVELOPERS</p>
+    <h1>Your website.<br /><span>Your client’s content.</span></h1>
+    <p>
+      Add editable content to the website you already build. Keep control of the
+      code, give clients control of their content.
+    </p>
+    <a class="ama-start" href="/quick-start/"
+      >Build your first integration <ShellIcon name="arrow" /></a
+    >
+  </section>
+  <section class="ama-home-section">
+    <div class="ama-section-heading">
+      <h2>Choose your starting point</h2><p>
+        From a first connection to a website ready for your client.
+      </p>
+    </div>
+    <div class="ama-home-cards">
+      {
+        cards.map((card) => (
+          <a class="ama-home-card" href={card.href}>
+            <>
+              <span class="ama-home-card-icon">
+                <ShellIcon name={card.icon} />
+              </span>
+              <h3>{card.title}</h3>
+              <p>{card.description}</p>
+              <span>
+                {card.action} <ShellIcon name="arrow" />
+              </span>
+            </>
+          </a>
+        ))
+      }
+    </div>
+  </section>
+  <section class="ama-home-section">
+    <div class="ama-section-heading"><h2>Build, verify, hand over</h2></div>
+    <div class="ama-guide-table">
+      <a href="/reference/fields/"
+        ><strong>Find the right field</strong><span
+          >Text, media, references, nested content, and validation.</span
+        ><span>01 ↗</span></a
+      >
+      <a href="/guides/diagnostics/"
+        ><strong>Check your integration</strong><span
+          >Confirm connectivity, content builds, and preview state.</span
+        ><span>02 ↗</span></a
+      >
+      <a href="/ai-assistant/"
+        ><strong>Prepare the client handoff</strong><span
+          >Make editing, previewing, and publishing predictable.</span
+        ><span>03 ↗</span></a
+      >
+    </div>
+  </section>
+</div>
