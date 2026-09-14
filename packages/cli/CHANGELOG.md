@@ -1,5 +1,13 @@
 # @atmyapp/cli
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [0560083]
+- Updated dependencies [0560083]
+  - @atmyapp/core@0.3.0
+
 ## 0.2.1
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @atmyapp/core
 
+## 0.3.0
+
+### Minor Changes
+
+- 0560083: Add optional, sanitized integration reports and an Astro diagnostics route helper for runtime and static websites.
+
+### Patch Changes
+
+- 0560083: Add static-first Astro integration, shared request-scoped clients, DEV_MODE with IS_DYNAMIC alias, preview-aware metadata defaults, safe head output, HTML submission forms and detailed Astro guides. System configuration requests now carry preview context, and all core request clients honor customFetch through the transport library's supported option. Astro integration requires Astro 5+ and Node 22.14+.
+
 ## 0.2.0
 
 ### Minor Changes
