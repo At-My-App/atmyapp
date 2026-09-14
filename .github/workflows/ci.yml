@@ -38,3 +38,9 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Astro diagnostics smoke test
+        run: pnpm --filter @atmyapp/astro test:diagnostics
+
+      - name: Astro static and dynamic website tests
+        run: pnpm --filter @atmyapp/astro test:website

@@ -1,8 +1,3 @@
-export { getClient } from "./client";
-export { fetchWebsiteMetadataOnce } from "./websiteMetadata";
-
-export type { AtMyAppWindowConfig } from "./client";
-export type { AtMyAppClient } from "@atmyapp/core";
-export type { AtMyAppHeadConfig } from "./headConfig";
-
-export type ConflictStrategy = "atmyapp-wins" | "local-wins" | "merge";
+export { default, default as atmyapp } from "./integration.js";
+export type { AtMyAppIntegrationOptions } from "./integration.js";
+export type { AtMyAppHeadConfig } from "./headConfig.js";

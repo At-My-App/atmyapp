@@ -1,6 +1,9 @@
 interface ImportMetaEnv {
   readonly ATMYAPP_API_KEY?: string;
   readonly ATMYAPP_BASE_URL?: string;
+  readonly ATMYAPP_API_URL?: string;
+  readonly ATMYAPP_PREVIEW_KEY?: string;
+  readonly IS_DYNAMIC?: string;
   readonly DEV_MODE?: string;
   readonly DEV?: boolean;
 }

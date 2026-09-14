@@ -18,10 +18,12 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/package-version.cjs && tsc -p tsconfig.json",
     "lint": "eslint src test --ext .ts",
     "format": "prettier --write .",
-    "test": "jest"
+    "test": "node scripts/package-version.cjs && jest",
+    "test:diagnostics": "node scripts/package-version.cjs && node test/diagnostics-smoke.mjs",
+    "test:website": "node scripts/package-version.cjs && node test/website-smoke.mjs static && node test/website-smoke.mjs dev && node test/website-smoke.mjs server-build"
   },
   "exports": {
     ".": {
@@ -34,18 +36,30 @@
       "import": "./dist/client.js",
       "default": "./dist/client.js"
     },
-    "./components": "./src/components/AtMyAppHead.astro"
+    "./components": "./src/components/AtMyAppHead.astro",
+    "./diagnostics": {
+      "types": "./dist/diagnostics.d.ts",
+      "import": "./dist/diagnostics.js",
+      "default": "./dist/diagnostics.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./src/server.ts",
+      "default": "./src/server.ts"
+    },
+    "./form": "./src/components/AtMyAppForm.astro"
   },
   "author": "Maciej Gamrot",
   "license": "ISC",
   "description": "",
   "peerDependencies": {
-    "astro": ">=4.0.0"
+    "astro": ">=5.0.0"
   },
   "dependencies": {
     "@atmyapp/core": "workspace:^"
   },
   "devDependencies": {
+    "@astrojs/node": "11.0.0",
     "@types/jest": "^29.5.14",
     "@typescript-eslint/eslint-plugin": "^8.32.1",
     "@typescript-eslint/parser": "^8.32.1",
@@ -55,5 +69,8 @@
     "prettier": "^3.5.3",
     "ts-jest": "^29.3.4",
     "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=22.14.0"
   }
 }

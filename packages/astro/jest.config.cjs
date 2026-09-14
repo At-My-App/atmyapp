@@ -9,13 +9,14 @@ module.exports = {
       "ts-jest",
       {
         useESM: true,
-        tsconfig: "./tsconfig.test.json"
-      }
-    ]
+        tsconfig: "./tsconfig.test.json",
+      },
+    ],
   },
   moduleNameMapper: {
-    "^@atmyapp/core$": "<rootDir>/../core/dist/index.js"
+    "^(\\.{1,2}/.*)\\.js$": "$1",
+    "^@atmyapp/core$": "<rootDir>/../core/dist/index.js",
   },
   testMatch: ["**/test/**/*.test.ts", "**/?(*.)+(spec|test).ts"],
-  collectCoverageFrom: ["src/**/*.ts", "!src/**/*.d.ts"]
+  collectCoverageFrom: ["src/**/*.ts", "!src/**/*.d.ts"],
 };

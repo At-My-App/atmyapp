@@ -51,7 +51,16 @@ export default defineConfig({
             { label: "Quick Start", slug: "quick-start" },
             { label: "Core Concepts", slug: "concepts/schema" },
             { label: "CLI", slug: "guides/cli" },
-            { label: "Astro", slug: "guides/astro" },
+            {
+              label: "Astro",
+              items: [
+                { label: "Quick start", slug: "guides/astro" },
+                { label: "Modes and previews", slug: "guides/astro-previews" },
+                { label: "Metadata", slug: "guides/astro-metadata" },
+                { label: "Forms", slug: "guides/astro-forms" },
+                { label: "Diagnostics", slug: "guides/diagnostics" },
+              ],
+            },
             { label: "Integrations", slug: "integrations" },
             { label: "AI Assistant", slug: "ai-assistant" },
             { label: "Deployment", slug: "deployment" },

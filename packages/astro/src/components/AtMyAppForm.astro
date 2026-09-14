@@ -1,0 +1,62 @@
+---
+import AtMyAppFormEnhancement from "./AtMyAppFormEnhancement.astro";
+import type { HTMLAttributes } from "astro/types";
+import { getAtMyApp, getAtMyAppConfiguration } from "../server";
+import type { AstroClientOptions } from "../config";
+import { resolveForm } from "../forms";
+interface Props extends Omit<
+  HTMLAttributes<"form">,
+  "action" | "method" | "enctype"
+> {
+  submission: string;
+  returnTo?: string;
+  clientOptions?: AstroClientOptions;
+  allowPreviewSubmit?: boolean;
+  enhance?: boolean;
+}
+const {
+  submission,
+  returnTo,
+  clientOptions,
+  allowPreviewSubmit = false,
+  enhance = false,
+  ...attributes
+} = Astro.props;
+const client = getAtMyApp(Astro, clientOptions);
+const { preview } = getAtMyAppConfiguration(Astro, clientOptions);
+const form = await resolveForm(client, submission, {
+  returnTo,
+  site: Astro.site,
+  preview,
+  allowPreviewSubmit,
+  hasCaptcha: Astro.slots.has("captcha"),
+});
+---
+
+{
+  form.enabled ? (
+    <form
+      {...attributes}
+      action={form.action}
+      method="POST"
+      enctype={form.encType}
+      data-atmyapp-enhance={enhance || undefined}
+    >
+      <>
+        <slot />
+        <slot name="captcha" />
+      </>
+      {enhance && <p data-atmyapp-result role="status" aria-live="polite" />}
+    </form>
+  ) : (
+    <div {...attributes}>
+      <>
+        <fieldset disabled>
+          <slot />
+        </fieldset>
+        <p role="status">{form.reason}</p>
+      </>
+    </div>
+  )
+}
+{enhance && form.enabled && <AtMyAppFormEnhancement />}

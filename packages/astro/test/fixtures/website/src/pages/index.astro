@@ -1,0 +1,21 @@
+---
+import AtMyAppHead from "@atmyapp/astro/components";
+import AtMyAppForm from "@atmyapp/astro/form";
+import { getAtMyApp } from "@atmyapp/astro/server";
+import { fetchWebsiteMetadataOnce } from "@atmyapp/astro/server";
+const client = getAtMyApp(Astro);
+const metadata = await fetchWebsiteMetadataOnce(client);
+const content = (await client.storage.getFromPath("home.json")) as {
+  text: string;
+};
+---
+
+<html>
+  <head><AtMyAppHead title="Home" /></head><body
+    ><h1>{metadata.description}</h1><p>{content.text}</p><AtMyAppForm
+      submission="contact"
+      returnTo="/thanks"
+      ><input name="email" type="email" /><button>Send</button></AtMyAppForm
+    ></body
+  >
+</html>

@@ -1,139 +1,101 @@
 ---
-// @ts-nocheck
-import { createAtMyAppClient, type AtMyAppHeadConfig } from "../coreBridge";
+import AtMyAppAnalytics from "./AtMyAppAnalytics.astro";
+import { getAtMyApp, getAtMyAppConfiguration } from "../server";
+import type { AstroClientOptions } from "../config";
 import { fetchWebsiteMetadataOnce } from "../websiteMetadata";
-import { hasHeadValue, normalizeHeadValue } from "../headConfig";
-
-export type ConflictStrategy = "atmyapp-wins" | "local-wins" | "merge";
-
-export interface Props extends Partial<AtMyAppHeadConfig> {
-  conflictStrategy?: ConflictStrategy;
+import { resolveMetadata, safeJson, type Metadata } from "../metadata";
+export type Props = Metadata & {
+  clientOptions?: AstroClientOptions;
+  defaults?: Metadata;
   trackPageView?: boolean;
-}
-
-const props = Astro.props as Props;
-const localMeta = props as Partial<AtMyAppHeadConfig>;
-const conflictStrategy: ConflictStrategy = props.conflictStrategy ?? "atmyapp-wins";
-const trackPageView = props.trackPageView ?? false;
-
-const apiKey = import.meta.env.ATMYAPP_API_KEY ?? "";
-const baseUrl = import.meta.env.ATMYAPP_BASE_URL ?? "https://api.atmyapp.com";
-
-const devModeValue = String(import.meta.env.DEV_MODE ?? (import.meta.env.DEV ? "1" : "0"));
-const shouldFetchWebsiteMetadata = devModeValue === "0";
-
-if (shouldFetchWebsiteMetadata && !apiKey) {
-  throw new Error(
-    "AtMyApp: missing required env vars: " +
-      "ATMYAPP_API_KEY" +
-      " must be set when DEV_MODE=0."
-  );
-}
-
-if (!shouldFetchWebsiteMetadata && import.meta.env.DEV && !apiKey) {
-  console.warn(
-    "[AtMyApp] ATMYAPP_API_KEY not set. Skipping build-time head config fetch in dev mode."
-  );
-}
-
-const config =
-  shouldFetchWebsiteMetadata && apiKey
-    ? await fetchWebsiteMetadataOnce(
-        createAtMyAppClient({ apiKey, baseUrl }),
-        baseUrl
-      )
-    : null;
-
-const mergeJsonLd = (
-  remote: Record<string, unknown> | undefined,
-  local: Record<string, unknown> | undefined
-): Record<string, unknown> | undefined => {
-  if (!remote && !local) return undefined;
-  return {
-    ...(remote ?? {}),
-    ...(local ?? {}),
-  };
+  metadataError?: "throw" | "fallback";
 };
-
-const resolveField = <Field extends keyof AtMyAppHeadConfig>(
-  field: Field
-): AtMyAppHeadConfig[Field] | undefined => {
-  const remoteValue = normalizeHeadValue(config?.[field]);
-  const localValue = normalizeHeadValue(localMeta[field]);
-
-  if (conflictStrategy === "local-wins") {
-    return localValue ?? remoteValue;
-  }
-
-  if (conflictStrategy === "merge") {
-    if (field === "jsonLd") {
-      return mergeJsonLd(
-        remoteValue as Record<string, unknown> | undefined,
-        localValue as Record<string, unknown> | undefined
-      ) as AtMyAppHeadConfig[Field];
-    }
-    return localValue ?? remoteValue;
-  }
-
-  return remoteValue ?? localValue;
+const {
+  clientOptions,
+  defaults = {},
+  trackPageView = false,
+  metadataError = "throw",
+  ...page
+} = Astro.props;
+const client = getAtMyApp(Astro, clientOptions);
+const configuration = getAtMyAppConfiguration(Astro, clientOptions);
+let managed: Metadata = {};
+try {
+  managed = await fetchWebsiteMetadataOnce(client);
+} catch {
+  if (metadataError === "throw" || configuration.preview)
+    throw new Error(
+      "AtMyApp: website metadata could not be loaded. Check configuration and preview access.",
+    );
+  console.warn("[AtMyApp] Using local metadata fallback.");
+}
+const meta = resolveMetadata(
+  page,
+  managed,
+  defaults,
+  Astro.url,
+  Astro.site,
+  configuration.preview,
+);
+const publicConfiguration = {
+  trackPageView: trackPageView && !configuration.preview,
+  apiKey: configuration.apiKey,
+  baseUrl: configuration.baseUrl,
+  previewKey: configuration.previewKey,
+  preview: configuration.preview,
+  dynamic: configuration.dynamic,
 };
-
-const resolved = {
-  title: resolveField("title"),
-  description: resolveField("description"),
-  robots: resolveField("robots"),
-  canonical: resolveField("canonical"),
-  sitemap: resolveField("sitemap"),
-  ogTitle: resolveField("ogTitle"),
-  ogDescription: resolveField("ogDescription"),
-  ogImage: resolveField("ogImage"),
-  ogType: resolveField("ogType"),
-  twitterCard: resolveField("twitterCard"),
-  favicon: resolveField("favicon"),
-  appleTouchIcon: resolveField("appleTouchIcon"),
-  themeColor: resolveField("themeColor"),
-  googleSiteVerification: resolveField("googleSiteVerification"),
-  jsonLd: resolveField("jsonLd"),
-  analyticsId: resolveField("analyticsId"),
-  analyticsUrl: resolveField("analyticsUrl"),
-};
-
-const finalOgType =
-  normalizeHeadValue(resolved.ogType) ??
-  (resolved.ogTitle || resolved.ogDescription || resolved.ogImage ? "website" : undefined);
-const finalTwitterCard =
-  normalizeHeadValue(resolved.twitterCard) ?? (resolved.ogImage ? "summary_large_image" : undefined);
-const shouldTrackPageView = trackPageView;
 ---
 
-<script define:vars={{ apiKey, baseUrl }}>
-  window.__ATMYAPP__ = { apiKey, baseUrl };
-</script>
-
-{hasHeadValue(resolved.title) && <title>{resolved.title}</title>}
-{hasHeadValue(resolved.description) && <meta name="description" content={resolved.description} />}
-{hasHeadValue(resolved.robots) && <meta name="robots" content={resolved.robots} />}
-{hasHeadValue(resolved.canonical) && <link rel="canonical" href={resolved.canonical} />}
-{hasHeadValue(resolved.sitemap) && <link rel="sitemap" type="application/xml" href={resolved.sitemap} />}
-{hasHeadValue(resolved.ogTitle) && <meta property="og:title" content={resolved.ogTitle} />}
-{hasHeadValue(resolved.ogDescription) && <meta property="og:description" content={resolved.ogDescription} />}
-{hasHeadValue(resolved.ogImage) && <meta property="og:image" content={resolved.ogImage} />}
-{hasHeadValue(finalOgType) && <meta property="og:type" content={finalOgType} />}
-{hasHeadValue(finalTwitterCard) && <meta name="twitter:card" content={finalTwitterCard} />}
-{hasHeadValue(resolved.favicon) && <link rel="icon" href={resolved.favicon} />}
-{hasHeadValue(resolved.appleTouchIcon) && <link rel="apple-touch-icon" href={resolved.appleTouchIcon} />}
-{hasHeadValue(resolved.themeColor) && <meta name="theme-color" content={resolved.themeColor} />}
-{hasHeadValue(resolved.googleSiteVerification) && (
-  <meta name="google-site-verification" content={resolved.googleSiteVerification} />
-)}
-{hasHeadValue(resolved.jsonLd) && (
-  <script type="application/ld+json" set:html={JSON.stringify(resolved.jsonLd)} />
-)}
-
-{shouldTrackPageView && (
-  <script>
-    import { getClient } from "@atmyapp/astro/client";
-
-    getClient().analytics.trackEvent("page_view").catch(() => {});
-  </script>
-)}
+<script
+  is:inline
+  set:html={`window.__ATMYAPP__ = ${safeJson(publicConfiguration)};`}
+/>
+{meta.title && <title>{meta.title}</title>}
+{meta.description && <meta name="description" content={meta.description} />}
+{meta.robots && <meta name="robots" content={meta.robots} />}
+{meta.canonical && <link rel="canonical" href={meta.canonical} />}
+{
+  meta.sitemap && (
+    <link rel="sitemap" type="application/xml" href={meta.sitemap} />
+  )
+}
+{meta.ogTitle && <meta property="og:title" content={meta.ogTitle} />}
+{
+  meta.ogDescription && (
+    <meta property="og:description" content={meta.ogDescription} />
+  )
+}
+{meta.ogImage && <meta property="og:image" content={meta.ogImage} />}
+{meta.ogType && <meta property="og:type" content={meta.ogType} />}
+{meta.siteName && <meta property="og:site_name" content={meta.siteName} />}
+{meta.canonical && <meta property="og:url" content={meta.canonical} />}
+{meta.twitterCard && <meta name="twitter:card" content={meta.twitterCard} />}
+{meta.ogTitle && <meta name="twitter:title" content={meta.ogTitle} />}
+{
+  meta.ogDescription && (
+    <meta name="twitter:description" content={meta.ogDescription} />
+  )
+}
+{meta.ogImage && <meta name="twitter:image" content={meta.ogImage} />}
+{meta.favicon && <link rel="icon" href={meta.favicon} />}
+{
+  meta.appleTouchIcon && (
+    <link rel="apple-touch-icon" href={meta.appleTouchIcon} />
+  )
+}
+{meta.themeColor && <meta name="theme-color" content={meta.themeColor} />}
+{
+  meta.googleSiteVerification && (
+    <meta
+      name="google-site-verification"
+      content={meta.googleSiteVerification}
+    />
+  )
+}
+{
+  meta.jsonLd && (
+    <script type="application/ld+json" set:html={safeJson(meta.jsonLd)} />
+  )
+}
+{trackPageView && !configuration.preview && <AtMyAppAnalytics />}

@@ -1,0 +1,85 @@
+---
+title: Astro metadata
+description: Predictable page and website defaults with safe social and structured metadata.
+---
+
+## Precedence
+
+Each field resolves independently: **page props → managed website defaults → local `defaults` props**. `undefined` and empty strings inherit. `null` explicitly clears a field, including derived social fallbacks. There is no conflict-strategy switch.
+
+```astro
+<AtMyAppHead
+  title={article.title}
+  description={article.summary}
+  image={article.coverUrl}
+  defaults={{ title: 'My website', titleTemplate: '%s | My website' }}
+/>
+```
+
+Set website-wide fields in **Website Configuration - Astro Metadata**. A `titleTemplate` replaces `%s` with the resolved title. Set `titleTemplate={null}` to disable it for one page. Social titles/descriptions default to the resolved page values; `image` supplies the default social image, while `ogImage` overrides it.
+
+## Supported fields
+
+| Fields                                                   | Purpose                                                            |
+| -------------------------------------------------------- | ------------------------------------------------------------------ |
+| `title`, `titleTemplate`, `description`                  | Document title and summary                                         |
+| `siteName`                                               | Social website name                                                |
+| `canonical`                                              | Explicit canonical URL, otherwise production `site` plus page path |
+| `robots`                                                 | Indexing directives; preview always uses noindex                   |
+| `image`, `ogImage`, `ogTitle`, `ogDescription`, `ogType` | Social preview metadata                                            |
+| `twitterCard`                                            | Card format; defaults according to whether an image exists         |
+| `favicon`, `appleTouchIcon`, `themeColor`                | Browser and device branding                                        |
+| `sitemap`                                                | Link to an existing sitemap                                        |
+| `googleSiteVerification`                                 | Verification tag                                                   |
+| `jsonLd`                                                 | Structured data object, serialized safely                          |
+
+Relative image and icon paths resolve against Astro's configured production `site`. The component does not resize images or generate icon variants. Canonical generation omits request query strings and fragments; explicit canonical URLs also have `amaPreviewKey` removed. Set `canonical={null}` to omit it.
+
+```astro
+<AtMyAppHead
+  title="Contact"
+  favicon="/favicon.svg"
+  appleTouchIcon="/apple-touch-icon.png"
+  jsonLd={{ '@context': 'https://schema.org', '@type': 'Organization', name: 'Example' }}
+/>
+```
+
+JSON-LD is selected as one object, not recursively merged. Values containing HTML-like strings are escaped before script serialization.
+
+## Metadata availability
+
+By default, missing or unavailable metadata raises a clear error. For a website that intentionally tolerates unavailable managed metadata, use `metadataError="fallback"` and local `defaults`. Preview errors still fail so an editor is not shown misleading published defaults.
+
+```astro
+<AtMyAppHead metadataError="fallback" defaults={{ title: 'Example' }} />
+```
+
+## Analytics
+
+`<AtMyAppHead trackPageView />` enables page-view events. They are disabled on preview pages. For custom browser events, import `getClient` from `@atmyapp/astro/client`. The head component supplies public configuration. It does not load arbitrary external analytics scripts from metadata fields.
+
+## Sitemap and robots
+
+The `sitemap` field only emits a discovery link. Use the official integration to generate the file:
+
+```sh
+npm install @astrojs/sitemap
+```
+
+```js
+import sitemap from "@astrojs/sitemap";
+// Add alongside atmyapp() in astro.config.mjs:
+// integrations: [atmyapp(), sitemap()]
+```
+
+Set `site` in Astro config and set metadata `sitemap` to `/sitemap-index.xml`. Generated static collection routes participate automatically. Dynamic server-only routes need explicit URL enumeration; consult [Astro sitemap configuration](https://docs.astro.build/en/guides/integrations-guide/sitemap/).
+
+For a static site, add `public/robots.txt`:
+
+```text
+User-agent: *
+Allow: /
+Sitemap: https://www.example.com/sitemap-index.xml
+```
+
+Use your actual production domain. Preview noindex is emitted by the head component; a public robots.txt file is shared unchanged between modes. Robots directives are not access control.

@@ -15,7 +15,7 @@ export const createAnalyticsClient = <TSchema = unknown>(
       type: "Bearer",
       token: clientOptions.apiKey,
     },
-    fetch: clientOptions.customFetch,
+    customFetchImpl: clientOptions.customFetch,
   });
 
   const trackCustomEvent = async <

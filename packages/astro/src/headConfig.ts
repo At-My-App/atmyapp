@@ -1,5 +1,8 @@
 export type AtMyAppHeadConfig = {
   title?: string;
+  titleTemplate?: string;
+  siteName?: string;
+  image?: string;
   description?: string;
   robots?: string;
   canonical?: string;

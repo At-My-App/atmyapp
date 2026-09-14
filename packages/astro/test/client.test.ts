@@ -44,3 +44,36 @@ describe("getClient", () => {
     expect(typeof first.systemConfig.get).toBe("function");
   });
 });
+
+describe("browser preview configuration", () => {
+  afterEach(() => {
+    delete (globalThis as any).window;
+    resetClientCache();
+  });
+  it("does not reuse a client across preview changes", () => {
+    (globalThis as any).window = {
+      __ATMYAPP__: {
+        apiKey: "public",
+        baseUrl: "https://api.example",
+        previewKey: "A",
+      },
+    };
+    const a = getClient();
+    window.__ATMYAPP__!.previewKey = "B";
+    expect(getClient()).not.toBe(a);
+  });
+  it("keeps explicit preview disablement across query changes", () => {
+    (globalThis as any).window = {
+      __ATMYAPP__: {
+        apiKey: "public",
+        baseUrl: "https://api.example",
+        dynamic: true,
+        previewKey: null,
+      },
+      location: { href: "https://site.example/?amaPreviewKey=A" },
+    };
+    const a = getClient();
+    (window.location as any).href = "https://site.example/?amaPreviewKey=B";
+    expect(getClient()).toBe(a);
+  });
+});

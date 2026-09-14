@@ -1,0 +1,48 @@
+<script>
+  document.addEventListener("submit", async (event) => {
+    const form = event.target;
+    if (
+      !(form instanceof HTMLFormElement) ||
+      !form.hasAttribute("data-atmyapp-enhance")
+    )
+      return;
+    event.preventDefault();
+    if (form.dataset.pending === "true") return;
+    const output = form.querySelector<HTMLElement>("[data-atmyapp-result]");
+    form.dataset.pending = "true";
+    form.setAttribute("aria-busy", "true");
+    if (output) output.textContent = "Sending…";
+    try {
+      const target = new URL(form.action);
+      const returnTo = target.searchParams.get("returnTo");
+      target.searchParams.delete("returnTo");
+      const response = await fetch(target, {
+        method: "POST",
+        body: new FormData(form, (event as SubmitEvent).submitter),
+        headers: { Accept: "application/json" },
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success)
+        throw new Error(
+          typeof result.error === "string"
+            ? result.error
+            : "Your message could not be sent. Please try again.",
+        );
+      if (returnTo) {
+        window.location.assign(returnTo);
+        return;
+      }
+      if (output) output.textContent = "Thank you. Your message was sent.";
+      form.reset();
+    } catch (error) {
+      if (output)
+        output.textContent =
+          error instanceof Error
+            ? error.message
+            : "Your message could not be sent. Please try again.";
+    } finally {
+      delete form.dataset.pending;
+      form.removeAttribute("aria-busy");
+    }
+  });
+</script>

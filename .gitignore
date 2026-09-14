@@ -35,3 +35,7 @@ pnpm-debug.log*
 *~
 .DS_Store
 Thumbs.db
+
+# Generated SDK build version
+packages/astro/src/packageVersion.ts
+packages/astro/test/fixtures/diagnostics/.astro/

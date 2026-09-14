@@ -41,7 +41,7 @@ export const createSystemConfigClient = (
       type: "Bearer",
       token: clientOptions.apiKey,
     },
-    fetch: clientOptions.customFetch,
+    customFetchImpl: clientOptions.customFetch,
   });
 
   const get = async <TConfig = Record<string, unknown>>({
@@ -53,7 +53,12 @@ export const createSystemConfigClient = (
         success: boolean;
         data: SystemConfigResponse<TConfig>;
         error?: string;
-      }>(`/${encodeURIComponent(framework)}/${encodeURIComponent(systemKey)}`);
+      }>(`/${encodeURIComponent(framework)}/${encodeURIComponent(systemKey)}`, {
+        query: clientOptions.previewKey
+          ? { amaPreviewKey: clientOptions.previewKey }
+          : undefined,
+        headers: { "Cache-Control": "no-store" },
+      });
 
       if (response.error || !response.data?.success) {
         throw buildSystemConfigError(

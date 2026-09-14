@@ -266,6 +266,9 @@ export type AtMyAppClient<
   TSchema = unknown,
   THasRuntimeSchema extends boolean = false,
 > = {
+  diagnostics: ReturnType<
+    typeof import("./diagnostics").createDiagnosticsClient
+  >;
   storage: StorageClient<TSchema, THasRuntimeSchema>;
   analytics: AnalyticsClient<TSchema>;
   collections: CollectionsClient<TSchema>;

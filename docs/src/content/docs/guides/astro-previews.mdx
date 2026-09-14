@@ -1,0 +1,93 @@
+---
+title: Astro modes and previews
+description: Understand DEV_MODE, request-scoped previews, caching and server deployment.
+---
+
+## Mode selection
+
+The integration resolves the mode when Astro starts or builds:
+
+| Configuration            | Behavior                                              |
+| ------------------------ | ----------------------------------------------------- |
+| `DEV_MODE=true` or `1`   | Dynamic output; routes render per request             |
+| `DEV_MODE=false` or `0`  | Static output; pages and metadata render during build |
+| Only `IS_DYNAMIC` is set | Same boolean rules, as a compatibility alias          |
+| Neither is set           | Dynamic for `astro dev`; static for `astro build`     |
+
+`DEV_MODE` wins even when it is false. Values are case-insensitive and trimmed; ambiguous values such as `yes` or an empty string produce an error. This replaces the old behavior that skipped metadata in dev mode. Dynamic mode now fetches metadata normally.
+
+AMA preview servers default `DEV_MODE` to `true` unless you explicitly configure it or the alias. Normal production builds should leave both variables unset or set `DEV_MODE=false`. Changing the variable on an already-built static site cannot turn it into a dynamic server; rebuild it.
+
+The integration owns Astro's `output` setting. In dynamic mode it disables prerendering for routes so query context is available. For a deliberately mixed static/server application, use the core SDK directly and manage Astro's rendering modes yourself.
+
+## Environment resolution
+
+The integration reads `.env`, `.env.local`, then the matching development/production mode files, and finally the process environment. Later values win. Server deployments also read runtime values through Astro's `getSecret()` API. Explicit helper options override environment values.
+
+| Variable              | Purpose                                                         |
+| --------------------- | --------------------------------------------------------------- |
+| `ATMYAPP_API_KEY`     | Public website API key                                          |
+| `ATMYAPP_BASE_URL`    | Project API URL; wins over the alias                            |
+| `ATMYAPP_API_URL`     | Project API URL supplied by AMA hosting                         |
+| `ATMYAPP_PREVIEW_KEY` | Optional preview fallback for a dedicated preview build/process |
+| `DEV_MODE`            | Preferred mode switch                                           |
+| `IS_DYNAMIC`          | Alias used only when `DEV_MODE` is absent                       |
+| `ATMYAPP_CODE_COMMIT` | Optional source identity in diagnostics                         |
+| `ATMYAPP_BUILD_TIME`  | Optional build timestamp in diagnostics                         |
+
+For hosted runtime environments, see [Astro environment variables](https://docs.astro.build/en/guides/environment-variables/). Configure the appropriate adapter and runtime bindings for your host.
+
+## Preview selection
+
+`getAtMyApp(Astro)` resolves preview context in this order:
+
+1. Explicit `previewKey` option. `null` disables preview, including query and environment fallback.
+2. The current `amaPreviewKey` query parameter, only in dynamic mode.
+3. `ATMYAPP_PREVIEW_KEY` from the environment.
+
+The same options must be passed to the head and form components when overriding configuration. A request never changes a process-global preview key. Browser configuration follows the rendered page's preview context; it does not persist capabilities into local storage.
+
+A visitor's query string cannot change prerendered HTML. Open editor previews on the dynamic preview server. The SDK does not automatically rewrite every link or set preview cookies. AMA's preview proxy retains preview context for its registered preview host; external preview setups must carry context through their own navigation.
+
+Preview reads validate access before fetching content. Metadata requests also carry the preview key to the API. Invalid or ended preview sessions produce an error instead of intentionally substituting published metadata. Page content may still change between individual requests during active editing; this is not a transactional page snapshot.
+
+## Caching and defaults
+
+Static rendering reuses clients and metadata within a build. Publishing metadata changes requires rebuilding a static website. Dynamic rendering reuses clients and metadata within the current request; refreshing fetches metadata again. Failed metadata requests are evicted from the metadata cache.
+
+Preview pages default to `noindex, nofollow`. Automatic page-view tracking is suppressed. Forms render disabled unless you explicitly opt into real preview submissions. Diagnostics omit the raw preview key. The preview capability is available to the page's browser client when needed; do not share preview URLs publicly.
+
+## Dynamic production example
+
+Install an adapter appropriate to the installed Astro version. For Node:
+
+```sh
+npm install @astrojs/node
+```
+
+```js
+import { defineConfig } from "astro/config";
+import node from "@astrojs/node";
+import atmyapp from "@atmyapp/astro";
+export default defineConfig({
+  site: "https://www.example.com",
+  adapter: node({ mode: "standalone" }),
+  integrations: [atmyapp({ diagnostics: true })],
+});
+```
+
+```sh
+DEV_MODE=true npm run build
+HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs
+```
+
+AMA's production hosting is static-first. A dynamic Node build needs a Node server host; do not upload it as a static artifact. Our Node fixture verifies runtime rendering; other adapters should be validated in their actual hosting environment.
+
+## Troubleshooting
+
+- **Missing API URL:** use the complete project URL, not just `https://api.atmyapp.com`.
+- **Preview looks published:** check dynamic mode, request URL and diagnostics. A static site cannot use request-time preview parameters.
+- **Metadata is old after publishing:** rebuild the static site. Dynamic preview refreshes should show the current edit.
+- **Preview cannot be verified:** reopen it from AtMyApp; check that both API and SDK support preview diagnostics.
+- **Missing adapter:** either build static with `DEV_MODE=false` or install your server adapter.
+- **Diagnostics route conflict:** use either `atmyapp({ diagnostics: true })` or a manually mounted route, not both.

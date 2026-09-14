@@ -55,5 +55,19 @@ export type {
   AmaMdxConfigDef,
   AmaMdxFieldDef,
 } from "./definitions/AmaMdx";
-export type { AmaCollection, AmaCollectionDef } from "./definitions/AmaCollection";
+export type {
+  AmaCollection,
+  AmaCollectionDef,
+} from "./definitions/AmaCollection";
 export * from "@atmyapp/structure";
+
+export {
+  createDiagnosticsHandler,
+  DIAGNOSTICS_PATH,
+} from "./client/diagnostics";
+export type {
+  IntegrationReport,
+  DiagnosticCheck,
+  DiagnosticStatus,
+  DiagnosticsOptions,
+} from "./client/diagnostics";

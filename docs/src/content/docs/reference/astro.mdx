@@ -1,28 +1,51 @@
 ---
-title: Astro Reference
-description: Curated reference for @atmyapp/astro.
+title: Astro API reference
+description: Exports and options for the static-first AtMyApp Astro integration.
 ---
 
-`@atmyapp/astro` provides AtMyApp helpers for Astro projects.
+## Requirements and exports
 
-## Install
+Astro 5+ and Node 22.14+. The integration is tested with the workspace's Astro version; use an adapter compatible with your installed Astro version.
 
-```bash
-pnpm add @atmyapp/astro
-```
+| Import                       | API                                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `@atmyapp/astro`             | Default `atmyapp(options?)` integration                                                   |
+| `@atmyapp/astro/server`      | `getAtMyApp`, `getAtMyAppConfiguration`, `fetchWebsiteMetadataOnce`, `AstroClientOptions` |
+| `@atmyapp/astro/client`      | Browser-only `getClient()`                                                                |
+| `@atmyapp/astro/components`  | Default `AtMyAppHead` component                                                           |
+| `@atmyapp/astro/form`        | Default `AtMyAppForm` component                                                           |
+| `@atmyapp/astro/diagnostics` | Manual `createAstroDiagnosticsRoute`, `atMyAppDiagnostics` helpers                        |
 
-Astro must already be installed in the project.
+## `atmyapp(options)`
 
-## Package exports
+Options: `apiKey?: string`, `baseUrl?: string`, `diagnostics?: boolean` (false by default). Environment configuration is usually enough. The integration configures output mode, shared environment defaults and optionally the diagnostics route. It does not install a server adapter or sitemap package.
 
-- `@atmyapp/astro`
-- `@atmyapp/astro/client`
-- `@atmyapp/astro/components`
+## `getAtMyApp(context, options?)`
 
-## Peer dependency
+Pass Astro's render/API context, including `url` and `locals`. Returns the normal core SDK client. Options accept core client configuration, with optional `apiKey`/`baseUrl`, `env` overrides and `previewKey: string | null`. Passing a canonical schema preserves inferred types. Explicit overrides win; null disables preview. Errors throw by default instead of returning placeholder content.
 
-The package supports Astro `>=4.0.0`.
+The helper requires the integration's virtual configuration module. It is a server/build import, not a browser import. Browser consumers use `@atmyapp/astro/client` after a head component has initialized the page.
 
-## Typical use
+## `AtMyAppHead`
 
-Use this package when an Astro project needs AtMyApp-managed metadata, client helpers, or integration-specific behavior.
+Accepts [metadata fields](/guides/astro-metadata/) plus:
+
+- `clientOptions`: same options used for your content client.
+- `defaults`: local fallback metadata.
+- `metadataError`: `throw` (default) or `fallback`; preview failures always throw.
+- `trackPageView`: false by default; ignored in preview context.
+
+## `AtMyAppForm`
+
+- `submission`: required submission type name.
+- `returnTo`: optional result page URL.
+- `clientOptions`: shared client options including schema.
+- `allowPreviewSubmit`: false by default; true permits real submissions.
+- `enhance`: false by default; inline browser feedback.
+- Ordinary form attributes, such as `id`, `class` and `aria-label`.
+
+The default slot contains developer-owned fields. The `captcha` slot contains an optional CAPTCHA widget. The component owns `action`, `method` and `enctype`.
+
+## Diagnostics
+
+Prefer `atmyapp({ diagnostics: true })`. Manual helpers remain available for custom client factories, but do not mount both approaches at the same path. Static reports describe the build; dynamic reports describe the current request. [Report fields and limitations](/guides/diagnostics/).

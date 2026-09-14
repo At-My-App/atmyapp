@@ -1,0 +1,72 @@
+---
+title: Integration diagnostics
+description: Optional, safe connection reports for static websites and live previews.
+---
+
+Diagnostics report the SDK configuration, credential validation, preview validity,
+and content identity where known. They do not prove which content a page renders.
+Nothing is exposed or requested until you explicitly mount a route or call
+`client.diagnostics.report()`.
+
+## Core SDK
+
+Mount this handler at `/.well-known/atmyapp/diagnostics.json` using your framework:
+
+```ts
+import { createDiagnosticsHandler } from "@atmyapp/core";
+import { createWebsiteClient } from "./website-client";
+
+export const GET = createDiagnosticsHandler(createWebsiteClient);
+```
+
+`createWebsiteClient(request)` must be the same client factory your website uses.
+If your website uses preview content, resolve `amaPreviewKey` per request in that
+factory. Never mutate a shared client to switch previews. A client without
+request-specific configuration can be supplied with `() => client`.
+
+You can also inspect a client directly:
+
+```ts
+const report = await client.diagnostics.report();
+```
+
+## Astro
+
+Prefer the integration, which shares the website client configuration:
+
+```js
+import { defineConfig } from "astro/config";
+import atmyapp from "@atmyapp/astro";
+export default defineConfig({ integrations: [atmyapp({ diagnostics: true })] });
+```
+
+This mounts the route automatically. It follows `DEV_MODE` (or the `IS_DYNAMIC` alias): production static builds capture build evidence; dynamic routes inspect the current request. Do not also create a manual endpoint at the same path.
+
+For an existing custom client factory, `createAstroDiagnosticsRoute(factory, options)` is available from `@atmyapp/astro/diagnostics`. Mount it in `src/pages/.well-known/atmyapp/diagnostics.json.ts`. Explicit `execution` overrides inference from the route's prerendered state. The optional standalone `atMyAppDiagnostics()` hook keeps that manual endpoint dynamic in development.
+
+AMA builds supply `ATMYAPP_CODE_COMMIT` and `ATMYAPP_BUILD_TIME`. External builds may supply those variables or the helper's `codeCommit` and `builtAt` options. SDK versions come from the installed packages. See the [complete Astro guide](/guides/astro/).
+
+## Reading a report
+
+- `passed`: the particular check succeeded.
+- `failed`: a specific problem was detected.
+- `unknown`: evidence was unavailable or the check could not complete.
+- `unsupported`: the check is not applicable or supported by this installation.
+- `pending`: the platform is waiting for preview startup.
+
+Content commit and snapshot identity can be null. The latest repository commit
+is never substituted for the content actually used. `fallbackUsed: null` means
+there was no request-scoped read evidence; it does not mean fallback is disabled.
+Local-only mode does not contact the API. The report is metadata-only and never
+creates sample content, records analytics, or extends a preview session.
+
+Reports omit API keys, preview capabilities, content bodies, raw errors, and
+private infrastructure URLs. They are public when you mount the endpoint on an
+external host. On AMA hosting, the diagnostics endpoint is hidden by default;
+authorized checks access it internally. Operators may set
+`HOSTING_DIAGNOSTICS_PUBLIC=1` to expose the same report.
+
+The client probe has a five-second deadline, rejects redirects, and reads at most
+64 KiB. Older APIs without the diagnostics probe report verification unavailable.
+An HTTP 200 response means the JSON report was generated, not that all checks
+passed. Runtime responses use `Cache-Control: no-store`.

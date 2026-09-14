@@ -1,0 +1,14 @@
+<script>
+  import { getClient } from "@atmyapp/astro/client";
+  let lastUrl: string | undefined;
+  const track = () => {
+    if (lastUrl === window.location.href) return;
+    lastUrl = window.location.href;
+    if (window.__ATMYAPP__?.trackPageView && !window.__ATMYAPP__.preview)
+      getClient()
+        .analytics.trackEvent("page_view")
+        .catch(() => {});
+  };
+  document.addEventListener("astro:page-load", track);
+  track();
+</script>

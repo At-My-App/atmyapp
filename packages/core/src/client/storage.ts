@@ -110,7 +110,7 @@ export const createStorageClient = (
       type: "Bearer",
       token: clientOptions.apiKey,
     },
-    fetch: clientOptions.customFetch,
+    customFetchImpl: clientOptions.customFetch,
     headers: {
       "Cache-Control":
         clientOptions.mode === "priority" ? "no-cache" : "max-age=60",

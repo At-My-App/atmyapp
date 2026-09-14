@@ -21,7 +21,7 @@ export function createLocalizationClient(
       type: "Bearer",
       token: clientOptions.apiKey,
     },
-    fetch: clientOptions.customFetch,
+    customFetchImpl: clientOptions.customFetch,
   });
 
   async function getData<T>(path: string, params: Record<string, string>) {

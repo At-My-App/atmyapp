@@ -1,37 +1,114 @@
 ---
-title: Astro Guide
-description: Add AtMyApp helpers to Astro projects.
+title: AtMyApp with Astro
+description: Build a static website with managed content, metadata, forms, and live previews.
 ---
 
-`@atmyapp/astro` contains Astro-specific helpers for projects that use AtMyApp content.
+AtMyApp renders your content and metadata into ordinary HTML during production builds. The same project runs dynamically for local development and AtMyApp previews. Contact forms submit directly to AtMyApp, so your published website does not need an application server.
 
-## Install
+## Install and configure
 
-```bash
-pnpm add @atmyapp/astro @atmyapp/core
+Use Node 22.14+ and Astro 5+. Install the package in your Astro project:
+
+```sh
+npm install @atmyapp/astro
 ```
 
-The package declares Astro as a peer dependency.
+Add the public website API key and **project API URL** from AtMyApp to `.env`:
 
-## Exports
-
-The package exposes:
-
-- `@atmyapp/astro` for the main integration helpers.
-- `@atmyapp/astro/client` for client-specific utilities.
-- `@atmyapp/astro/components` for the `AtMyAppHead.astro` component.
-
-## Configuration
-
-Keep your runtime values in environment variables:
-
-```bash
-ATMYAPP_URL=https://edge.atmyapp.com/projects/your-project-id
-ATMYAPP_API_KEY=ama_...
+```dotenv
+ATMYAPP_API_KEY=pk-ama-your-project-key
+ATMYAPP_API_URL=https://api.atmyapp.com/v0/projects/YOUR_PROJECT_ID
 ```
 
-Use the generated client from `atmyapp init --template minimal` or `atmyapp init --template blog` as the starting point for fetching content.
+Use the actual URL provided for your environment. `ATMYAPP_BASE_URL` is also supported and takes precedence over `ATMYAPP_API_URL`. Do not use the API origin without the project path. The API key is public and is included in browser configuration by the head component.
 
-## Head metadata
+```js
+// astro.config.mjs
+import { defineConfig } from "astro/config";
+import atmyapp from "@atmyapp/astro";
 
-Use the Astro package when you want AtMyApp-managed metadata and website configuration to participate in the Astro render lifecycle.
+export default defineConfig({
+  site: "https://www.example.com",
+  integrations: [atmyapp({ diagnostics: true })],
+});
+```
+
+Set `site` to the production website URL, including any hosting base path where applicable. Canonical links and form return URLs use it, never the temporary preview host. Diagnostics are optional; omit `diagnostics: true` to leave the endpoint unmounted.
+
+## Add a base layout
+
+Enable the Astro framework configuration in AtMyApp Project Setup so the `website.metadata` system configuration exists. Edit its website defaults in **Website Configuration - Astro Metadata**.
+
+```astro
+---
+// src/layouts/BaseLayout.astro
+import AtMyAppHead from '@atmyapp/astro/components';
+const { title, description } = Astro.props;
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <AtMyAppHead title={title} description={description} />
+  </head>
+  <body><slot /></body>
+</html>
+```
+
+Use one head component per page. It owns the title, description, canonical and social tags; remove duplicate copies from your layout. It does not generate viewport or charset tags.
+
+## Read content
+
+```astro
+---
+import { getAtMyApp } from '@atmyapp/astro/server';
+import BaseLayout from '../layouts/BaseLayout.astro';
+const ama = getAtMyApp(Astro);
+const content = await ama.storage.getFromPath('home.json');
+---
+<BaseLayout title="Home">
+  <pre>{JSON.stringify(content, null, 2)}</pre>
+</BaseLayout>
+```
+
+Replace `home.json` with a real configured document path and render its fields in your own markup. For typed storage and collection helpers, pass your existing AtMyApp schema:
+
+```ts
+const ama = getAtMyApp(Astro, { schema });
+```
+
+The schema retains the core SDK's inferred types. Keep a shared `clientOptions` object if you override the project, schema, locale or preview; pass it to the client, head and form components. Configuration overrides on one component do not mutate other clients.
+
+## Run locally and build
+
+```sh
+npm run dev
+npm run build
+```
+
+Development defaults to dynamic; production builds default to static. `DEV_MODE=true` enables dynamic mode explicitly. `IS_DYNAMIC=1` remains an alias. A dynamic **production build** needs an Astro adapter; local development does not. See [modes and previews](/guides/astro-previews/) for precedence, isolation and deployment examples.
+
+## Add a static contact form
+
+```astro
+---
+import AtMyAppForm from '@atmyapp/astro/form';
+---
+<AtMyAppForm submission="contact" returnTo="/thank-you">
+  <label>Email <input name="email" type="email" required /></label>
+  <label>Message <textarea name="message" required /></label>
+  <button type="submit">Send message</button>
+</AtMyAppForm>
+```
+
+Create the `contact` submission type in AtMyApp first, with matching field names. Create your `/thank-you` page too. No Astro endpoint, Actions, React or hydration is required. [Form guide](/guides/astro-forms/).
+
+## Next steps
+
+- [Modes, environment variables and previews](/guides/astro-previews/)
+- [Page metadata, favicons, sitemap and robots](/guides/astro-metadata/)
+- [Submissions, uploads and CAPTCHA](/guides/astro-forms/)
+- [Astro API reference](/reference/astro/)
+- [Diagnostics](/guides/diagnostics/)
+
+The package's `test/fixtures/website` project exercises this layout, metadata and form flow in static, development and Node server modes. From the SDK workspace, run `pnpm --filter @atmyapp/astro test:website` after building the SDK packages.

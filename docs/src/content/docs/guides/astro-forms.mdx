@@ -1,0 +1,70 @@
+---
+title: Astro forms
+description: Static HTML submissions, return pages, uploads, preview behavior and enhancement.
+---
+
+## A form that works without a server
+
+Create a submission type in AtMyApp, then use the same type name and field names in your markup:
+
+```astro
+---
+import AtMyAppForm from '@atmyapp/astro/form';
+---
+<AtMyAppForm submission="contact" returnTo="/thank-you">
+  <label>Name <input name="name" required /></label>
+  <label>Email <input name="email" type="email" required /></label>
+  <label>Message <textarea name="message" required /></label>
+  <button type="submit">Send</button>
+</AtMyAppForm>
+```
+
+The SDK resolves AtMyApp's public form action during rendering. Submissions go directly to that endpoint, including on static hosting. No API key is placed in a hidden form field. Styling, labels and field markup remain yours. Browser validation is a convenience; the receiving API remains authoritative.
+
+`returnTo` may be relative to the configured production `site`. Off-site return URLs are rejected when `site` is configured. Without `returnTo`, the public endpoint displays its result page. With it, the normal HTML flow returns to your page with a success/error result; your page must handle both. Do not label every return as a success without reading the result.
+
+The public endpoint uses `result=success|error`, with `error` for errors and `submissionId` when available. A static thank-you page can use a small browser script to read those values and render text safely with `textContent`.
+
+## Uploads
+
+```astro
+<AtMyAppForm submission="application" returnTo="/application-result">
+  <label>Email <input name="email" type="email" required /></label>
+  <label>CV <input name="cv" type="file" accept=".pdf" required /></label>
+  <button>Apply</button>
+</AtMyAppForm>
+```
+
+Configure matching asset fields in the submission schema. The SDK infers the encoding when you pass a schema in `clientOptions`; otherwise it defaults to multipart, which supports uploads. `accept` only guides the file picker; server file validation and limits still apply.
+
+## Closed forms and CAPTCHA
+
+A closed form renders disabled with a message. This is a build-time hint on static websites: changing acceptance later is enforced by the receiving API, and rebuilding updates the displayed state.
+
+If CAPTCHA is required, the component disables submission until you provide a named `captcha` slot. Include your configured provider's widget and scripts there. The provider must populate the token field accepted by AtMyApp (for hCaptcha, `h-captcha-response`). Slot presence does not prove a valid CAPTCHA token; the API verifies it. Never include the provider's secret in the page.
+
+## Preview behavior
+
+Preview forms are disabled by default and do not resolve/provision a public form URL. Use `allowPreviewSubmit` only when you intentionally want **real** submissions. It is not a sandbox: successful requests enter the project's submissions workflow. Return redirects depend on the endpoint's origin policy, so a production `returnTo` may be unavailable from an external preview host.
+
+## Optional inline feedback
+
+```astro
+<AtMyAppForm submission="contact" enhance>
+  <label>Email <input name="email" type="email" required /></label>
+  <button>Send</button>
+</AtMyAppForm>
+```
+
+`enhance` adds a small browser handler: pending status, duplicate-click protection, text errors, and inline success. It preserves entered values after an error and resets the form after success. Without JavaScript it still submits as HTML. Cross-origin enhancement needs the AtMyApp endpoint's CORS policy to allow the website origin.
+
+With `enhance` and `returnTo`, successful requests navigate to the return URL; errors remain on the form. This does not provide an exactly-once delivery guarantee after a lost network response. For CAPTCHA forms, reset/reissue the provider token after an attempt as required by that provider.
+
+## Troubleshooting
+
+- **Type not found:** create the submission type and check the exact name.
+- **Fields missing:** check input `name` attributes against the schema; disabled fields are not submitted.
+- **Form is closed:** enable accepting responses in AtMyApp and rebuild if you want the static UI updated.
+- **CAPTCHA required:** provide the widget slot and configure provider verification in AtMyApp.
+- **Redirect unavailable:** use the configured website origin; confirm the public endpoint's origin policy.
+- **Inline request fails:** inspect CORS and network status; the plain HTML flow can work even if browser fetch is blocked.

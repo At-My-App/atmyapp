@@ -48,3 +48,7 @@ Publishing uses the `NPM_TOKEN` GitHub Actions secret through `NODE_AUTH_TOKEN`.
 The token must have permission to publish the `@atmyapp` packages. If the npm
 account or packages require 2FA, use a granular token with publish access and
 2FA bypass enabled.
+
+## Canonical Astro SDK
+
+`packages/astro` in the At-My-App/atmyapp repository is the only maintained source for `@atmyapp/astro`. The standalone At-My-App/astro repository is retired. Changes and releases use this workspace and its Changesets workflow.

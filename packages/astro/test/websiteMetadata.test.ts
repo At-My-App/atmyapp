@@ -30,10 +30,12 @@ describe("fetchWebsiteMetadataOnce", () => {
     });
   });
 
-  it("keeps separate cache entries per key", async () => {
-    const getSystemConfig = jest.fn(async ({ systemKey }: { systemKey: string }) => ({
-      config: { title: systemKey },
-    }));
+  it("keeps separate configuration keys within a client", async () => {
+    const getSystemConfig = jest.fn(
+      async ({ systemKey }: { systemKey: string }) => ({
+        config: { title: systemKey },
+      }),
+    );
     const client = { systemConfig: { get: getSystemConfig } } as any;
 
     await fetchWebsiteMetadataOnce(client, "https://api.atmyapp.com");
@@ -42,9 +44,9 @@ describe("fetchWebsiteMetadataOnce", () => {
       client,
       "https://api.atmyapp.com",
       "astro",
-      "website.other"
+      "website.other",
     );
 
-    expect(getSystemConfig).toHaveBeenCalledTimes(3);
+    expect(getSystemConfig).toHaveBeenCalledTimes(2);
   });
 });
