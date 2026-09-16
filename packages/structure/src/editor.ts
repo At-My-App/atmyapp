@@ -172,7 +172,7 @@ declare module "@atmyapp/structure" {
     description?: string;
     localize?: boolean;
     systemFields?: Record<string, unknown>;
-    framework: string;
+    framework?: string;
     systemKey: string;
     displayName: string;
     path: string;

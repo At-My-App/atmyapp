@@ -13,10 +13,9 @@ export const preview_json = {
 };
 
 export const default_system_config = {
-  framework: "astro",
   systemKey: "website.metadata",
-  displayName: "Website Configuration - Astro Metadata",
-  path: "_SystemConfig/astro/website-metadata.json",
+  displayName: "Website settings",
+  path: "_SystemConfig/website/metadata.json",
   config: {
     title: "AtMyApp default title",
     description: "AtMyApp default description",
@@ -45,7 +44,7 @@ export const handlers = [
           {
             status: 500,
             headers: { "Content-Type": "application/json" },
-          },
+          }
         );
       }
 
@@ -56,30 +55,29 @@ export const handlers = [
           {
             status: 400,
             headers: { "Content-Type": "application/json" },
-          },
+          }
         );
       }
 
       return HttpResponse.json({ success: true, eventId });
-    },
+    }
   ),
 
   // System config handler
-  http.get(`${API_BASE_URL}/system-config/:framework/:systemKey`, ({ params }) => {
-    const framework = params.framework as string;
+  http.get(`${API_BASE_URL}/system-config/:systemKey`, ({ params }) => {
     const systemKey = params.systemKey as string;
 
-    if (framework === "missing") {
+    if (systemKey === "missing") {
       return new HttpResponse(null, { status: 404 });
     }
 
-    if (framework === "error") {
+    if (systemKey === "error") {
       return new HttpResponse(
         JSON.stringify({ error: "System config failed" }),
         {
           status: 500,
           headers: { "Content-Type": "application/json" },
-        },
+        }
       );
     }
 
@@ -87,7 +85,6 @@ export const handlers = [
       success: true,
       data: {
         ...default_system_config,
-        framework,
         systemKey,
       },
     });
@@ -116,29 +113,35 @@ export const handlers = [
     });
   }),
 
-  http.post(`${API_BASE_URL}/submissions/:submissionType/form-url`, ({ params }) => {
-    const submissionType = params.submissionType as string;
+  http.post(
+    `${API_BASE_URL}/submissions/:submissionType/form-url`,
+    ({ params }) => {
+      const submissionType = params.submissionType as string;
 
-    return HttpResponse.json({
-      success: true,
-      data: {
-        formUrl: `https://edge.atmyapp.com/forms/project/${submissionType}`,
-      },
-      error: "",
-    });
-  }),
+      return HttpResponse.json({
+        success: true,
+        data: {
+          formUrl: `https://edge.atmyapp.com/forms/project/${submissionType}`,
+        },
+        error: "",
+      });
+    }
+  ),
 
-  http.post(`${API_BASE_URL}/submissions/:submissionType`, async ({ params }) => {
-    const submissionType = params.submissionType as string;
+  http.post(
+    `${API_BASE_URL}/submissions/:submissionType`,
+    async ({ params }) => {
+      const submissionType = params.submissionType as string;
 
-    return HttpResponse.json({
-      success: true,
-      data: {
-        submissionId: `${submissionType}-submission-id`,
-      },
-      error: "",
-    });
-  }),
+      return HttpResponse.json({
+        success: true,
+        data: {
+          submissionId: `${submissionType}-submission-id`,
+        },
+        error: "",
+      });
+    }
+  ),
 
   // Default handler for paths not explicitly defined
   http.get(`${API_BASE_URL}/storage/f/:path`, ({ params }) => {
@@ -159,7 +162,7 @@ export const handlers = [
         {
           status: 500,
           headers: { "Content-Type": "application/json" },
-        },
+        }
       );
     }
 

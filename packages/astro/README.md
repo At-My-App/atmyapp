@@ -35,3 +35,7 @@ Use `getAtMyApp(Astro)` from `@atmyapp/astro/server` for content, `AtMyAppHead` 
 - [API reference](../../docs/src/content/docs/reference/astro.mdx)
 
 The website fixture in `test/fixtures/website` is exercised in static, development and built Node server modes by `pnpm --filter @atmyapp/astro test:website`. Releases use the unified workspace Changesets workflow.
+
+## Website settings
+
+Manage website-wide defaults in **Settings → Website settings**. `<AtMyAppHead />` uses them automatically; `<AtMyAppHead title="Menu" />` applies the website-name suffix, while `titleMode="absolute"` preserves an exact page title. AMA generates browser and phone icon variants on the server; the SDK renders their URLs. See the metadata guide for precedence, clearing, preview behavior and server-rendering limits.

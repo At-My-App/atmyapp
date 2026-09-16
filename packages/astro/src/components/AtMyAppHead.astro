@@ -84,6 +84,7 @@ const publicConfiguration = {
     <link rel="apple-touch-icon" href={meta.appleTouchIcon} />
   )
 }
+{meta.manifest && <link rel="manifest" href={meta.manifest} />}
 {meta.themeColor && <meta name="theme-color" content={meta.themeColor} />}
 {
   meta.googleSiteVerification && (

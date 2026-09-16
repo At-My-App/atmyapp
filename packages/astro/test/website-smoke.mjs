@@ -40,6 +40,8 @@ const api = createServer((req, res) => {
         success: true,
         data: {
           config: {
+            icon: 'https://images.example/source.png',
+            iconVariants: { source: 'https://images.example/source.png', favicon: 'https://images.example/icon-32.png', appleTouchIcon: 'https://images.example/icon-180.png', manifest: 'https://images.example/site.webmanifest' },
             title: "Website",
             titleTemplate: "%s | Brand",
             description: key ? `Preview ${key} ${revision}` : "Published",
@@ -82,6 +84,10 @@ try {
     const html = await readFile(new URL("dist/index.html", root), "utf8");
     assert.match(html, /Home \| Brand/);
     assert.match(html, /Published/);
+    assert.match(html, /rel="icon" href="https:\/\/images.example\/icon-32.png"/);
+    assert.match(html, /rel="apple-touch-icon" href="https:\/\/images.example\/icon-180.png"/);
+    assert.match(html, /rel="manifest" href="https:\/\/images.example\/site.webmanifest"/);
+    assert.doesNotMatch(html, /data-atmyapp-icon/);
     assert.match(html, /action="https:\/\/forms.example/);
     assert.doesNotMatch(html, /<script>bad/);
     assert.doesNotMatch(html, /addEventListener/);

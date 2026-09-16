@@ -12,7 +12,6 @@ it("forwards preview context and disables metadata response caching", async () =
       return Response.json({
         success: true,
         data: {
-          framework: "astro",
           systemKey: "website.metadata",
           config: { title: "Draft" },
         },
@@ -20,7 +19,6 @@ it("forwards preview context and disables metadata response caching", async () =
     },
   });
   const result = await client.get({
-    framework: "astro",
     systemKey: "website.metadata",
   });
   expect(result.config).toEqual({ title: "Draft" });

@@ -13,9 +13,8 @@ describe("System config client", () => {
     });
   });
 
-  it("returns framework system configuration", async () => {
+  it("returns website system configuration", async () => {
     const result = await client.systemConfig.get({
-      framework: "astro",
       systemKey: "website.metadata",
     });
 
@@ -25,28 +24,22 @@ describe("System config client", () => {
   it("throws enriched errors for failed requests", async () => {
     await expect(
       client.systemConfig.get({
-        framework: "error",
-        systemKey: "website.metadata",
-      }),
-    ).rejects.toThrow(
-      'AtMyApp: failed to fetch system config "error/website.metadata"',
-    );
+        systemKey: "error",
+      })
+    ).rejects.toThrow('AtMyApp: failed to fetch system config "error"');
   });
 
   it("wraps network failures", async () => {
     server.use(
-      http.get(`${API_BASE_URL}/system-config/network_error/:systemKey`, () => {
+      http.get(`${API_BASE_URL}/system-config/network_error`, () => {
         return HttpResponse.error();
-      }),
+      })
     );
 
     await expect(
       client.systemConfig.get({
-        framework: "network_error",
-        systemKey: "website.metadata",
-      }),
-    ).rejects.toThrow(
-      'AtMyApp: failed to fetch system config "network_error/website.metadata"',
-    );
+        systemKey: "network_error",
+      })
+    ).rejects.toThrow('AtMyApp: failed to fetch system config "network_error"');
   });
 });

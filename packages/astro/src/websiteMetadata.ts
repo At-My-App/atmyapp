@@ -7,19 +7,18 @@ export function clearWebsiteMetadataCache() {
 export function fetchWebsiteMetadataOnce(
   client: Pick<AtMyAppClient, "systemConfig">,
   _baseUrl?: string,
-  framework = "astro",
-  systemKey = "website.metadata",
+  systemKey = "website.metadata"
 ): Promise<AtMyAppHeadConfig> {
   let entries = cache.get(client);
   if (!entries) {
     entries = new Map();
     cache.set(client, entries);
   }
-  const key = `${framework}:${systemKey}`;
+  const key = systemKey;
   const existing = entries.get(key);
   if (existing) return existing;
   const pending = client.systemConfig
-    .get<AtMyAppHeadConfig>({ framework, systemKey })
+    .get<AtMyAppHeadConfig>({ systemKey })
     .then((result) => result.config)
     .catch((error) => {
       entries!.delete(key);

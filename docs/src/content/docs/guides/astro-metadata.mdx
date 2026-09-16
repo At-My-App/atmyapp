@@ -3,48 +3,91 @@ title: Astro metadata
 description: Predictable page and website defaults with safe social and structured metadata.
 ---
 
-## Precedence
+## Website settings
 
-Each field resolves independently: **page props → managed website defaults → local `defaults` props**. `undefined` and empty strings inherit. `null` explicitly clears a field, including derived social fallbacks. There is no conflict-strategy switch.
+Open **Settings → Website settings** in AtMyApp. Configure your website name, default page title and description, one website icon, and a sharing image. The editor shows live browser-tab and shared-link previews. Changes save as drafts; use Preview and Review & publish to apply them.
+
+The settings are framework-independent. Astro only supplies the page URL and renders the resolved tags.
+
+```astro
+---
+import AtMyAppHead from '@atmyapp/astro/components';
+---
+<head>
+  <AtMyAppHead />
+</head>
+```
+
+## Page titles and overrides
+
+With website name `Altana` and **Add website name to page titles** enabled:
+
+```astro
+<!-- Uses the default website title exactly as entered -->
+<AtMyAppHead />
+
+<!-- Menu · Altana -->
+<AtMyAppHead title="Menu" />
+
+<!-- Uses this exact title -->
+<AtMyAppHead title="Altana — Italian kitchen & garden" titleMode="absolute" />
+```
+
+Each field resolves independently: **page props → website settings → local `defaults`**. Missing values, empty strings, and empty objects inherit. `null` explicitly clears a field, including its derived social fallback. The two dashboard switches have explicit defaults; they take precedence over local defaults.
 
 ```astro
 <AtMyAppHead
   title={article.title}
   description={article.summary}
   image={article.coverUrl}
-  defaults={{ title: 'My website', titleTemplate: '%s | My website' }}
+  defaults={{ title: 'My website', description: 'A local fallback' }}
 />
 ```
 
-Set website-wide fields in **Website Configuration - Astro Metadata**. A `titleTemplate` replaces `%s` with the resolved title. Set `titleTemplate={null}` to disable it for one page. Social titles/descriptions default to the resolved page values; `image` supplies the default social image, while `ogImage` overrides it.
+Shared-link text inherits the resolved title and description unless **Use different text for shared links** is enabled. Explicit page `ogTitle`, `ogDescription`, or `ogImage` override corresponding website defaults. `image` supplies the sharing image when there is no `ogImage` override. An explicit `titleTemplate` remains available in code; `titleMode="absolute"` bypasses all title formatting.
 
-## Supported fields
+## One website icon
 
-| Fields                                                   | Purpose                                                            |
-| -------------------------------------------------------- | ------------------------------------------------------------------ |
-| `title`, `titleTemplate`, `description`                  | Document title and summary                                         |
-| `siteName`                                               | Social website name                                                |
-| `canonical`                                              | Explicit canonical URL, otherwise production `site` plus page path |
-| `robots`                                                 | Indexing directives; preview always uses noindex                   |
-| `image`, `ogImage`, `ogTitle`, `ogDescription`, `ogType` | Social preview metadata                                            |
-| `twitterCard`                                            | Card format; defaults according to whether an image exists         |
-| `favicon`, `appleTouchIcon`, `themeColor`                | Browser and device branding                                        |
-| `sitemap`                                                | Link to an existing sitemap                                        |
-| `googleSiteVerification`                                 | Verification tag                                                   |
-| `jsonLd`                                                 | Structured data object, serialized safely                          |
+Choose and crop one square image in Website settings. AMA generates PNG variants at 32, 180, 192 and 512 pixels plus a web manifest on the server. The settings, icon, and variants are published together; conversion failure prevents publication and leaves the previous version intact. Unchanged icons reuse existing variants.
 
-Relative image and icon paths resolve against Astro's configured production `site`. The component does not resize images or generate icon variants. Canonical generation omits request query strings and fragments; explicit canonical URLs also have `amaPreviewKey` removed. Set `canonical={null}` to omit it.
+The SDK receives URLs and renders links. It has no image-processing dependency or icon build step. This works for static and server-rendered pages. Draft previews use the selected source image before publication.
+
+Icons supplied directly in code, such as `defaults={{ icon: '/icon.png' }}`, remain developer-managed. Use explicit `favicon`, `appleTouchIcon`, and `manifest` props if you provide your own variants. Set Astro's production `site` to resolve relative URLs.
+
+## Canonical and structured metadata
+
+Configure the production `site` in `astro.config.mjs`. Canonical URLs use that origin and each page's path, excluding request query strings and fragments. Explicit canonical URLs also have `amaPreviewKey` removed. Use `canonical={null}` to omit the tag. Preview pages always emit `noindex, nofollow`.
+
+The production homepage receives basic `WebSite` JSON-LD from the website name and production URL. Other pages receive no automatically inferred structured data in this version. Explicit `jsonLd` replaces that object; `jsonLd={null}` disables it. Values are escaped for safe script serialization.
 
 ```astro
 <AtMyAppHead
   title="Contact"
-  favicon="/favicon.svg"
-  appleTouchIcon="/apple-touch-icon.png"
   jsonLd={{ '@context': 'https://schema.org', '@type': 'Organization', name: 'Example' }}
 />
 ```
 
-JSON-LD is selected as one object, not recursively merged. Values containing HTML-like strings are escaped before script serialization.
+AI enrichment after publication is a separate upcoming hosting feature. It is not enabled by these settings yet.
+
+## Other frameworks and direct reads
+
+The shared contract and resolver are exported from `@atmyapp/structure` and re-exported by `@atmyapp/core`:
+
+```ts
+import { resolveWebsiteMetadata, type Metadata } from "@atmyapp/core";
+const { config } = await client.systemConfig.get<Metadata>({
+  systemKey: "website.metadata",
+});
+const metadata = resolveWebsiteMetadata(
+  { title: "Menu" },
+  config,
+  {},
+  new URL("https://example.com/menu"),
+  new URL("https://example.com/")
+);
+```
+
+The experimental Astro-specific configuration has been replaced by `_SystemConfig/website/metadata.json` and `GET /system-config/website.metadata`. Update the SDK and backend together, and initialize Website settings. No old-path migration or compatibility alias is provided.
 
 ## Metadata availability
 

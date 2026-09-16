@@ -30,7 +30,7 @@ function pushIssue(issues: ValidationIssue[], path: string, message: string) {
 /** Match a union branch using the same shape rules as ordinary content validation. */
 export function matchesFieldValue(
   value: unknown,
-  field: FieldDefinition,
+  field: FieldDefinition
 ): boolean {
   const issues: ValidationIssue[] = [];
   validateField(value, field, "", issues, {});
@@ -42,7 +42,7 @@ function validateField(
   field: FieldDefinition,
   path: string,
   issues: ValidationIssue[],
-  configs: Record<string, MdxConfigDefinition>,
+  configs: Record<string, MdxConfigDefinition>
 ) {
   switch (field.kind) {
     case "scalar": {
@@ -56,7 +56,7 @@ function validateField(
         pushIssue(
           issues,
           path,
-          `Expected ${expected}, got ${valueType(value)}`,
+          `Expected ${expected}, got ${valueType(value)}`
         );
         return;
       }
@@ -65,14 +65,14 @@ function validateField(
           pushIssue(
             issues,
             path,
-            `String shorter than minLength ${field.minLength}`,
+            `String shorter than minLength ${field.minLength}`
           );
         }
         if (field.maxLength !== undefined && value.length > field.maxLength) {
           pushIssue(
             issues,
             path,
-            `String longer than maxLength ${field.maxLength}`,
+            `String longer than maxLength ${field.maxLength}`
           );
         }
         if (field.pattern) {
@@ -81,7 +81,7 @@ function validateField(
             pushIssue(
               issues,
               path,
-              `Value does not match pattern ${field.pattern}`,
+              `Value does not match pattern ${field.pattern}`
             );
           }
         }
@@ -94,7 +94,7 @@ function validateField(
           pushIssue(
             issues,
             path,
-            `Number greater than maximum ${field.maximum}`,
+            `Number greater than maximum ${field.maximum}`
           );
         }
       }
@@ -117,7 +117,7 @@ function validateField(
         pushIssue(
           issues,
           path,
-          "Expected a URL identifier of up to 96 lowercase letters, numbers, and single hyphens",
+          "Expected a URL identifier of up to 96 lowercase letters, numbers, and single hyphens"
         );
       }
       return;
@@ -132,7 +132,7 @@ function validateField(
             pushIssue(
               issues,
               `${path}.${index}`,
-              `Expected string, got ${valueType(entry)}`,
+              `Expected string, got ${valueType(entry)}`
             );
           }
         });
@@ -149,27 +149,38 @@ function validateField(
         pushIssue(issues, path, `Unknown mdx config "${field.config}"`);
       }
       return;
-    case "asset":
+    case "asset": {
+      // Managed content stores references; drafts can contain inline uploads.
+      const validAsset = (entry: unknown) => {
+        if (typeof entry === "string") return true;
+        if (!entry || typeof entry !== "object" || Array.isArray(entry))
+          return false;
+        const record = entry as Record<string, unknown>;
+        return (
+          ["$asset", "__blob", "url"].some(
+            (key) => typeof record[key] === "string" && !!record[key]
+          ) ||
+          (typeof record.data === "string" && record.data.startsWith("data:"))
+        );
+      };
+      if (value === null && isFieldOptional(field)) return;
       if (field.multiple) {
         if (!Array.isArray(value)) {
           pushIssue(issues, path, `Expected array, got ${valueType(value)}`);
           return;
         }
         value.forEach((entry, index) => {
-          if (typeof entry !== "string") {
+          if (!validAsset(entry))
             pushIssue(
               issues,
               `${path}.${index}`,
-              `Expected string, got ${valueType(entry)}`,
+              "Expected an asset reference"
             );
-          }
         });
-        return;
-      }
-      if (typeof value !== "string") {
-        pushIssue(issues, path, `Expected string, got ${valueType(value)}`);
-      }
+      } else if (!validAsset(value))
+        pushIssue(issues, path, "Expected an asset reference");
       return;
+    }
     case "array":
       if (!Array.isArray(value)) {
         pushIssue(issues, path, `Expected array, got ${valueType(value)}`);
@@ -179,7 +190,7 @@ function validateField(
         pushIssue(
           issues,
           path,
-          `Array shorter than minItems ${field.minItems}`,
+          `Array shorter than minItems ${field.minItems}`
         );
       }
       if (field.maxItems !== undefined && value.length > field.maxItems) {
@@ -215,7 +226,7 @@ function validateField(
             pushIssue(
               issues,
               `${path}.${childName}`,
-              "Required field is missing",
+              "Required field is missing"
             );
           }
           continue;
@@ -225,7 +236,7 @@ function validateField(
           childField,
           `${path}.${childName}`,
           issues,
-          configs,
+          configs
         );
       }
       if (field.additionalProperties === false) {
@@ -243,7 +254,7 @@ function validateField(
 function validateStructuredObject(
   data: unknown,
   definition: Definition,
-  configs: Record<string, MdxConfigDefinition>,
+  configs: Record<string, MdxConfigDefinition>
 ): ValidationResult {
   const issues: ValidationIssue[] = [];
   if (
@@ -281,7 +292,7 @@ function validateStructuredObject(
 export function validateContent(
   compiled: CompiledSchema,
   definitionName: string,
-  data: unknown,
+  data: unknown
 ): ValidationResult {
   const definition = compiled.definitionsByName[definitionName]?.definition;
   if (!definition) {
@@ -299,7 +310,7 @@ export function validateContentAtPath(
   input: string | CompiledSchema,
   path: string,
   content: string,
-  mimeType?: string | null,
+  mimeType?: string | null
 ): ValidationResult {
   const compiled =
     typeof input === "string" ? compileSchema(JSON.parse(input)) : input;
@@ -333,7 +344,7 @@ export function validateContentAtPath(
   return validateStructuredObject(
     parsed,
     definition.definition,
-    compiled.configs,
+    compiled.configs
   );
 }
 
@@ -341,21 +352,21 @@ function validateDefinitionSchema(
   definitionName: string,
   definition: Definition,
   issues: ValidationIssue[],
-  schema: SchemaDocument,
+  schema: SchemaDocument
 ) {
   if (definition.localize === true) {
     if (schema.localization?.enabled !== true) {
       pushIssue(
         issues,
         `definitions.${definitionName}.localize`,
-        "Resource localization requires localization.enabled",
+        "Resource localization requires localization.enabled"
       );
     }
     if (definition.kind === "image" || definition.kind === "system_config") {
       pushIssue(
         issues,
         `definitions.${definitionName}.localize`,
-        `Localized ${definition.kind} definitions are not supported`,
+        `Localized ${definition.kind} definitions are not supported`
       );
     }
     if (
@@ -365,7 +376,7 @@ function validateDefinitionSchema(
       pushIssue(
         issues,
         `definitions.${definitionName}.localize`,
-        "Only Markdown and text files can be localized",
+        "Only Markdown and text files can be localized"
       );
     }
   }
@@ -380,7 +391,7 @@ function validateDefinitionSchema(
         pushIssue(
           issues,
           `definitions.${definitionName}.fields.${reserved}`,
-          `Reserved system field "${reserved}" cannot be declared as a normal field`,
+          `Reserved system field "${reserved}" cannot be declared as a normal field`
         );
       }
     }
@@ -390,7 +401,7 @@ function validateDefinitionSchema(
         field,
         `definitions.${definitionName}.fields.${fieldName}`,
         issues,
-        schema,
+        schema
       );
     }
   }
@@ -400,13 +411,13 @@ function validateFieldSchema(
   field: FieldDefinition,
   path: string,
   issues: ValidationIssue[],
-  schema: SchemaDocument,
+  schema: SchemaDocument
 ) {
   if (field.localize === true && !isLocalizableLeaf(field)) {
     pushIssue(
       issues,
       `${path}.localize`,
-      "Only string and MDX leaf fields can be localized",
+      "Only string and MDX leaf fields can be localized"
     );
   }
 
@@ -425,7 +436,7 @@ function validateFieldSchema(
       pushIssue(
         issues,
         path,
-        "Order fields must be top-level collection fields",
+        "Order fields must be top-level collection fields"
       );
     if (field.groupBy !== undefined) {
       const group =
@@ -434,7 +445,7 @@ function validateFieldSchema(
         pushIssue(
           issues,
           path,
-          "groupBy must name a top-level single-value reference in the same collection",
+          "groupBy must name a top-level single-value reference in the same collection"
         );
     }
   }
@@ -445,19 +456,19 @@ function validateFieldSchema(
         pushIssue(
           issues,
           path,
-          "Collection references support only id or slug",
+          "Collection references support only id or slug"
         );
       if (field.targetField)
         pushIssue(
           issues,
           path,
-          "Custom reference target fields are not supported",
+          "Custom reference target fields are not supported"
         );
       if (field.onDelete && field.onDelete !== "restrict")
         pushIssue(
           issues,
           path,
-          "Collection references require onDelete: restrict",
+          "Collection references require onDelete: restrict"
         );
     }
   }
@@ -465,7 +476,7 @@ function validateFieldSchema(
     pushIssue(
       issues,
       path,
-      `Reference target "${field.target}" does not exist`,
+      `Reference target "${field.target}" does not exist`
     );
   }
 
@@ -481,7 +492,9 @@ function validateFieldSchema(
       pushIssue(
         issues,
         path,
-        `Reference "${path.split(".").pop()}" resolves by slug, but target "${field.target}" does not expose a slug`,
+        `Reference "${path.split(".").pop()}" resolves by slug, but target "${
+          field.target
+        }" does not expose a slug`
       );
     }
   }
@@ -504,7 +517,7 @@ function validateFieldSchema(
         pushIssue(
           issues,
           `${path}.identityField`,
-          "Arrays of objects with localized descendants require identityField",
+          "Arrays of objects with localized descendants require identityField"
         );
       } else if (
         !identity ||
@@ -514,7 +527,7 @@ function validateFieldSchema(
         pushIssue(
           issues,
           `${path}.identityField`,
-          "identityField must reference a non-localized scalar field",
+          "identityField must reference a non-localized scalar field"
         );
       }
     }
@@ -553,13 +566,13 @@ function validateSubmissionSchema(
   submissionName: string,
   submission: SubmissionDefinition,
   issues: ValidationIssue[],
-  schema: SchemaDocument,
+  schema: SchemaDocument
 ) {
   if (!submission.fields || typeof submission.fields !== "object") {
     pushIssue(
       issues,
       `submissions.${submissionName}.fields`,
-      "Submission fields must be an object",
+      "Submission fields must be an object"
     );
     return;
   }
@@ -569,7 +582,7 @@ function validateSubmissionSchema(
       field,
       `submissions.${submissionName}.fields.${fieldName}`,
       issues,
-      schema,
+      schema
     );
   }
 }
@@ -577,7 +590,7 @@ function validateSubmissionSchema(
 function validateEventSchema(
   eventName: string,
   event: { columns: string[] },
-  issues: ValidationIssue[],
+  issues: ValidationIssue[]
 ) {
   const seen = new Set<string>();
 
@@ -586,7 +599,7 @@ function validateEventSchema(
       pushIssue(
         issues,
         `events.${eventName}.columns.${index}`,
-        "Event column names must be non-empty strings",
+        "Event column names must be non-empty strings"
       );
       return;
     }
@@ -595,7 +608,7 @@ function validateEventSchema(
       pushIssue(
         issues,
         `events.${eventName}.columns.${index}`,
-        `Duplicate event column "${column}"`,
+        `Duplicate event column "${column}"`
       );
       return;
     }
@@ -605,7 +618,7 @@ function validateEventSchema(
 }
 
 export function validateSchemaDocument(
-  input: string | SchemaDocument | Record<string, unknown>,
+  input: string | SchemaDocument | Record<string, unknown>
 ): ValidationResult {
   try {
     const schema = parseSchema(input as any);
@@ -619,7 +632,7 @@ export function validateSchemaDocument(
       pushIssue(
         issues,
         "root",
-        "At least one definition, event, or submission is required",
+        "At least one definition, event, or submission is required"
       );
     }
 
@@ -636,7 +649,7 @@ export function validateSchemaDocument(
         name,
         submission as SubmissionDefinition,
         issues,
-        schema,
+        schema
       );
     }
 

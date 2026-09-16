@@ -25,7 +25,6 @@ describe("fetchWebsiteMetadataOnce", () => {
     expect(second).toEqual({ title: "Hello" });
     expect(getSystemConfig).toHaveBeenCalledTimes(1);
     expect(getSystemConfig).toHaveBeenCalledWith({
-      framework: "astro",
       systemKey: "website.metadata",
     });
   });
@@ -34,7 +33,7 @@ describe("fetchWebsiteMetadataOnce", () => {
     const getSystemConfig = jest.fn(
       async ({ systemKey }: { systemKey: string }) => ({
         config: { title: systemKey },
-      }),
+      })
     );
     const client = { systemConfig: { get: getSystemConfig } } as any;
 
@@ -43,8 +42,7 @@ describe("fetchWebsiteMetadataOnce", () => {
     await fetchWebsiteMetadataOnce(
       client,
       "https://api.atmyapp.com",
-      "astro",
-      "website.other",
+      "website.other"
     );
 
     expect(getSystemConfig).toHaveBeenCalledTimes(2);

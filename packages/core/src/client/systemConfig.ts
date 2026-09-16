@@ -2,24 +2,21 @@ import { createFetch } from "@better-fetch/fetch";
 import { AtMyAppClientOptions } from "./clientTypes";
 
 const buildSystemConfigError = (
-  framework: string,
   systemKey: string,
   status: number | string,
-  message: string,
+  message: string
 ): Error =>
   new Error(
-    `AtMyApp: failed to fetch system config "${framework}/${systemKey}". ` +
+    `AtMyApp: failed to fetch system config "${systemKey}". ` +
       `Status: ${status}. ` +
-      `Message: ${message}`,
+      `Message: ${message}`
   );
 
 export type SystemConfigGetInput = {
-  framework: string;
   systemKey: string;
 };
 
 export type SystemConfigResponse<TConfig = Record<string, unknown>> = {
-  framework: string;
   systemKey: string;
   displayName: string;
   path: string;
@@ -28,12 +25,12 @@ export type SystemConfigResponse<TConfig = Record<string, unknown>> = {
 
 export interface SystemConfigClient {
   get<TConfig = Record<string, unknown>>(
-    input: SystemConfigGetInput,
+    input: SystemConfigGetInput
   ): Promise<SystemConfigResponse<TConfig>>;
 }
 
 export const createSystemConfigClient = (
-  clientOptions: AtMyAppClientOptions,
+  clientOptions: AtMyAppClientOptions
 ): SystemConfigClient => {
   const $fetch = createFetch({
     baseURL: `${clientOptions.baseUrl}/system-config`,
@@ -45,7 +42,6 @@ export const createSystemConfigClient = (
   });
 
   const get = async <TConfig = Record<string, unknown>>({
-    framework,
     systemKey,
   }: SystemConfigGetInput): Promise<SystemConfigResponse<TConfig>> => {
     try {
@@ -53,7 +49,7 @@ export const createSystemConfigClient = (
         success: boolean;
         data: SystemConfigResponse<TConfig>;
         error?: string;
-      }>(`/${encodeURIComponent(framework)}/${encodeURIComponent(systemKey)}`, {
+      }>(`/${encodeURIComponent(systemKey)}`, {
         query: clientOptions.previewKey
           ? { amaPreviewKey: clientOptions.previewKey }
           : undefined,
@@ -62,10 +58,9 @@ export const createSystemConfigClient = (
 
       if (response.error || !response.data?.success) {
         throw buildSystemConfigError(
-          framework,
           systemKey,
           response.error?.status ?? "unknown",
-          response.error?.message ?? response.data?.error ?? "unknown",
+          response.error?.message ?? response.data?.error ?? "unknown"
         );
       }
 
@@ -74,17 +69,16 @@ export const createSystemConfigClient = (
       if (
         error instanceof Error &&
         error.message.startsWith(
-          `AtMyApp: failed to fetch system config "${framework}/${systemKey}"`,
+          `AtMyApp: failed to fetch system config "${systemKey}"`
         )
       ) {
         throw error;
       }
 
       throw buildSystemConfigError(
-        framework,
         systemKey,
         "unknown",
-        error instanceof Error ? error.message : "unknown",
+        error instanceof Error ? error.message : "unknown"
       );
     }
   };

@@ -8,7 +8,7 @@ import {
   defineSubmission,
   defineSchema,
   frameworkPresets,
-  frameworkSystemConfigs,
+  systemConfigRegistry,
   getEvent,
   getCollection,
   getDocument,
@@ -122,7 +122,9 @@ describe("@atmyapp/structure compiler", () => {
     expect(resolveDefinitionForPath(compiled, "settings.json")?.kind).toBe(
       "document"
     );
-    expect(resolveDefinitionForPath(compiled, "settings")?.kind).toBe("document");
+    expect(resolveDefinitionForPath(compiled, "settings")?.kind).toBe(
+      "document"
+    );
     expect(getEvent(compiled, "page_view")?.description).toBe(
       "Tracked page view analytics event"
     );
@@ -133,7 +135,9 @@ describe("@atmyapp/structure compiler", () => {
     ]);
     expect(listAssetFields(compiled, "posts")).toHaveLength(2);
     expect(listReferences(compiled)).toHaveLength(1);
-    expect(listSystemFields(compiled, "posts").some((field) => field.name === "slug")).toBe(true);
+    expect(
+      listSystemFields(compiled, "posts").some((field) => field.name === "slug")
+    ).toBe(true);
   });
 
   it("compiles legacy .structure input into canonical collection and document definitions", () => {
@@ -210,9 +214,9 @@ describe("@atmyapp/structure compiler", () => {
       columns: ["email"],
     });
     expect(legacy.definitions.settings.description).toBe("Settings");
-    expect(legacy.definitions.settings.structure?.properties?.theme?.description).toBe(
-      "Theme"
-    );
+    expect(
+      legacy.definitions.settings.structure?.properties?.theme?.description
+    ).toBe("Theme");
     expect(legacy.definitions.settings.structure?.required).toEqual(["theme"]);
   });
 
@@ -411,14 +415,17 @@ describe("@atmyapp/structure compiler", () => {
     expect(getField(compiled, "posts.seo")?.optional).toBe(true);
     expect(getField(compiled, "posts.seo.tags")?.description).toBe("SEO tags");
     expect(getField(compiled, "posts.status")?.optional).toBe(true);
-    expect(getField(compiled, "posts.author")?.description).toBe("Author lookup");
+    expect(getField(compiled, "posts.author")?.description).toBe(
+      "Author lookup"
+    );
     expect(getEvent(compiled, "signup")?.description).toBe("Signup event");
-    expect(legacy.definitions.posts.structure?.properties?.seo?.description).toBe(
-      "SEO block"
-    );
-    expect(legacy.definitions.posts.structure?.properties?.seo?.properties?.tags?.description).toBe(
-      "SEO tags"
-    );
+    expect(
+      legacy.definitions.posts.structure?.properties?.seo?.description
+    ).toBe("SEO block");
+    expect(
+      legacy.definitions.posts.structure?.properties?.seo?.properties?.tags
+        ?.description
+    ).toBe("SEO tags");
     expect(legacy.definitions.posts.structure?.required).toEqual([
       "title",
       "body",
@@ -489,7 +496,7 @@ describe("@atmyapp/structure compiler", () => {
   it("compiles framework-managed system config definitions", () => {
     const schema = defineSchema({
       definitions: {
-        astroWebsiteMetadata: frameworkSystemConfigs.astro.websiteMetadata,
+        websiteMetadata: systemConfigRegistry["website.metadata"],
         customSystemConfig: defineSystemConfig({
           framework: "astro",
           systemKey: "custom.config",
@@ -506,30 +513,24 @@ describe("@atmyapp/structure compiler", () => {
     const compiled = compileSchema(schema);
     const resolved = resolveDefinitionForPath(
       compiled,
-      "_SystemConfig/astro/website-metadata.json",
+      "_SystemConfig/website/metadata.json",
       "application/json"
     );
     const legacy = toLegacyStructure(schema);
 
-    expect(frameworkPresets.astro.systemConfigDefinitions).toEqual([
-      "astroWebsiteMetadata",
-    ]);
+    expect(frameworkPresets.astro.systemConfigs).toEqual(["website.metadata"]);
     expect(resolved?.kind).toBe("system_config");
     expect(resolved?.definition).toMatchObject({
-      framework: "astro",
       systemKey: "website.metadata",
-      displayName: "Website Configuration - Astro Metadata",
+      displayName: "Website settings",
       managedBy: "framework_preset",
     });
-    expect(getField(compiled, "astroWebsiteMetadata.title")?.optional).toBe(
-      true
-    );
-    expect(legacy.definitions.astroWebsiteMetadata).toMatchObject({
+    expect(getField(compiled, "websiteMetadata.title")?.optional).toBe(true);
+    expect(legacy.definitions.websiteMetadata).toMatchObject({
       type: "system_config",
-      framework: "astro",
       systemKey: "website.metadata",
-      displayName: "Website Configuration - Astro Metadata",
-      path: "_SystemConfig/astro/website-metadata.json",
+      displayName: "Website settings",
+      path: "_SystemConfig/website/metadata.json",
       managedBy: "framework_preset",
     });
   });

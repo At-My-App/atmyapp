@@ -12,3 +12,5 @@ export * from "./validation";
 
 export * from "./managedContent";
 export * from "./contentConstraints";
+
+export * from "./websiteMetadata";

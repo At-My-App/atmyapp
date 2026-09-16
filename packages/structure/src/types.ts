@@ -1,5 +1,9 @@
 export type DefinitionKind =
-  "collection" | "document" | "file" | "image" | "system_config";
+  | "collection"
+  | "document"
+  | "file"
+  | "image"
+  | "system_config";
 export type FieldKind =
   | "scalar"
   | "object"
@@ -12,7 +16,13 @@ export type FieldKind =
   | "slug"
   | "order";
 export type ScalarType =
-  "string" | "number" | "boolean" | "null" | "date" | "datetime" | "timestamp";
+  | "string"
+  | "number"
+  | "boolean"
+  | "null"
+  | "date"
+  | "datetime"
+  | "timestamp";
 export type StringFieldFormat =
   | "short"
   | "long"
@@ -30,9 +40,17 @@ export type AssetKind = "image" | "file" | "gallery";
 export type SystemFieldName = "id" | "createdAt" | "updatedAt" | "slug";
 export type ReferenceResolveBy = "id" | "slug" | "path";
 export type LegacyDefinitionType =
-  "collection" | "document" | "system_config" | "jsonx" | "file" | "image";
+  | "collection"
+  | "document"
+  | "system_config"
+  | "jsonx"
+  | "file"
+  | "image";
 export type MigrationCompatibilityClass =
-  "safe_auto_convert" | "confirmable_convert" | "incompatible" | "compatible";
+  | "safe_auto_convert"
+  | "confirmable_convert"
+  | "incompatible"
+  | "compatible";
 export type MigrationActionType =
   | "auto_convert"
   | "confirm_convert"
@@ -82,7 +100,8 @@ export interface LegacySubmissionDefinition {
 }
 
 export type SubmissionInputDefinition =
-  SubmissionDefinition | LegacySubmissionDefinition;
+  | SubmissionDefinition
+  | LegacySubmissionDefinition;
 
 export interface FieldBase {
   kind: FieldKind;
@@ -223,7 +242,8 @@ export interface SystemFieldDefinition {
 }
 
 export type SystemFieldInput =
-  boolean | Partial<Omit<SystemFieldDefinition, "name">>;
+  | boolean
+  | Partial<Omit<SystemFieldDefinition, "name">>;
 
 export interface DefinitionBase {
   kind: DefinitionKind;
@@ -247,7 +267,7 @@ export interface DocumentDefinition extends DefinitionBase {
 
 export interface SystemConfigDefinition extends DefinitionBase {
   kind: "system_config";
-  framework: string;
+  framework?: string;
   systemKey: string;
   displayName: string;
   path: string;
@@ -288,7 +308,7 @@ export interface CompiledField {
 }
 
 export interface CompiledDefinition<
-  TDefinition extends Definition = Definition,
+  TDefinition extends Definition = Definition
 > {
   definition: TDefinition;
   name: string;
