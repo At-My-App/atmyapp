@@ -11,6 +11,10 @@
     "./collectionSchemaConverter": {
       "types": "./dist/collectionSchemaConverter.d.ts",
       "default": "./dist/collectionSchemaConverter.js"
+    },
+    "./testing": {
+      "types": "./dist/contractCorpus.d.ts",
+      "default": "./dist/contractCorpus.js"
     }
   },
   "repository": {

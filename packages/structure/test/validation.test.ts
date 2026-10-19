@@ -108,7 +108,7 @@ describe("@atmyapp/structure validation", () => {
     ).toBe(true);
   });
 
-  it("treats fields with defaults as optional during validation", () => {
+  it("requires stored values even when a creation default exists", () => {
     const compiled = compileSchema(
       defineSchema({
         definitions: {
@@ -130,7 +130,7 @@ describe("@atmyapp/structure validation", () => {
 
     expect(
       validateContent(compiled, "settings", {}).valid
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("validates submission schema fields and allows schemas without content definitions", () => {
@@ -250,10 +250,10 @@ describe("@atmyapp/structure validation", () => {
         },
       })
     );
-    expect(missingIdentity.valid).toBe(false);
+    expect(missingIdentity.valid).toBe(true);
     expect(missingIdentity.issues.some((issue) =>
       issue.message.includes("require identityField")
-    )).toBe(true);
+    )).toBe(false);
   });
 
   it("rejects localized binary resources and non-string localized fields", () => {

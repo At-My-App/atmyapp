@@ -15,11 +15,7 @@ export interface MigrateConflictOptions {
 
 function normalizeList(values: string[] = []): string[] {
   return Array.from(
-    new Set(
-      values
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
+    new Set(values.map((value) => value.trim()).filter(Boolean)),
   );
 }
 
@@ -179,7 +175,10 @@ export function logMigrationConflictGuidance(
   options: MigrateConflictOptions,
   attemptedClear?: UploadStructureClearRequest,
 ): void {
-  const combinedClear = mergeClearRequests(attemptedClear, conflict.suggestedClear);
+  const combinedClear = mergeClearRequests(
+    attemptedClear,
+    conflict.suggestedClear,
+  );
 
   logger.error(
     `Migration upload was blocked by a destructive change conflict on branch "${conflict.branch}".`,
@@ -200,7 +199,7 @@ export function logMigrationConflictGuidance(
     "  1. Keep the affected collections, content files, or fields in your schema for now and migrate again later.",
   );
   logger.info(
-    "  2. Explicitly clear only the data you want to remove, then rerun migrate.",
+    "  2. Explicitly confirm the removals, then rerun migrate. Column values are retained.",
   );
 
   for (const collection of conflict.suggestedClear.collections) {
@@ -230,7 +229,7 @@ export function logMigrationConflictGuidance(
   for (const group of conflict.suggestedClear.columns) {
     for (const column of group.columns) {
       logger.info(
-        `This will permanently delete stored values for column "${group.collection}.${column}":`,
+        `This will hide the column and retain stored values for "${group.collection}.${column}":`,
       );
       logger.info(
         `  ${buildMigrateCommand(
@@ -248,22 +247,16 @@ export function logMigrationConflictGuidance(
   if (combinedClear) {
     logger.info("Resolve all currently blocked items from this conflict:");
     logger.info(
-      "This will permanently clear every blocked collection, content file, and column listed above, then rerun migration:",
+      "This deletes the listed collections/content files and hides removed columns while retaining their values:",
     );
     logger.info(`  ${buildMigrateCommand(combinedClear, options)}`);
   }
 
   logger.info("Dangerous shortcut:");
   logger.info(
-    "This will retry once and permanently clear every currently blocked item returned by the server for this migration attempt:",
+    "This retries once, deleting suggested collections/content files and hiding suggested columns while retaining their values:",
   );
-  logger.info(
-    `  ${buildMigrateCommand(
-      attemptedClear,
-      options,
-      true,
-    )}`,
-  );
+  logger.info(`  ${buildMigrateCommand(attemptedClear, options, true)}`);
 
   if (conflict.migration?.prompts?.length) {
     logger.info("Server migration hints:");

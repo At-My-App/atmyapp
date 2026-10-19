@@ -4,17 +4,10 @@ export type DefinitionKind =
   | "file"
   | "image"
   | "system_config";
-export type FieldKind =
-  | "scalar"
-  | "object"
-  | "array"
-  | "enum"
-  | "union"
-  | "asset"
-  | "reference"
-  | "mdx"
-  | "slug"
-  | "order";
+export const FIELD_KINDS = [
+  "scalar", "object", "array", "enum", "union", "asset", "reference", "mdx", "slug", "order",
+] as const;
+export type FieldKind = (typeof FIELD_KINDS)[number];
 export type ScalarType =
   | "string"
   | "number"
@@ -60,7 +53,9 @@ export type MigrationActionType =
   | "backfill_generated_field"
   | "create_unique_index"
   | "drop_definition"
-  | "drop_field";
+  | "drop_field"
+  | "rename_field"
+  | "verify_existing_content";
 
 export interface MdxComponentConfig {
   description?: string;
@@ -82,7 +77,6 @@ export type SubmissionCaptchaProvider = "hcaptcha" | (string & {});
 export interface SubmissionCaptchaConfig {
   required?: boolean;
   provider?: SubmissionCaptchaProvider;
-  secret?: string;
 }
 
 export interface SubmissionDefinition {
@@ -96,7 +90,6 @@ export interface LegacySubmissionDefinition {
   fields?: Record<string, FieldDefinition>;
   requiresCaptcha?: boolean;
   captchaProvider?: SubmissionCaptchaProvider;
-  hcaptchaSecret?: string;
 }
 
 export type SubmissionInputDefinition =
@@ -104,6 +97,7 @@ export type SubmissionInputDefinition =
   | LegacySubmissionDefinition;
 
 export interface FieldBase {
+  nullable?: boolean;
   kind: FieldKind;
   description?: string;
   localize?: boolean;
@@ -333,6 +327,8 @@ export interface CompiledSchema {
 }
 
 export interface ValidationIssue {
+  code: import("./valueValidation").ContentIssueCode;
+  severity: "hard" | "overridable";
   path: string;
   message: string;
 }
@@ -357,7 +353,11 @@ export interface MigrationChange {
     | "array_identity_field_changed"
     | "system_field_changed"
     | "index_added"
-    | "index_removed";
+    | "index_removed"
+    | "field_renamed"
+    | "field_requirement_changed"
+    | "field_constraint_changed"
+    | "definition_path_changed";
   definitionName: string;
   fieldPath?: string;
   fromType?: string;
@@ -380,6 +380,11 @@ export interface MigrationPrompt {
   definitionName: string;
   fieldPath?: string;
 }
+
+/** Explicit content transformations; renames are declared, never inferred. */
+export type MigrationOperation =
+  | { type: "renameField"; definition: string; from: string; to: string }
+  | { type: "backfillField"; definition: string; field: string; value: unknown };
 
 export interface MigrationPlan {
   changes: MigrationChange[];

@@ -52,3 +52,5 @@ account or packages require 2FA, use a granular token with publish access and
 ## Canonical Astro SDK
 
 `packages/astro` in the At-My-App/atmyapp repository is the only maintained source for `@atmyapp/astro`. The standalone At-My-App/astro repository is retired. Changes and releases use this workspace and its Changesets workflow.
+
+The shared validation, defaults, nullability and item identity rules are documented in [Content validation and normalization](docs/content-contract.md).

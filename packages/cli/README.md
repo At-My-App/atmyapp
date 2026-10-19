@@ -8,7 +8,7 @@ It is now centered on the canonical schema flow:
 
 - author definitions in `atmyapp.schema.ts`, `atmyapp.schema.mts`, `atmyapp.schema.js`, `atmyapp.schema.mjs`, or `atmyapp.schema.json`
 - compile them with `@atmyapp/structure`
-- generate the compatibility payload the platform currently accepts
+- generate the normalized canonical schema without a legacy conversion
 - upload that payload with `atmyapp migrate`
 
 ## Installation
@@ -148,7 +148,7 @@ atmyapp use --token cli_... --url https://edge.atmyapp.com/projects/your-project
 
 ### `atmyapp migrate`
 
-Finds your canonical schema file, validates it, generates `.ama/definitions.json`, and uploads it unless `--dry-run` is set.
+Finds your canonical schema file, compiles it to `.ama/definitions.json`, and plans the change against the target environment's stored content. If nothing in the plan blocks it, the CLI asks for confirmation when stored content is affected, then applies exactly the reviewed plan.
 
 ```bash
 atmyapp migrate [options]
@@ -156,8 +156,43 @@ atmyapp migrate [options]
 
 Options:
 
-- `--dry-run` Generate output without uploading it
-- `--verbose` Print detailed timing and validation logs
+- `--dry-run` Compile locally without contacting the server
+- `--branch <name>` Target environment branch (default: `main`)
+- `--operations <file>` JSON file with explicit content operations (see below)
+- `-y, --yes` Apply a plan that rewrites, removes or hides stored content without asking (required in CI)
+- `--json` Print the plan and result as JSON
+- `--clear-collection <name>`, `--clear-content <name>`, `--clear-column <collection.column>` Confirm removals. Removed columns are hidden from editors, and their values are kept in storage.
+- `--dangerously-resolve-all-conflicts` Plan again with clears for every destructive conflict in the current plan
+- `--verbose` Print detailed logs, including sample content changes
+
+The plan shows:
+- schema changes;
+- how many stored items the operations rewrite;
+- removals;
+- content problems the change would introduce, separated from problems that already existed.
+
+The plan is blocked when the change would make stored content invalid, for example a field that becomes required while entries lack it. Fix the content, or add a `backfillField` operation.
+
+Renames are never guessed. Declare them in an operations file:
+
+```json
+[
+  { "type": "renameField", "definition": "posts", "from": "title", "to": "headline" },
+  { "type": "backfillField", "definition": "posts", "field": "summary", "value": "" }
+]
+```
+
+`renameField` moves stored values, including translations, and moves form layouts to the new name. `backfillField` fills the field only where it is missing.
+
+Each apply uses a new operation ID, saved to `.ama/last-migration.json` before the request is sent. If content changed after the plan was made, the CLI reports that nothing was written; run it again to review a fresh plan. If the response is lost, the migration may still have been applied. Check it with:
+
+### `atmyapp migrate-status`
+
+```bash
+atmyapp migrate-status [operationId] [--reconcile] [--operations <file>] [--json]
+```
+
+This reports whether a migration was committed. The default operation is the last one started in this directory. `--reconcile` re-runs follow-up work, such as updating the read model or moving form layouts, for a committed migration. Use the same schema and operations file that the migration was applied with.
 
 If no canonical schema file is found, the command exits with a clear error.
 
@@ -225,7 +260,7 @@ The package also exports runtime helpers for custom tooling:
 ```ts
 import {
   compileCanonicalSource,
-  generateLegacyOutput,
+  generateCanonicalOutput,
   runCanonicalMigrate,
 } from "@atmyapp/cli";
 ```
@@ -235,5 +270,5 @@ These APIs compile canonical schema modules with `@atmyapp/structure` and return
 ## Notes
 
 - The CLI no longer supports the old type-alias extraction flow based on exported `ATMYAPP` tuples.
-- The generated output is still the compatibility payload expected by the current platform rollout.
+- The generated `.ama/definitions.json` is the normalized canonical schema persisted as `.structure.json`. It preserves explicit paths and field metadata and contains no generated audit timestamp. Schema authoring belongs to the website repository; the dashboard is read-only. `--clear-column` confirms hiding a removed field while retaining its stored values. `--dry-run` compiles locally; it is not a remote data-safety check.
 - For schema authoring and inference helpers, use [`@atmyapp/structure`](https://www.npmjs.com/package/@atmyapp/structure).

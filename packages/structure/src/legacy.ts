@@ -1,3 +1,4 @@
+import { assertNever } from "./valueValidation";
 import type {
   ArrayFieldDefinition,
   AssetFieldDefinition,
@@ -19,7 +20,7 @@ import { ensureDocumentPath, isFieldOptional, normalizePath } from "./utils";
 
 const ASSET_FORMATS = new Set(["image", "file", "video", "audio", "document"]);
 
-function legacyFieldToCanonical(
+export function legacyFieldToCanonical(
   name: string,
   schema: any,
   required = false,
@@ -35,8 +36,10 @@ function legacyFieldToCanonical(
 
   const description =
     typeof schema.description === "string" ? schema.description : undefined;
-  const localization =
-    typeof schema.localize === "boolean" ? { localize: schema.localize } : {};
+  const localization = {
+    ...(typeof schema.localize === "boolean" ? { localize: schema.localize } : {}),
+    ...(schema.nullable === true ? { nullable: true } : {}),
+  };
 
   // COMPAT(legacy-structure): support legacy __amatype markers while older
   // generated .structure payloads still rely on them.
@@ -264,17 +267,21 @@ function legacyFieldToCanonical(
   const scalar: ScalarFieldDefinition = {
     kind: "scalar",
     scalar:
-      schema.type === "number" ||
-      schema.type === "boolean" ||
-      schema.type === "null"
-        ? schema.type
-        : schema.format === "date"
-          ? "date"
-          : schema.format === "datetime"
-            ? "datetime"
-            : schema.format === "timestamp"
-              ? "timestamp"
-              : "string",
+      schema.type === "integer"
+        ? "number"
+        : schema.type === "number" ||
+            schema.type === "boolean" ||
+            schema.type === "null"
+          ? schema.type
+          : schema.format === "date"
+            ? "date"
+            : schema.format === "datetime"
+              ? "datetime"
+              : schema.format === "timestamp"
+                ? "timestamp"
+                : "string",
+    // JSON Schema `integer` (collection integer columns) is a whole number, not text.
+    ...(schema.type === "integer" ? { integer: true } : {}),
     description,
     optional,
     default: schema.default,
@@ -303,6 +310,8 @@ function canonicalFieldToLegacy(field: FieldDefinition): any {
   if (typeof field.localize === "boolean") {
     base["localize"] = field.localize;
   }
+
+  if (field.nullable !== undefined) base["nullable"] = field.nullable;
 
   switch (field.kind) {
     case "scalar":
@@ -431,6 +440,7 @@ function canonicalFieldToLegacy(field: FieldDefinition): any {
         ...(field.accept ? { accept: field.accept } : {}),
         ...(field.imageOptions ? { imageOptions: field.imageOptions } : {}),
       };
+    default: return assertNever(field);
   }
 }
 
@@ -578,6 +588,21 @@ function compileLegacyDefinition(
     };
 
     if ("slug" in fields) {
+      // Older collection schemas implicitly treated a string named `slug` as
+      // the managed slug. Materialize that meaning at the import boundary so
+      // canonical normalization does not see two competing declarations.
+      const slug = fields.slug;
+      if (slug.kind === "scalar" && slug.scalar === "string") {
+        fields.slug = {
+          kind: "slug",
+          description: slug.description,
+          optional: slug.optional,
+          unique: slug.unique !== false,
+          generated: true,
+          immutable: true,
+          updatePolicy: "immutable",
+        };
+      }
       collection.systemFields = {
         slug: {
           enabled: true,

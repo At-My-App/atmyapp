@@ -51,6 +51,7 @@ declare module "@atmyapp/structure" {
     required?: boolean;
     unique?: boolean;
     default?: unknown;
+    nullable?: boolean;
     legacy?: Record<string, unknown>;
     storage?: Record<string, unknown>;
     ui?: Record<string, unknown>;
@@ -206,7 +207,6 @@ declare module "@atmyapp/structure" {
   export interface SubmissionCaptchaConfig {
     required?: boolean;
     provider?: SubmissionCaptchaProvider;
-    secret?: string;
   }
 
   export interface SubmissionDefinition {

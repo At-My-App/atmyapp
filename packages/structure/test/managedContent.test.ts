@@ -311,3 +311,16 @@ test("appends changed groups independently and preserves primary slugs after tit
     }),
   ).toThrow(/already used/);
 });
+
+
+test("reference preparation and validation share absent and explicit-null semantics", () => {
+  const schema = defineSchema({ definitions: {
+    people: defineCollection({ fields: { name: s.string() } }),
+    posts: defineCollection({ fields: { owner: s.reference("people", { optional: true, nullable: true }) } }),
+  } });
+  expect(prepareCollectionMutation(schema, {}, { collection: "posts", entryId: "one", data: { owner: null } }).posts.one.owner).toBeNull();
+  expect(prepareCollectionMutation(schema, {}, { collection: "posts", entryId: "one", data: {} }).posts.one).toEqual({});
+  expect(() => prepareCollectionMutation(schema, {}, { collection: "posts", entryId: "one", data: { owner: "" } })).toThrow();
+  const nonNullable = defineSchema({ definitions: { people: schema.definitions.people, posts: defineCollection({ fields: { owner: s.reference("people", { optional: true }) } }) } });
+  expect(() => prepareCollectionMutation(nonNullable, {}, { collection: "posts", entryId: "one", data: { owner: null } })).toThrow();
+});

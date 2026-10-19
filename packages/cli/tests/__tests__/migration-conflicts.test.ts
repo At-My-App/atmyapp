@@ -132,17 +132,23 @@ describe("migration conflict helpers", () => {
 
     const output = entries.map((entry) => entry.message).join("\n");
 
-    expect(output).toContain('Migration upload was blocked by a destructive change conflict on branch "main".');
+    expect(output).toContain(
+      'Migration upload was blocked by a destructive change conflict on branch "main".',
+    );
     expect(output).toContain(
       'This will permanently delete all entries in collection "posts":',
     );
-    expect(output).toContain("atmyapp migrate --clear-collection posts --verbose");
+    expect(output).toContain(
+      "atmyapp migrate --clear-collection posts --verbose",
+    );
     expect(output).toContain(
       'This will permanently delete stored content for "homepage":',
     );
-    expect(output).toContain("atmyapp migrate --clear-content homepage --verbose");
     expect(output).toContain(
-      'This will permanently delete stored values for column "authors.bio":',
+      "atmyapp migrate --clear-content homepage --verbose",
+    );
+    expect(output).toContain(
+      'This will hide the column and retain stored values for "authors.bio":',
     );
     expect(output).toContain(
       "atmyapp migrate --clear-column authors.bio --verbose",

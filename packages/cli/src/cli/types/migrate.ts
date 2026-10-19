@@ -14,24 +14,9 @@ export interface SubmissionConfig {
   fields: Record<string, unknown>;
   requiresCaptcha?: boolean;
   captchaProvider?: string;
-  hcaptchaSecret?: string;
 }
 
-export interface OutputDefinition {
-  description: string;
-  localization?: {
-    enabled: boolean;
-  };
-  definitions: Record<string, { structure: any; type?: string; description?: string }>;
-  events: Record<string, EventConfig>;
-  args: Record<string, unknown>;
-  submissions?: Record<string, SubmissionConfig>;
-  metadata?: any;
-  mdx?: Record<
-    string,
-    { components: Record<string, { props?: Record<string, string> }> }
-  >;
-}
+export type OutputDefinition = import("@atmyapp/structure").SchemaDocument;
 
 export interface MigrateOptions {
   dryRun: boolean;

@@ -42,7 +42,7 @@ function fieldsFor(
   collection: string,
 ): Record<string, FieldDefinition> {
   const definition = schema.definitions[collection];
-  if (definition?.kind !== "collection") return {};
+  if (!definition || !("fields" in definition)) return {};
   const fields = { ...definition.fields };
   const slug = definition.systemFields?.slug;
   if (slug && (slug === true || slug.enabled !== false) && !fields.slug) {
@@ -59,6 +59,7 @@ export function validateCollectionSnapshot(
   schema: SchemaDocument,
   next: CollectionSnapshot,
   previous?: CollectionSnapshot,
+  mode: "legacy" | "draft" | "publish" = "publish",
 ): ContentConstraintIssue[] {
   const issues: ContentConstraintIssue[] = [];
   for (const [collection, entries] of Object.entries(next)) {
@@ -85,9 +86,10 @@ export function validateCollectionSnapshot(
             message: `${typeof (data.name ?? data.label ?? data.title) === "string" ? (data.name ?? data.label ?? data.title) : collection + "/" + entryId}: ${message}`,
             ...extra,
           });
+        if (value === undefined && mode === "draft") return;
         if (field.kind === "union") {
           const branch = field.variants.find((variant) =>
-            matchesFieldValue(value, variant),
+            matchesFieldValue(value, variant, schema.mdx),
           );
           if (branch) visit(branch, value, path, old);
         } else if (
@@ -143,19 +145,14 @@ export function validateCollectionSnapshot(
           slugs.set(path, seen);
         } else if (
           field.kind === "reference" &&
-          schema.definitions[field.target]?.kind === "collection"
+          Boolean(schema.definitions[field.target] && "fields" in schema.definitions[field.target])
         ) {
-          if (
-            (value === undefined || value === null || value === "") &&
-            (field.optional || field.required === false)
-          )
-            return;
+          if (value === undefined && (mode === 'draft' || field.optional || field.required === false)) return;
+          if (value === null && (field.nullable === true || (mode === 'legacy' && (field.optional || field.required === false)))) return;
+          if (value === '' && mode === 'legacy' && (field.optional || field.required === false)) return;
           const values = field.multiple ? value : [value];
-          if (
-            !Array.isArray(values) ||
-            (!values.length && !field.optional && field.required !== false)
-          ) {
-            add("invalid-reference", `Choose an entry for ${path}.`);
+          if (!Array.isArray(values)) {
+            add('invalid-reference', `Choose an entry for ${path}.`);
             return;
           }
           const seen = new Set<string>();
@@ -229,7 +226,7 @@ export function prepareCollectionMutation(
   schema: SchemaDocument,
   previous: CollectionSnapshot,
   mutation: CollectionMutation,
-  options: { deferReferences?: boolean } = {},
+  options: { deferReferences?: boolean; mode?: "legacy" | "draft" | "publish" } = {},
 ): CollectionSnapshot {
   const next = structuredClone(previous);
   const { collection, entryId, placements = {} } = mutation;
@@ -257,12 +254,16 @@ export function prepareCollectionMutation(
         failure(name, "invalid-order", `${name} is not an order field.`);
     for (const [name, field] of Object.entries(fields)) {
       if (
+        options.mode === "legacy" &&
         field.kind === "reference" &&
         (field.optional || field.required === false) &&
         data[name] === ""
       )
         data[name] = null;
-      if (field.kind === "slug" && !old && data[name] === undefined) {
+      if (field.kind === 'reference' && options.mode !== 'legacy' && (data[name] === '' || (data[name] === null && field.nullable !== true)))
+        failure(name, 'invalid-reference', `${name} must be omitted or use an explicitly nullable reference. Empty reference strings are not valid targets.`);
+      if (field.kind === "slug" && (!old || (options.mode === "draft" && old[name] === undefined)) && data[name] === undefined) {
+        if (options.mode === "draft" && !data[field.source || ""]) continue;
         const source = field.source ? data[field.source] : undefined;
         data[name] = attempt(name, "invalid-slug", () => generateUniqueSlug(
           typeof source === "string" ? source : "",
@@ -306,9 +307,27 @@ export function prepareCollectionMutation(
         entries[id][name] = rank;
     }
   }
-  const issues = validateCollectionSnapshot(schema, next, previous).filter(
+  const issues = validateCollectionSnapshot(schema, next, previous, options.mode).filter(
     issue => !options.deferReferences || (issue.code !== "invalid-reference" && issue.code !== "duplicate-reference")
   );
   if (issues.length) throw new ContentConstraintError(issues);
   return next;
+}
+
+/** Singletons participate in the same integrity graph as collection entries. */
+export function validateContentSnapshot(
+  schema: SchemaDocument,
+  collections: CollectionSnapshot,
+  documents: Record<string, Record<string, unknown>>,
+  previous?: CollectionSnapshot,
+  mode: "legacy" | "draft" | "publish" = "publish",
+): ContentConstraintIssue[] {
+  const next = { ...collections };
+  for (const [name, definition] of Object.entries(schema.definitions)) {
+    if (definition.kind !== "document" && definition.kind !== "system_config") continue;
+    const path = definition.path || name;
+    const data = documents[path];
+    next[name] = data ? { [path]: data } : {};
+  }
+  return validateCollectionSnapshot(schema, next, previous, mode);
 }

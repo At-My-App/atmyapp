@@ -37,7 +37,7 @@ pnpm add @atmyapp/structure
 
 - authoring should target canonical schema inputs such as `ama.schema.ts` or `ama.schema.json`
 - runtime consumers should use compiled schema APIs from this package
-- `.structure.json` is still supported as the persisted/generated compatibility artifact during rollout
+- `.structure.json` stores the normalized canonical schema; legacy input is accepted through an explicit compatibility adapter
 - legacy labels such as `jsonx` and legacy markers such as `__amatype` are accepted only for compatibility with older projects and older CLI outputs
 
 ## Core concepts
@@ -201,9 +201,14 @@ The same canonical model can be authored without TypeScript:
 ### Compiler
 
 ```ts
-import { compileSchema, parseSchema, normalizeSchema } from "@atmyapp/structure";
+import {
+  compileSchema,
+  parseSchema,
+  normalizeSchema,
+} from "@atmyapp/structure";
 ```
 
+- `serializeSchema(input)`: deterministic normalized contract JSON, excluding transport metadata such as `generatedAt`
 - `parseSchema(input)`: parses canonical JSON or legacy `.structure.json`
 - `normalizeSchema(schema)`: normalizes definitions, paths, and defaults
 - `compileSchema(input)`: builds the compiled schema with precomputed indexes
@@ -231,7 +236,11 @@ Use these helpers instead of manually traversing raw `.structure` objects.
 Analytics events are modeled as a top-level schema concern and preserved through canonical and legacy compilation:
 
 ```ts
-import { defineBasicEvent, defineEvent, defineSchema } from "@atmyapp/structure";
+import {
+  defineBasicEvent,
+  defineEvent,
+  defineSchema,
+} from "@atmyapp/structure";
 
 const schema = defineSchema({
   events: {
@@ -291,7 +300,7 @@ Notes:
 - `acceptingResponses` is intentionally not part of the schema; that stays dashboard-managed
 - submission fields use the same field DSL as collections and documents
 - `InferSubmission` is input-oriented, so asset fields infer upload values rather than stored CDN URLs
-- legacy compatibility output keeps captcha settings under `requiresCaptcha`, `captchaProvider`, and `hcaptchaSecret`
+- CAPTCHA requirements and provider are public schema settings; secret literals (`captcha.secret` or `hcaptchaSecret`) are rejected and must be configured on the server
 
 ## References
 

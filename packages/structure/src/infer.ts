@@ -150,7 +150,9 @@ type GeneratedSystemFields<
       : { slug: string }
   : {};
 
-export type FieldValue<TField extends FieldDefinition> = TField extends {
+export type FieldValue<TField extends FieldDefinition> =
+  (TField extends { nullable: true } ? null : never) | NonNullFieldValue<TField>;
+type NonNullFieldValue<TField extends FieldDefinition> = TField extends {
   kind: "order";
 }
   ? number
@@ -161,7 +163,13 @@ export type FieldValue<TField extends FieldDefinition> = TField extends {
       : TField extends ObjectFieldDefinition
         ? StructuredObjectValue<TField["fields"]>
         : TField extends ArrayFieldDefinition
-          ? FieldValue<TField["items"]>[]
+          ? (TField["items"] extends ObjectFieldDefinition
+            ? FieldValue<TField["items"]> & (TField extends { identityField: string } ? {} : { _key?: string })
+            : TField["items"] extends { kind: "union" }
+              ? FieldValue<TField["items"]> extends object
+                ? FieldValue<TField["items"]> & (TField extends { identityField: string } ? {} : { _key?: string })
+                : FieldValue<TField["items"]>
+              : FieldValue<TField["items"]>)[]
           : TField extends AssetFieldDefinition
             ? AssetFieldValue<TField>
             : TField extends ReferenceFieldDefinition

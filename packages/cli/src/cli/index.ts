@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { initCommand } from "./commands/init";
-import { migrateCommand } from "./commands/migrate";
+import { migrateCommand, migrateStatusCommand } from "./commands/migrate";
 import { useCommand } from "./commands/use";
 import { uploadCommand } from "./commands/upload";
 import { generateCommand } from "./commands/generate";
@@ -17,6 +17,7 @@ program.addCommand(initCommand());
 program.addCommand(createCommand());
 program.addCommand(useCommand());
 program.addCommand(migrateCommand());
+program.addCommand(migrateStatusCommand());
 program.addCommand(uploadCommand());
 program.addCommand(generateCommand());
 program.addCommand(snapshotCommand());

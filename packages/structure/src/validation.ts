@@ -10,363 +10,101 @@ import type {
 } from "./types";
 import { compileSchema, parseSchema } from "./compiler";
 import { resolveDefinitionForPath } from "./introspection";
-import { isValidSlug } from "./managedContent";
-import { isFieldOptional } from "./utils";
-
-function valueType(value: unknown): string {
-  if (value === null) {
-    return "null";
-  }
-  if (Array.isArray(value)) {
-    return "array";
-  }
-  return typeof value;
-}
-
+import {
+  contentIssue,
+  validate,
+  validateFieldValue,
+  type ValidationMode,
+} from "./valueValidation";
+export { validate, validateFieldValue } from "./valueValidation";
 function pushIssue(issues: ValidationIssue[], path: string, message: string) {
-  issues.push({ path, message });
+  issues.push(contentIssue("invalid-schema", path, message));
 }
-
-/** Match a union branch using the same shape rules as ordinary content validation. */
 export function matchesFieldValue(
   value: unknown,
-  field: FieldDefinition
-): boolean {
-  const issues: ValidationIssue[] = [];
-  validateField(value, field, "", issues, {});
-  return issues.length === 0;
-}
-
-function validateField(
-  value: unknown,
   field: FieldDefinition,
-  path: string,
-  issues: ValidationIssue[],
-  configs: Record<string, MdxConfigDefinition>
-) {
-  switch (field.kind) {
-    case "scalar": {
-      const expected =
-        field.scalar === "date" ||
-        field.scalar === "datetime" ||
-        field.scalar === "timestamp"
-          ? "string"
-          : field.scalar;
-      if (valueType(value) !== expected) {
-        pushIssue(
-          issues,
-          path,
-          `Expected ${expected}, got ${valueType(value)}`
-        );
-        return;
-      }
-      if (field.scalar === "string" && typeof value === "string") {
-        if (field.minLength !== undefined && value.length < field.minLength) {
-          pushIssue(
-            issues,
-            path,
-            `String shorter than minLength ${field.minLength}`
-          );
-        }
-        if (field.maxLength !== undefined && value.length > field.maxLength) {
-          pushIssue(
-            issues,
-            path,
-            `String longer than maxLength ${field.maxLength}`
-          );
-        }
-        if (field.pattern) {
-          const regex = new RegExp(field.pattern);
-          if (!regex.test(value)) {
-            pushIssue(
-              issues,
-              path,
-              `Value does not match pattern ${field.pattern}`
-            );
-          }
-        }
-      }
-      if (field.scalar === "number" && typeof value === "number") {
-        if (field.minimum !== undefined && value < field.minimum) {
-          pushIssue(issues, path, `Number less than minimum ${field.minimum}`);
-        }
-        if (field.maximum !== undefined && value > field.maximum) {
-          pushIssue(
-            issues,
-            path,
-            `Number greater than maximum ${field.maximum}`
-          );
-        }
-      }
-      if (field.enumValues && !field.enumValues.includes(value as any)) {
-        pushIssue(issues, path, "Value not in enum");
-      }
-      return;
-    }
-    case "enum":
-      if (!field.values.includes(value as any)) {
-        pushIssue(issues, path, "Value not in enum");
-      }
-      return;
-    case "order":
-      if (typeof value !== "number" || !Number.isSafeInteger(value))
-        pushIssue(issues, path, "Expected a safe integer order rank");
-      return;
-    case "slug":
-      if (!isValidSlug(value)) {
-        pushIssue(
-          issues,
-          path,
-          "Expected a URL identifier of up to 96 lowercase letters, numbers, and single hyphens"
-        );
-      }
-      return;
-    case "reference":
-      if (field.multiple) {
-        if (!Array.isArray(value)) {
-          pushIssue(issues, path, `Expected array, got ${valueType(value)}`);
-          return;
-        }
-        value.forEach((entry, index) => {
-          if (typeof entry !== "string") {
-            pushIssue(
-              issues,
-              `${path}.${index}`,
-              `Expected string, got ${valueType(entry)}`
-            );
-          }
-        });
-        return;
-      }
-      if (typeof value !== "string") {
-        pushIssue(issues, path, `Expected string, got ${valueType(value)}`);
-      }
-      return;
-    case "mdx":
-      if (typeof value !== "string") {
-        pushIssue(issues, path, `Expected string, got ${valueType(value)}`);
-      } else if (!configs[field.config]) {
-        pushIssue(issues, path, `Unknown mdx config "${field.config}"`);
-      }
-      return;
-    case "asset": {
-      // Managed content stores references; drafts can contain inline uploads.
-      const validAsset = (entry: unknown) => {
-        if (typeof entry === "string") return true;
-        if (!entry || typeof entry !== "object" || Array.isArray(entry))
-          return false;
-        const record = entry as Record<string, unknown>;
-        return (
-          ["$asset", "__blob", "url"].some(
-            (key) => typeof record[key] === "string" && !!record[key]
-          ) ||
-          (typeof record.data === "string" && record.data.startsWith("data:"))
-        );
-      };
-      if (value === null && isFieldOptional(field)) return;
-      if (field.multiple) {
-        if (!Array.isArray(value)) {
-          pushIssue(issues, path, `Expected array, got ${valueType(value)}`);
-          return;
-        }
-        value.forEach((entry, index) => {
-          if (!validAsset(entry))
-            pushIssue(
-              issues,
-              `${path}.${index}`,
-              "Expected an asset reference"
-            );
-        });
-      } else if (!validAsset(value))
-        pushIssue(issues, path, "Expected an asset reference");
-      return;
-    }
-    case "array":
-      if (!Array.isArray(value)) {
-        pushIssue(issues, path, `Expected array, got ${valueType(value)}`);
-        return;
-      }
-      if (field.minItems !== undefined && value.length < field.minItems) {
-        pushIssue(
-          issues,
-          path,
-          `Array shorter than minItems ${field.minItems}`
-        );
-      }
-      if (field.maxItems !== undefined && value.length > field.maxItems) {
-        pushIssue(issues, path, `Array longer than maxItems ${field.maxItems}`);
-      }
-      value.forEach((entry, index) => {
-        validateField(entry, field.items, `${path}.${index}`, issues, configs);
-      });
-      return;
-    case "union": {
-      const variantResults = field.variants.map((variant) => {
-        const variantIssues: ValidationIssue[] = [];
-        validateField(value, variant, path, variantIssues, configs);
-        return variantIssues;
-      });
-      if (!variantResults.some((entry) => entry.length === 0)) {
-        pushIssue(issues, path, "Value does not match any union variant");
-      }
-      return;
-    }
-    case "object":
-      if (valueType(value) !== "object") {
-        pushIssue(issues, path, `Expected object, got ${valueType(value)}`);
-        return;
-      }
-      if (!value || typeof value !== "object" || Array.isArray(value)) {
-        return;
-      }
-      for (const [childName, childField] of Object.entries(field.fields)) {
-        const childValue = (value as Record<string, unknown>)[childName];
-        if (childValue === undefined) {
-          if (!isFieldOptional(childField)) {
-            pushIssue(
-              issues,
-              `${path}.${childName}`,
-              "Required field is missing"
-            );
-          }
-          continue;
-        }
-        validateField(
-          childValue,
-          childField,
-          `${path}.${childName}`,
-          issues,
-          configs
-        );
-      }
-      if (field.additionalProperties === false) {
-        const allowed = new Set(Object.keys(field.fields));
-        for (const key of Object.keys(value as Record<string, unknown>)) {
-          if (!allowed.has(key)) {
-            pushIssue(issues, `${path}.${key}`, "Unexpected property");
-          }
-        }
-      }
-      return;
-  }
+  configs: Record<string, MdxConfigDefinition> = {},
+): boolean {
+  return !validateFieldValue(value, field, "", "publish", configs).some(
+    (issue) => issue.severity === "hard",
+  );
 }
-
-function validateStructuredObject(
-  data: unknown,
-  definition: Definition,
-  configs: Record<string, MdxConfigDefinition>
-): ValidationResult {
-  const issues: ValidationIssue[] = [];
-  if (
-    definition.kind !== "collection" &&
-    definition.kind !== "document" &&
-    definition.kind !== "system_config"
-  ) {
-    return { valid: true, issues };
-  }
-  if (!data || typeof data !== "object" || Array.isArray(data)) {
-    return {
-      valid: false,
-      issues: [{ path: "root", message: "Expected object" }],
-    };
-  }
-
-  const record = data as Record<string, unknown>;
-  for (const [fieldName, field] of Object.entries(definition.fields)) {
-    const value = record[fieldName];
-    if (value === undefined) {
-      if (!isFieldOptional(field)) {
-        pushIssue(issues, fieldName, "Required field is missing");
-      }
-      continue;
-    }
-    validateField(value, field, fieldName, issues, configs);
-  }
-
-  return {
-    valid: issues.length === 0,
-    issues,
-  };
-}
-
 export function validateContent(
   compiled: CompiledSchema,
   definitionName: string,
-  data: unknown
+  data: unknown,
+  mode: ValidationMode = "publish",
 ): ValidationResult {
   const definition = compiled.definitionsByName[definitionName]?.definition;
-  if (!definition) {
+  if (!definition)
     return {
       valid: false,
       issues: [
-        { path: "root", message: `Unknown definition "${definitionName}"` },
+        contentIssue(
+          "invalid-schema",
+          "root",
+          `Unknown definition "${definitionName}"`,
+        ),
       ],
     };
-  }
-  return validateStructuredObject(data, definition, compiled.configs);
+  return validate(data, definition, mode, compiled.configs);
 }
-
 export function validateContentAtPath(
   input: string | CompiledSchema,
   path: string,
   content: string,
-  mimeType?: string | null
+  mimeType?: string | null,
+  mode: ValidationMode = "publish",
 ): ValidationResult {
-  const compiled =
-    typeof input === "string" ? compileSchema(JSON.parse(input)) : input;
-  const definition = resolveDefinitionForPath(compiled, path, mimeType);
-  if (!definition) {
-    return { valid: true, issues: [] };
-  }
-  if (
-    definition.kind !== "collection" &&
-    definition.kind !== "document" &&
-    definition.kind !== "system_config"
-  ) {
-    return { valid: true, issues: [] };
-  }
-
-  let parsed: unknown;
+  let compiled: CompiledSchema;
   try {
-    parsed = JSON.parse(content);
+    compiled = typeof input === "string" ? compileSchema(input) : input;
   } catch (error) {
     return {
       valid: false,
       issues: [
-        {
-          path: "root",
-          message:
-            error instanceof Error ? error.message : "Invalid JSON content",
-        },
+        contentIssue(
+          "invalid-schema",
+          "root",
+          error instanceof Error ? error.message : "Invalid schema",
+        ),
       ],
     };
   }
-  return validateStructuredObject(
-    parsed,
-    definition.definition,
-    compiled.configs
-  );
+  const definition = resolveDefinitionForPath(compiled, path, mimeType);
+  if (!definition) return { valid: true, issues: [] };
+  if (!("fields" in definition.definition)) return { valid: true, issues: [] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return {
+      valid: false,
+      issues: [contentIssue("invalid-json", "root", "Invalid JSON content")],
+    };
+  }
+  return validate(parsed, definition.definition, mode, compiled.configs);
 }
 
 function validateDefinitionSchema(
   definitionName: string,
   definition: Definition,
   issues: ValidationIssue[],
-  schema: SchemaDocument
+  schema: SchemaDocument,
 ) {
   if (definition.localize === true) {
     if (schema.localization?.enabled !== true) {
       pushIssue(
         issues,
         `definitions.${definitionName}.localize`,
-        "Resource localization requires localization.enabled"
+        "Resource localization requires localization.enabled",
       );
     }
     if (definition.kind === "image" || definition.kind === "system_config") {
       pushIssue(
         issues,
         `definitions.${definitionName}.localize`,
-        `Localized ${definition.kind} definitions are not supported`
+        `Localized ${definition.kind} definitions are not supported`,
       );
     }
     if (
@@ -376,7 +114,7 @@ function validateDefinitionSchema(
       pushIssue(
         issues,
         `definitions.${definitionName}.localize`,
-        "Only Markdown and text files can be localized"
+        "Only Markdown and text files can be localized",
       );
     }
   }
@@ -386,12 +124,12 @@ function validateDefinitionSchema(
     definition.kind === "document" ||
     definition.kind === "system_config"
   ) {
-    for (const reserved of ["id", "createdAt", "updatedAt"] as const) {
+    for (const reserved of ["id", "createdAt", "updatedAt", "_key"] as const) {
       if (reserved in definition.fields) {
         pushIssue(
           issues,
           `definitions.${definitionName}.fields.${reserved}`,
-          `Reserved system field "${reserved}" cannot be declared as a normal field`
+          `Reserved system field "${reserved}" cannot be declared as a normal field`,
         );
       }
     }
@@ -401,7 +139,7 @@ function validateDefinitionSchema(
         field,
         `definitions.${definitionName}.fields.${fieldName}`,
         issues,
-        schema
+        schema,
       );
     }
   }
@@ -411,13 +149,27 @@ function validateFieldSchema(
   field: FieldDefinition,
   path: string,
   issues: ValidationIssue[],
-  schema: SchemaDocument
+  schema: SchemaDocument,
 ) {
+  if (field.unique && field.kind !== "slug") {
+    const parts = path.split(".");
+    const owner = schema.definitions[parts[1]];
+    if (
+      parts.length !== 4 ||
+      owner?.kind !== "collection" ||
+      hasLocalizedDescendant(field)
+    )
+      pushIssue(
+        issues,
+        path,
+        "Generic unique is supported only on non-localized top-level collection fields. Use uniqueItems for list values.",
+      );
+  }
   if (field.localize === true && !isLocalizableLeaf(field)) {
     pushIssue(
       issues,
       `${path}.localize`,
-      "Only string and MDX leaf fields can be localized"
+      "Only string and MDX leaf fields can be localized",
     );
   }
 
@@ -436,7 +188,7 @@ function validateFieldSchema(
       pushIssue(
         issues,
         path,
-        "Order fields must be top-level collection fields"
+        "Order fields must be top-level collection fields",
       );
     if (field.groupBy !== undefined) {
       const group =
@@ -445,7 +197,7 @@ function validateFieldSchema(
         pushIssue(
           issues,
           path,
-          "groupBy must name a top-level single-value reference in the same collection"
+          "groupBy must name a top-level single-value reference in the same collection",
         );
     }
   }
@@ -456,19 +208,19 @@ function validateFieldSchema(
         pushIssue(
           issues,
           path,
-          "Collection references support only id or slug"
+          "Collection references support only id or slug",
         );
       if (field.targetField)
         pushIssue(
           issues,
           path,
-          "Custom reference target fields are not supported"
+          "Custom reference target fields are not supported",
         );
       if (field.onDelete && field.onDelete !== "restrict")
         pushIssue(
           issues,
           path,
-          "Collection references require onDelete: restrict"
+          "Collection references require onDelete: restrict",
         );
     }
   }
@@ -476,7 +228,7 @@ function validateFieldSchema(
     pushIssue(
       issues,
       path,
-      `Reference target "${field.target}" does not exist`
+      `Reference target "${field.target}" does not exist`,
     );
   }
 
@@ -494,7 +246,7 @@ function validateFieldSchema(
         path,
         `Reference "${path.split(".").pop()}" resolves by slug, but target "${
           field.target
-        }" does not expose a slug`
+        }" does not expose a slug`,
       );
     }
   }
@@ -513,21 +265,14 @@ function validateFieldSchema(
       const identity = identityField
         ? field.items.fields[identityField]
         : undefined;
-      if (!identityField) {
-        pushIssue(
-          issues,
-          `${path}.identityField`,
-          "Arrays of objects with localized descendants require identityField"
-        );
-      } else if (
-        !identity ||
-        identity.kind !== "scalar" ||
-        identity.localize === true
+      if (
+        identityField &&
+        (!identity || identity.kind !== "scalar" || identity.localize === true)
       ) {
         pushIssue(
           issues,
           `${path}.identityField`,
-          "identityField must reference a non-localized scalar field"
+          "identityField must reference a non-localized scalar field",
         );
       }
     }
@@ -566,13 +311,13 @@ function validateSubmissionSchema(
   submissionName: string,
   submission: SubmissionDefinition,
   issues: ValidationIssue[],
-  schema: SchemaDocument
+  schema: SchemaDocument,
 ) {
   if (!submission.fields || typeof submission.fields !== "object") {
     pushIssue(
       issues,
       `submissions.${submissionName}.fields`,
-      "Submission fields must be an object"
+      "Submission fields must be an object",
     );
     return;
   }
@@ -582,7 +327,7 @@ function validateSubmissionSchema(
       field,
       `submissions.${submissionName}.fields.${fieldName}`,
       issues,
-      schema
+      schema,
     );
   }
 }
@@ -590,7 +335,7 @@ function validateSubmissionSchema(
 function validateEventSchema(
   eventName: string,
   event: { columns: string[] },
-  issues: ValidationIssue[]
+  issues: ValidationIssue[],
 ) {
   const seen = new Set<string>();
 
@@ -599,7 +344,7 @@ function validateEventSchema(
       pushIssue(
         issues,
         `events.${eventName}.columns.${index}`,
-        "Event column names must be non-empty strings"
+        "Event column names must be non-empty strings",
       );
       return;
     }
@@ -608,7 +353,7 @@ function validateEventSchema(
       pushIssue(
         issues,
         `events.${eventName}.columns.${index}`,
-        `Duplicate event column "${column}"`
+        `Duplicate event column "${column}"`,
       );
       return;
     }
@@ -618,7 +363,7 @@ function validateEventSchema(
 }
 
 export function validateSchemaDocument(
-  input: string | SchemaDocument | Record<string, unknown>
+  input: string | SchemaDocument | Record<string, unknown>,
 ): ValidationResult {
   try {
     const schema = parseSchema(input as any);
@@ -632,7 +377,7 @@ export function validateSchemaDocument(
       pushIssue(
         issues,
         "root",
-        "At least one definition, event, or submission is required"
+        "At least one definition, event, or submission is required",
       );
     }
 
@@ -649,7 +394,7 @@ export function validateSchemaDocument(
         name,
         submission as SubmissionDefinition,
         issues,
-        schema
+        schema,
       );
     }
 
@@ -662,6 +407,8 @@ export function validateSchemaDocument(
       valid: false,
       issues: [
         {
+          code: "invalid-schema",
+          severity: "hard",
           path: "root",
           message:
             error instanceof Error ? error.message : "Invalid schema document",

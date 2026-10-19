@@ -48,7 +48,7 @@ Fields describe validation, editor behavior, and generated platform payloads. Co
 
 ## Compilation
 
-The CLI finds `atmyapp.schema.*`, validates it, compiles it with `@atmyapp/structure`, writes `.ama/definitions.json`, and uploads it during `atmyapp migrate`.
+The CLI finds `atmyapp.schema.*`, validates it, compiles it with `@atmyapp/structure`, writes normalized canonical JSON to `.ama/definitions.json`, and uploads that same contract during `atmyapp migrate`. The platform stores it as `.structure.json`; legacy input is converted at the compatibility boundary. Schema changes belong to the website repository and CLI workflow.
 
 ## Package roles
 

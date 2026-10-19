@@ -6,6 +6,48 @@ import {
 import { uploadDefinitions } from "../../src/cli/utils/upload";
 
 describe("CLI runtime canonical APIs", () => {
+  it("uploads the canonical contract without a lossy legacy conversion or audit timestamp", async () => {
+    const schema = {
+      version: 1 as const,
+      definitions: {
+        home: {
+          kind: "document" as const,
+          path: "content/home.json",
+          fields: {
+            title: {
+              kind: "scalar" as const,
+              scalar: "string" as const,
+              unique: true,
+              preferredLength: 70,
+              ui: { label: "Headline" },
+            },
+          },
+        },
+      },
+    };
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ success: true }),
+      });
+    const result = await runCanonicalMigrate({
+      schema,
+      upload: true,
+      url: "https://atmyapp.test",
+      fetchImplementation: fetchMock,
+    });
+    const persisted = JSON.parse(
+      JSON.parse(fetchMock.mock.calls[0][1].body).content,
+    );
+    expect(persisted.version).toBe(1);
+    expect(persisted.definitions.home).toMatchObject(schema.definitions.home);
+    expect(persisted.metadata).toBeUndefined();
+    expect(persisted.definitions.home.type).toBeUndefined();
+    const repeated = await runCanonicalMigrate({ schema, dryRun: true });
+    expect(repeated.output).toEqual(result.output);
+  });
   const code = `
     import { defineDocument, defineSchema, s } from "@atmyapp/structure";
 
@@ -28,7 +70,7 @@ describe("CLI runtime canonical APIs", () => {
 
     expect(result.schema?.definitions.settings.kind).toBe("document");
     expect(result.compiled?.definitionsByName.settings.kind).toBe("document");
-    expect(result.output?.definitions.settings.type).toBe("jsonx");
+    expect(result.output?.definitions.settings.kind).toBe("document");
     expect(result.validation.valid).toBe(true);
     expect(result.errors).toEqual([]);
   });
@@ -85,11 +127,11 @@ describe("CLI runtime canonical APIs", () => {
 
     expect(result.schema?.definitions.settings.kind).toBe("document");
     expect(result.compiled?.fieldsByPath["settings.seo"]?.field.optional).toBe(
-      true
+      true,
     );
-    expect(result.compiled?.fieldsByPath["settings.seo.tags"]?.description).toBe(
-      undefined
-    );
+    expect(
+      result.compiled?.fieldsByPath["settings.seo.tags"]?.description,
+    ).toBe(undefined);
     expect(result.errors).toEqual([]);
   });
 
@@ -114,7 +156,7 @@ describe("CLI runtime canonical APIs", () => {
     expect(result.errors).toEqual([]);
   });
 
-  it("includes submissions in generated legacy output", () => {
+  it("includes submissions in generated canonical output", () => {
     const result = compileCanonicalSource({
       filename: "atmyapp.schema.ts",
       code: `
@@ -131,8 +173,7 @@ describe("CLI runtime canonical APIs", () => {
               captcha: {
                 required: true,
                 provider: "hcaptcha",
-                secret: "secret",
-              },
+                  },
             }),
           },
         });
@@ -149,9 +190,7 @@ describe("CLI runtime canonical APIs", () => {
             format: "email",
           }),
         },
-        requiresCaptcha: true,
-        captchaProvider: "hcaptcha",
-        hcaptchaSecret: "secret",
+        captcha: { required: true, provider: "hcaptcha" },
       },
     });
   });
@@ -193,6 +232,7 @@ describe("CLI runtime canonical APIs", () => {
   it("parses destructive migration conflicts from upload responses", async () => {
     const result = await uploadStructure({
       output: {
+        version: 1,
         description: "Runtime migrate test",
         definitions: {},
         events: {},
@@ -253,7 +293,7 @@ describe("CLI runtime canonical APIs", () => {
     expect(result.status).toBe(409);
     expect(result.error).toContain("Structure update blocked");
     expect(result.conflict?.code).toBe(
-      "DESTRUCTIVE_STRUCTURE_CHANGE_REQUIRES_CLEAR"
+      "DESTRUCTIVE_STRUCTURE_CHANGE_REQUIRES_CLEAR",
     );
     expect(result.conflict?.branch).toBe("main");
     expect(result.conflict?.suggestedClear.columns).toEqual([
@@ -277,6 +317,7 @@ describe("CLI runtime canonical APIs", () => {
     try {
       const result = await uploadStructure({
         output: {
+          version: 1,
           description: "Runtime migrate test",
           definitions: {},
           events: {},
@@ -309,6 +350,7 @@ describe("CLI runtime canonical APIs", () => {
         expect.objectContaining({
           body: JSON.stringify({
             content: JSON.stringify({
+              version: 1,
               description: "Runtime migrate test",
               definitions: {},
               events: {},
@@ -332,7 +374,7 @@ describe("CLI runtime canonical APIs", () => {
               ],
             },
           }),
-        })
+        }),
       );
     } finally {
       global.fetch = originalFetch;
@@ -366,6 +408,7 @@ describe("CLI runtime canonical APIs", () => {
     try {
       const result = await uploadDefinitions(
         {
+          version: 1,
           description: "Runtime migrate test",
           definitions: {},
           events: {},
@@ -393,7 +436,7 @@ describe("CLI runtime canonical APIs", () => {
           collections: ["posts"],
           contentFiles: [],
           columns: [],
-        }
+        },
       );
 
       expect(result.success).toBe(false);

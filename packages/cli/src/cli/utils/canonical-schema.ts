@@ -4,7 +4,7 @@ import { dirname, extname, parse, relative, resolve } from "path";
 import { type SchemaDocument } from "@atmyapp/structure";
 import { Logger } from "../logger";
 import { OutputDefinition } from "../types/migrate";
-import { compileCanonicalSource, generateLegacyOutput } from "../../runtime";
+import { compileCanonicalSource, generateCanonicalOutput } from "../../runtime";
 
 export const CANONICAL_SCHEMA_PATTERNS = [
   "atmyapp.schema.ts",
@@ -484,7 +484,7 @@ export function generateOutputFromCanonicalSchema(
   schema: SchemaDocument,
   config: Record<string, unknown>,
 ): OutputDefinition {
-  return generateLegacyOutput(schema, config);
+  return generateCanonicalOutput(schema, config);
 }
 
 export function generateCanonicalSchemaTemplate(

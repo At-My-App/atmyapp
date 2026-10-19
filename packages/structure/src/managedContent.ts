@@ -1,3 +1,5 @@
+import type { FieldDefinition } from "./types";
+
 /** Shared, deterministic primitives. Persistence must protect the snapshot revision. */
 export const ORDER_SPACING = 1024;
 export const MAX_SLUG_LENGTH = 96;
@@ -6,6 +8,11 @@ export type Placement =
   | { position: "last" }
   | { position: "before"; entryId: string }
   | { position: "after"; entryId: string };
+
+/** Values the server assigns when an entry is saved; editors must not require them from the author. */
+export function isAssignedOnSave(field: FieldDefinition): boolean {
+  return field.kind === "order" || (field.kind === "slug" && Boolean(field.source));
+}
 
 export function normalizeSlug(value: string): string {
   return value

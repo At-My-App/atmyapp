@@ -3,6 +3,8 @@ import vm from "vm";
 import ts from "typescript";
 import {
   compileSchema,
+  contentIssue,
+  parseSchema,
   diffSchemas,
   planMigration,
   renderMigrationPrompts,
@@ -47,21 +49,6 @@ function getSchemaFromModule(moduleExports: Record<string, unknown>): unknown {
 
 function loadAtMyAppStructureRuntime(): Record<string, unknown> {
   return require("@atmyapp/structure") as Record<string, unknown>;
-}
-
-function buildMetadata(
-  output: OutputDefinition,
-  config: Record<string, unknown>,
-): OutputDefinition["metadata"] {
-  return {
-    generatedAt: new Date().toISOString(),
-    totalDefinitions: Object.keys(output.definitions).length,
-    totalEvents: Object.keys(output.events).length,
-    version: "1.0.0",
-    ...(config.metadata && typeof config.metadata === "object"
-      ? config.metadata
-      : {}),
-  };
 }
 
 function createRuntimeLogger(verbose = false): {
@@ -134,39 +121,19 @@ function parseUploadConflict(
   return data as UploadStructureConflict;
 }
 
-export function generateLegacyOutput(
+export function generateCanonicalOutput(
   schema: SchemaDocument,
   config: Record<string, unknown> = {},
 ): OutputDefinition {
-  const compiled = compileSchema(schema);
-  const legacyStructure = compiled.legacyStructure;
-  const output: OutputDefinition = {
-    ...legacyStructure,
+  const document = parseSchema(schema);
+  return {
+    ...document,
     description:
-      legacyStructure.description ||
+      document.description ||
       (typeof config.description === "string"
         ? config.description
         : "AMA Definitions"),
-    definitions:
-      legacyStructure.definitions as OutputDefinition["definitions"],
-    events: ((((legacyStructure as any).events ||
-      (schema as any).events) ??
-      {}) as OutputDefinition["events"]),
-    args: (legacyStructure.args || {}) as Record<string, unknown>,
-    ...(legacyStructure.mdx
-      ? { mdx: legacyStructure.mdx as OutputDefinition["mdx"] }
-      : {}),
-    ...(legacyStructure.submissions
-      ? {
-          submissions:
-            legacyStructure.submissions as OutputDefinition["submissions"],
-        }
-      : {}),
-  } as OutputDefinition;
-
-  output.metadata = buildMetadata(output, config);
-
-  return output;
+  };
 }
 
 export function loadCanonicalModuleValue({
@@ -240,7 +207,7 @@ export function compileCanonicalSource(
       return {
         validation: {
           valid: false,
-          issues: [{ path: input.filename, message: error }],
+          issues: [contentIssue("invalid-schema", input.filename, error)],
         },
         logs: entries,
         warnings,
@@ -267,7 +234,7 @@ export function compileCanonicalSource(
     const compileStartedAt = Date.now();
     const schema = rawValue as SchemaDocument;
     const compiled = compileSchema(schema);
-    const output = generateLegacyOutput(schema, {});
+    const output = generateCanonicalOutput(schema, {});
     const compileMs = Date.now() - compileStartedAt;
 
     return {
@@ -293,7 +260,7 @@ export function compileCanonicalSource(
     return {
       validation: {
         valid: false,
-        issues: [{ path: input.filename, message }],
+        issues: [contentIssue("invalid-schema", input.filename, message)],
       },
       logs: entries,
       warnings,
@@ -377,7 +344,7 @@ export async function runCanonicalMigrate({
   const errors: string[] = [];
 
   const generateStartedAt = Date.now();
-  const output = generateLegacyOutput(schema, config);
+  const output = generateCanonicalOutput(schema, config);
   const generateMs = Date.now() - generateStartedAt;
   logger.success(
     `Generated ${Object.keys(output.definitions).length} definitions from canonical schema.`,

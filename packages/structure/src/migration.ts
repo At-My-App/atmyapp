@@ -1,3 +1,4 @@
+import { assertNever, canonicalValue } from "./valueValidation";
 import type {
   CollectionDefinition,
   Definition,
@@ -5,13 +6,14 @@ import type {
   MigrationAction,
   MigrationChange,
   MigrationCompatibilityClass,
+  MigrationOperation,
   MigrationPlan,
   MigrationPrompt,
   SchemaDocument,
   SystemFieldDefinition,
 } from "./types";
 import { compileSchema } from "./compiler";
-import { stableKey } from "./utils";
+import { isFieldOptional, stableKey } from "./utils";
 
 function fieldIdentity(field: FieldDefinition): string {
   switch (field.kind) {
@@ -35,6 +37,7 @@ function fieldIdentity(field: FieldDefinition): string {
       return `order:${field.groupBy || ""}`;
     case "slug":
       return "slug";
+    default: return assertNever(field);
   }
 }
 
@@ -74,6 +77,31 @@ export function classifyTypeChange(
   }
 
   return "incompatible";
+}
+
+/** Rules that existing values must satisfy; presentation and nesting are compared elsewhere. */
+const nonConstraintKeys = new Set([
+  "kind",
+  "description",
+  "ui",
+  "default",
+  "localize",
+  "required",
+  "optional",
+  "unique",
+  "fields",
+  "items",
+  "variants",
+  "preferredLength",
+  "legacy",
+  "identityField",
+]);
+function constraintSignature(field: FieldDefinition): string {
+  return canonicalValue(
+    Object.fromEntries(
+      Object.entries(field).filter(([key]) => !nonConstraintKeys.has(key)),
+    ),
+  );
 }
 
 function compareSystemFields(
@@ -149,22 +177,38 @@ function compareFields(
   nextFields: Record<string, FieldDefinition>,
   changes: MigrationChange[],
   pathPrefix: string = definitionName,
+  renames: Map<string, string> = new Map(),
 ) {
+  const renamedTo = new Set(renames.values());
   const names = new Set([
     ...Object.keys(currentFields),
-    ...Object.keys(nextFields),
+    ...Object.keys(nextFields).filter((name) => !renamedTo.has(name)),
   ]);
   for (const name of names) {
     const currentField = currentFields[name];
-    const nextField = nextFields[name];
-    const fieldPath = `${pathPrefix}.${name}`;
+    const nextName = renames.get(name) ?? name;
+    const nextField = nextFields[nextName];
+    const fieldPath = `${pathPrefix}.${nextName}`;
+    if (renames.has(name) && currentField && nextField) {
+      changes.push({
+        kind: "field_renamed",
+        definitionName,
+        fieldPath,
+        fromType: `${pathPrefix}.${name}`,
+        compatibility: "compatible",
+      });
+    }
 
     if (!currentField && nextField) {
+      // A required field without a default needs existing content to supply it.
       changes.push({
         kind: "field_added",
         definitionName,
         fieldPath,
-        compatibility: "compatible",
+        compatibility:
+          isFieldOptional(nextField) || nextField.default !== undefined
+            ? "compatible"
+            : "confirmable_convert",
       });
       continue;
     }
@@ -192,6 +236,25 @@ function compareFields(
         fromType: fieldIdentity(currentField),
         toType: fieldIdentity(nextField),
         compatibility,
+      });
+    } else if (
+      constraintSignature(currentField) !== constraintSignature(nextField)
+    ) {
+      // Enum values, bounds, patterns, formats and nullability: stored values decide.
+      changes.push({
+        kind: "field_constraint_changed",
+        definitionName,
+        fieldPath,
+        compatibility: "confirmable_convert",
+      });
+    }
+
+    if (isFieldOptional(currentField) && !isFieldOptional(nextField)) {
+      changes.push({
+        kind: "field_requirement_changed",
+        definitionName,
+        fieldPath,
+        compatibility: "confirmable_convert",
       });
     }
 
@@ -256,6 +319,7 @@ function compareFields(
 export function diffSchemas(
   currentInput: SchemaDocument | string,
   nextInput: SchemaDocument | string,
+  operations: MigrationOperation[] = [],
 ): MigrationChange[] {
   const current = compileSchema(currentInput).document;
   const next = compileSchema(nextInput).document;
@@ -344,7 +408,28 @@ export function diffSchemas(
         currentDefinition.fields,
         nextDefinition.fields,
         changes,
+        name,
+        new Map(
+          operations.flatMap((operation) =>
+            operation.type === "renameField" && operation.definition === name
+              ? [[operation.from, operation.to] as const]
+              : [],
+          ),
+        ),
       );
+    }
+
+    const currentPath =
+      "path" in currentDefinition ? currentDefinition.path : undefined;
+    const nextPath = "path" in nextDefinition ? nextDefinition.path : undefined;
+    if ((currentPath || name) !== (nextPath || name)) {
+      changes.push({
+        kind: "definition_path_changed",
+        definitionName: name,
+        fromType: currentPath || name,
+        toType: nextPath || name,
+        compatibility: "incompatible",
+      });
     }
 
     if (
@@ -456,8 +541,67 @@ function actionForChange(change: MigrationChange): MigrationAction[] {
           compatibility: change.compatibility,
         },
       ];
-    default:
+    case "field_renamed":
+      return [
+        {
+          type: "rename_field",
+          definitionName: change.definitionName,
+          fieldPath: change.fieldPath,
+          message: `Field "${change.fromType}" will be renamed to "${change.fieldPath}"; stored values move with it.`,
+          compatibility: change.compatibility,
+        },
+      ];
+    case "field_added":
+      return change.compatibility === "compatible"
+        ? []
+        : [
+            {
+              type: "verify_existing_content",
+              definitionName: change.definitionName,
+              fieldPath: change.fieldPath,
+              message: `Required field "${change.fieldPath}" has no default. Existing content must supply it, for example with a backfill operation.`,
+              compatibility: change.compatibility,
+            },
+          ];
+    case "field_requirement_changed":
+      return [
+        {
+          type: "verify_existing_content",
+          definitionName: change.definitionName,
+          fieldPath: change.fieldPath,
+          message: `Field "${change.fieldPath}" becomes required. Existing content is checked; missing values need a backfill.`,
+          compatibility: change.compatibility,
+        },
+      ];
+    case "field_constraint_changed":
+      return [
+        {
+          type: "verify_existing_content",
+          definitionName: change.definitionName,
+          fieldPath: change.fieldPath,
+          message: `Rules for "${change.fieldPath}" change. Existing values are checked against the new rules.`,
+          compatibility: change.compatibility,
+        },
+      ];
+    case "definition_kind_changed":
+    case "definition_path_changed":
+      return [
+        {
+          type: "require_manual_migration",
+          definitionName: change.definitionName,
+          message:
+            change.kind === "definition_path_changed"
+              ? `Content "${change.definitionName}" moves from "${change.fromType}" to "${change.toType}". Moving stored content is not supported yet; keep the old path.`
+              : `Definition "${change.definitionName}" changes kind. Existing content cannot be converted automatically.`,
+          compatibility: change.compatibility,
+        },
+      ];
+    case "definition_added":
+    case "index_added":
+    case "index_removed":
       return [];
+    default:
+      return assertNever(change.kind);
   }
 }
 
@@ -478,8 +622,9 @@ export function renderMigrationPrompts(plan: MigrationPlan): MigrationPrompt[] {
 export function planMigration(
   currentInput: SchemaDocument | string,
   nextInput: SchemaDocument | string,
+  operations: MigrationOperation[] = [],
 ): MigrationPlan {
-  const changes = diffSchemas(currentInput, nextInput);
+  const changes = diffSchemas(currentInput, nextInput, operations);
   const actions = changes.flatMap(actionForChange);
   const prompts = renderMigrationPrompts({
     changes,
@@ -487,6 +632,7 @@ export function planMigration(
     prompts: [],
     blocking: false,
   });
+  // A decision is needed before activation; the server decides removals from stored data.
   const blocking = actions.some((action) =>
     [
       "require_union",

@@ -1,3 +1,5 @@
+import { assertNever } from "./valueValidation";
+import { assertSchemaShape, assertSchemaDefaults } from "./schemaShape";
 import type {
   CompiledDefinition,
   CompiledField,
@@ -25,11 +27,13 @@ function isLegacyStructure(input: any): input is LegacyStructureDocument {
   if (!definitions || typeof definitions !== "object") {
     return false;
   }
+  // Stored legacy artifacts carry `version: 1`, so the definition shape decides, not the version.
   return Object.values(definitions).every((definition) => {
     return Boolean(
       definition &&
       typeof definition === "object" &&
-      "type" in (definition as Record<string, unknown>),
+      "type" in (definition as Record<string, unknown>) &&
+      !("kind" in (definition as Record<string, unknown>)),
     );
   });
 }
@@ -106,12 +110,9 @@ function normalizeField(field: FieldDefinition): FieldDefinition {
         required: undefined,
         by: field.by || "id",
       };
-    default:
-      return {
-        ...field,
-        optional: normalizedOptional,
-        required: undefined,
-      };
+    case "enum": case "asset": case "mdx": case "slug": case "order":
+      return { ...field, optional: normalizedOptional, required: undefined };
+    default: return assertNever(field);
   }
 }
 
@@ -208,11 +209,9 @@ function normalizeSubmission(
     captcha?: {
       required?: boolean;
       provider?: string;
-      secret?: string;
     };
     requiresCaptcha?: boolean;
     captchaProvider?: string;
-    hcaptchaSecret?: string;
   };
 
   const required =
@@ -221,13 +220,16 @@ function normalizeSubmission(
     false;
   const provider =
     submissionInput.captcha?.provider ?? submissionInput.captchaProvider;
-  const secret =
-    submissionInput.captcha?.secret ?? submissionInput.hcaptchaSecret;
+  if (
+    "hcaptchaSecret" in submissionInput ||
+    (submissionInput.captcha && "secret" in submissionInput.captcha)
+  ) {
+    throw new Error(
+      "Submission secrets must be configured on the server, not in the public schema",
+    );
+  }
 
-  const hasCaptcha =
-    required === true ||
-    typeof provider === "string" ||
-    typeof secret === "string";
+  const hasCaptcha = required === true || typeof provider === "string";
 
   return {
     description:
@@ -240,7 +242,6 @@ function normalizeSubmission(
           captcha: {
             required,
             ...(typeof provider === "string" ? { provider } : {}),
-            ...(typeof secret === "string" ? { secret } : {}),
           },
         }
       : {}),
@@ -255,14 +256,24 @@ export function parseSchema(
       ? (JSON.parse(input) as SchemaDocument | LegacyStructureDocument)
       : input;
 
-  if (isLegacyStructure(parsed)) {
-    return compileLegacyStructure(parsed);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Schema must be an object");
   }
-
-  return normalizeSchema(parsed as SchemaDocument);
+  if ("version" in parsed && parsed.version !== 1) {
+    throw new Error(`Unsupported schema version: ${String(parsed.version)}`);
+  }
+  return normalizeSchema(
+    isLegacyStructure(parsed)
+      ? compileLegacyStructure(parsed)
+      : (parsed as SchemaDocument),
+  );
 }
 
 export function normalizeSchema(input: SchemaDocument): SchemaDocument {
+  if (input.version !== undefined && input.version !== 1) {
+    throw new Error(`Unsupported schema version: ${String(input.version)}`);
+  }
+  assertSchemaShape(input);
   const definitions: Record<string, Definition> = {};
   for (const [name, definition] of Object.entries(input.definitions || {})) {
     definitions[name] = normalizeDefinition(name, definition);
@@ -286,7 +297,7 @@ export function normalizeSchema(input: SchemaDocument): SchemaDocument {
     submissions[name] = normalizeSubmission(submission);
   }
 
-  return {
+  const result: SchemaDocument = {
     version: 1,
     description: input.description,
     localization:
@@ -299,6 +310,8 @@ export function normalizeSchema(input: SchemaDocument): SchemaDocument {
     mdx: input.mdx && typeof input.mdx === "object" ? input.mdx : {},
     submissions,
   };
+  assertSchemaDefaults(result);
+  return result;
 }
 
 function collectFieldIndexes(
@@ -404,6 +417,12 @@ export function compileSchema(
     definitionsByName[name] = compiledDefinition;
 
     for (const alias of pathAliases) {
+      const existing = definitionsByPath[alias];
+      if (existing && existing.name !== name) {
+        throw new Error(
+          `Definition path alias '${alias}' is shared by '${existing.name}' and '${name}'`,
+        );
+      }
       definitionsByPath[alias] = compiledDefinition;
       definitionKindsByPath[alias] = definition.kind;
     }

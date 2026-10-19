@@ -4,6 +4,7 @@ export * from "./canonical-schema";
 export * from "./file-operations";
 export * from "./upload";
 export * from "./migration-conflicts";
+export * from "./migration-plan";
 
 // Re-export types and logger
 export * from "../types/migrate";

@@ -40,8 +40,8 @@ describe("canonical schema support", () => {
             },
           },
           null,
-          2
-        )
+          2,
+        ),
       );
 
       const filePath = await findCanonicalSchemaFile(logger, dir);
@@ -52,7 +52,7 @@ describe("canonical schema support", () => {
 
       const output = generateOutputFromCanonicalSchema(schema, {});
       expect(output.definitions["settings"]).toBeDefined();
-      expect(output.definitions["settings"].type).toBe("jsonx");
+      expect(output.definitions["settings"].kind).toBe("document");
       expect(output.events).toEqual({
         page_view: {
           columns: ["page", "timestamp"],
@@ -81,12 +81,12 @@ describe("canonical schema support", () => {
               }),
             },
           });
-        `
+        `,
       );
 
       const schema = await loadCanonicalSchemaFile(
         join(dir, "atmyapp.schema.ts"),
-        logger
+        logger,
       );
 
       expect(schema.definitions.settings.kind).toBe("document");
@@ -114,12 +114,11 @@ describe("canonical schema support", () => {
             captcha: {
               required: true,
               provider: "hcaptcha",
-              secret: "secret",
             },
           },
         },
       },
-      {}
+      {},
     );
 
     expect(output.submissions).toEqual({
@@ -130,11 +129,10 @@ describe("canonical schema support", () => {
             kind: "scalar",
             scalar: "string",
             format: "email",
+            optional: false,
           },
         },
-        requiresCaptcha: true,
-        captchaProvider: "hcaptcha",
-        hcaptchaSecret: "secret",
+        captcha: { required: true, provider: "hcaptcha" },
       },
     });
   });
@@ -142,7 +140,10 @@ describe("canonical schema support", () => {
   it("prefers atmyapp.schema over ama.schema when both exist", async () => {
     const dir = mkdtempSync(join(process.cwd(), "test-canonical-prefer-"));
     try {
-      writeFileSync(join(dir, "ama.schema.ts"), "export default { version: 1, definitions: {} };\n");
+      writeFileSync(
+        join(dir, "ama.schema.ts"),
+        "export default { version: 1, definitions: {} };\n",
+      );
       writeFileSync(
         join(dir, "atmyapp.schema.ts"),
         "export default { version: 1, definitions: { settings: { kind: 'document', fields: {} } } };\n",
@@ -161,7 +162,9 @@ describe("canonical schema support", () => {
     try {
       const result = await initializeCanonicalSchema(logger, { cwd: dir });
 
-      expect(result.schemaPath).toBe(join(dir, DEFAULT_CANONICAL_SCHEMA_FILENAME));
+      expect(result.schemaPath).toBe(
+        join(dir, DEFAULT_CANONICAL_SCHEMA_FILENAME),
+      );
       expect(result.clientPath).toBe(join(dir, "atmyapp.client.ts"));
 
       const schema = await loadCanonicalSchemaFile(result.schemaPath, logger);
@@ -198,7 +201,9 @@ describe("canonical schema support", () => {
 
       const clientFile = result.files.find((file) => file.kind === "client");
       expect(clientFile?.content).toContain("export const client");
-      expect(clientFile?.content).toContain('client.collections.list("blogPosts")');
+      expect(clientFile?.content).toContain(
+        'client.collections.list("blogPosts")',
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

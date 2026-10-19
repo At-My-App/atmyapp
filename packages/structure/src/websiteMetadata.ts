@@ -1,3 +1,4 @@
+import { normalizeContent, createItemKey } from "./normalization";
 import { defineSystemConfig, s } from "./builder";
 import type { FieldDefinition } from "./types";
 
@@ -20,15 +21,15 @@ export type WebsiteImage =
       name?: string;
     };
 export interface WebsiteSettings {
-  siteName: string;
-  title: string;
-  description: string;
-  appendSiteName: boolean;
+  siteName?: string;
+  title?: string;
+  description?: string;
+  appendSiteName?: boolean;
   icon?: WebsiteImage;
   image?: WebsiteImage;
-  customizeSharing: boolean;
-  ogTitle: string;
-  ogDescription: string;
+  customizeSharing?: boolean;
+  ogTitle?: string;
+  ogDescription?: string;
 }
 
 const text = (description: string) =>
@@ -50,11 +51,13 @@ export const websiteMetadataSystemConfig = defineSystemConfig({
       optional: true,
     }),
     icon: s.image({
+      nullable: true,
       description: "Website icon",
       optional: true,
       config: { ratioHint: { x: 1, y: 1 }, optimizeFormat: "none" },
     }),
     image: s.image({
+      nullable: true,
       description: "Sharing image",
       optional: true,
       config: { ratioHint: { x: 191, y: 100 } },
@@ -73,13 +76,9 @@ export const websiteMetadataSystemConfig = defineSystemConfig({
 export function buildDefaultsFromFields(
   fields: Record<string, FieldDefinition>
 ): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, field] of Object.entries(fields)) {
-    if (field.default !== undefined) out[key] = structuredClone(field.default);
-    else if (field.kind === "object")
-      out[key] = buildDefaultsFromFields(field.fields);
-  }
-  return out;
+  return normalizeContent({}, { kind: "document", fields }, {
+    resourceIdentity: "new-resource", createKey: createItemKey,
+  }).value as Record<string, unknown>;
 }
 export const createDefaultWebsiteSettings = (): WebsiteSettings =>
   buildDefaultsFromFields(

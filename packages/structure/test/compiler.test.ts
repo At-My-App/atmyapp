@@ -100,33 +100,33 @@ describe("@atmyapp/structure compiler", () => {
             },
           }),
         },
-      })
+      }),
     );
 
     expect(compiled.document.description).toBe("Project schema");
     expect(getCollection(compiled, "posts")?.description).toBe(
-      "Blog posts collection"
+      "Blog posts collection",
     );
     expect(getDocument(compiled, "settings")?.description).toBe(
-      "Single settings document"
+      "Single settings document",
     );
     const settingsDocument = getDocument(compiled, "settings");
     expect(settingsDocument?.definition.kind).toBe("document");
     expect(settingsDocument?.definition.path).toBe("settings.json");
     expect(getField(compiled, "posts.title")?.description).toBe(
-      "Public title for the post"
+      "Public title for the post",
     );
     expect(getField(compiled, "posts.seo.ogImages[]")?.description).toBe(
-      "Open Graph image"
+      "Open Graph image",
     );
     expect(resolveDefinitionForPath(compiled, "settings.json")?.kind).toBe(
-      "document"
+      "document",
     );
     expect(resolveDefinitionForPath(compiled, "settings")?.kind).toBe(
-      "document"
+      "document",
     );
     expect(getEvent(compiled, "page_view")?.description).toBe(
-      "Tracked page view analytics event"
+      "Tracked page view analytics event",
     );
     expect(listEvents(compiled).page_view?.columns).toEqual([
       "page",
@@ -136,7 +136,9 @@ describe("@atmyapp/structure compiler", () => {
     expect(listAssetFields(compiled, "posts")).toHaveLength(2);
     expect(listReferences(compiled)).toHaveLength(1);
     expect(
-      listSystemFields(compiled, "posts").some((field) => field.name === "slug")
+      listSystemFields(compiled, "posts").some(
+        (field) => field.name === "slug",
+      ),
     ).toBe(true);
   });
 
@@ -215,7 +217,7 @@ describe("@atmyapp/structure compiler", () => {
     });
     expect(legacy.definitions.settings.description).toBe("Settings");
     expect(
-      legacy.definitions.settings.structure?.properties?.theme?.description
+      legacy.definitions.settings.structure?.properties?.theme?.description,
     ).toBe("Theme");
     expect(legacy.definitions.settings.structure?.required).toEqual(["theme"]);
   });
@@ -230,7 +232,7 @@ describe("@atmyapp/structure compiler", () => {
               summary: s.shortText({
                 min: 10,
                 max: 120,
-                default: "Welcome",
+                default: "Welcome home",
               }),
               body: s.markdown({
                 optional: true,
@@ -243,7 +245,7 @@ describe("@atmyapp/structure compiler", () => {
             },
           }),
         },
-      })
+      }),
     );
 
     const summary = getField(compiled, "settings.summary");
@@ -257,7 +259,7 @@ describe("@atmyapp/structure compiler", () => {
       minLength: 10,
       maxLength: 120,
       preferredLength: 80,
-      default: "Welcome",
+      default: "Welcome home",
       localize: true,
     });
     expect(body).toMatchObject({
@@ -278,7 +280,7 @@ describe("@atmyapp/structure compiler", () => {
       default: 3,
     });
     expect(getDocument(compiled, "settings")?.definition.path).toBe(
-      "content/site.json"
+      "content/site.json",
     );
   });
 
@@ -416,15 +418,15 @@ describe("@atmyapp/structure compiler", () => {
     expect(getField(compiled, "posts.seo.tags")?.description).toBe("SEO tags");
     expect(getField(compiled, "posts.status")?.optional).toBe(true);
     expect(getField(compiled, "posts.author")?.description).toBe(
-      "Author lookup"
+      "Author lookup",
     );
     expect(getEvent(compiled, "signup")?.description).toBe("Signup event");
     expect(
-      legacy.definitions.posts.structure?.properties?.seo?.description
+      legacy.definitions.posts.structure?.properties?.seo?.description,
     ).toBe("SEO block");
     expect(
       legacy.definitions.posts.structure?.properties?.seo?.properties?.tags
-        ?.description
+        ?.description,
     ).toBe("SEO tags");
     expect(legacy.definitions.posts.structure?.required).toEqual([
       "title",
@@ -457,7 +459,6 @@ describe("@atmyapp/structure compiler", () => {
           captcha: {
             required: true,
             provider: "hcaptcha",
-            secret: "secret",
           },
         }),
       },
@@ -481,7 +482,6 @@ describe("@atmyapp/structure compiler", () => {
       captcha: {
         required: true,
         provider: "hcaptcha",
-        secret: "secret",
       },
     });
     expect(listSubmissions(compiled).contact?.captcha?.required).toBe(true);
@@ -489,7 +489,6 @@ describe("@atmyapp/structure compiler", () => {
       description: "Main contact form",
       requiresCaptcha: true,
       captchaProvider: "hcaptcha",
-      hcaptchaSecret: "secret",
     });
   });
 
@@ -514,7 +513,7 @@ describe("@atmyapp/structure compiler", () => {
     const resolved = resolveDefinitionForPath(
       compiled,
       "_SystemConfig/website/metadata.json",
-      "application/json"
+      "application/json",
     );
     const legacy = toLegacyStructure(schema);
 
