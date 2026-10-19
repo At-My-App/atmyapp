@@ -1,5 +1,18 @@
 # @atmyapp/core
 
+## 0.5.0
+
+### Minor Changes
+
+- d6d295e: Add shared draft/publication validation with stable issue codes and severities, explicit nullability, creation-only normalization, stable object-list identities, strict schema checks, and a testing corpus export. Reject ambiguous identity/union normalization instead of guessing, preserve delivery keys and generated item types, include singleton references in integrity snapshots, and make website settings types reflect their optional stored fields. Publication editorial acceptance must be bound to an exact human-reviewed state by the server.
+
+### Patch Changes
+
+- Updated dependencies [d6d295e]
+- Updated dependencies [d6d295e]
+- Updated dependencies [d6d295e]
+  - @atmyapp/structure@0.4.0
+
 ## 0.4.0
 
 ### Minor Changes
