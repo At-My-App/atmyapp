@@ -1,5 +1,17 @@
 # @atmyapp/cli
 
+## 0.4.0
+
+### Minor Changes
+
+- 6f364cd: Confirming a migration plan approves its content warnings; the CLI sends that approval with the apply request. Each migration is recorded in `.ama/migrations/<operationId>.json` with its target, branch, compiled schema, operations and clears (never the token). `migrate-status` and `--reconcile` use exactly what was applied and refuse a session that points at another project or branch. With `--json`, stdout holds exactly one JSON document, also on failure, and logs go to stderr.
+
+### Patch Changes
+
+- Updated dependencies [6f364cd]
+  - @atmyapp/core@0.6.0
+  - @atmyapp/structure@0.5.0
+
 ## 0.3.0
 
 ### Minor Changes
