@@ -499,6 +499,17 @@ export type AtMyAppClientOptions = {
    * Optional browser-friendly local data adapter used by local/with-fallback modes.
    */
   localDataSource?: LocalDataSource;
+  /**
+   * Called when a staged preview could not evaluate a collection query exactly.
+   * Defaults to a console warning. `dataWithMeta` results also carry
+   * `previewApproximate`.
+   */
+  onPreviewApproximate?: (info: { collection: string; method: string }) => void;
+  /**
+   * Treat an approximate preview as a failed request, following `errorPolicy`.
+   * @default false
+   */
+  strictPreview?: boolean;
 };
 
 export type AnalyticsClient<TSchema = unknown> = {
@@ -595,11 +606,15 @@ export type CollectionsPrimitive = string | number | boolean | Date;
 export type CollectionsListWithMeta<Row> = {
   rows: Row[];
   total: number;
+  /** True when a staged preview could not evaluate the query exactly. */
+  previewApproximate?: boolean;
 };
 
 export type CollectionsSingleWithMeta<Row> = {
   row: Row | null;
   total: number;
+  /** True when a staged preview could not evaluate the query exactly. */
+  previewApproximate?: boolean;
 };
 
 export type CollectionsFormat = "raw" | "data" | "dictionary" | "dataWithMeta";
@@ -660,6 +675,8 @@ export type CollectionsListOptions<Format extends CollectionsFormat = "data"> =
     plugins?: string[];
     locale?: string;
     format?: Format;
+    /** Overrides the client's `strictPreview` for this request. */
+    strictPreview?: boolean;
   };
 
 export type CollectionsResponse<Row = any> = {
@@ -708,6 +725,13 @@ export type CollectionsResponseRaw<Row = any> = {
   data?: {
     entries: Row[];
     total: number;
+    /**
+     * Set by a staged preview it could not evaluate exactly (OR filters,
+     * nested fields, very large collections). Staged versions of the returned
+     * entries are shown, but membership, order and total may differ from what
+     * publishing would give.
+     */
+    previewApproximate?: boolean;
   };
   error?: string;
 };

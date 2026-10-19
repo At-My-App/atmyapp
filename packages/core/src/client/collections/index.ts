@@ -42,6 +42,28 @@ export const createCollectionsClient = <TSchema = unknown>(
     }
   };
 
+  /**
+   * An approximate preview is never passed off as exact: it is reported, or
+   * with `strictPreview` returned as an error.
+   */
+  const previewProblem = (
+    method: string,
+    collection: string,
+    approximate: boolean | undefined,
+    strict: boolean | undefined
+  ): string | null => {
+    if (!approximate) return null;
+    if (strict ?? clientOptions.strictPreview)
+      return "the staged preview cannot evaluate this query exactly (strictPreview)";
+    if (clientOptions.onPreviewApproximate)
+      clientOptions.onPreviewApproximate({ collection, method });
+    else
+      console.warn(
+        `AtMyApp collections: the staged preview of ${method}("${collection}") is approximate. Returned entries show their drafts, but which entries match, their order and the total may differ after publishing.`
+      );
+    return null;
+  };
+
   const $fetch = createFetch({
     baseURL: collectionsUrl,
     auth: {
@@ -263,14 +285,24 @@ export const createCollectionsClient = <TSchema = unknown>(
   ): Promise<CollectionsListResult<Row, Format>> {
     const { format, base } = splitFormat(options);
     const resp = await listRaw<CollectionsRawEntry<Row>>(collection, base);
-    if (resp.success === true && resp.data) {
+    const problem =
+      resp.success === true && resp.data
+        ? previewProblem(
+            "list",
+            collection,
+            resp.data.previewApproximate,
+            options?.strictPreview
+          )
+        : null;
+    if (resp.success === true && resp.data && !problem) {
       return transformRows<Row, Format>(
         resp.data.entries,
         format,
-        resp.data.total
+        resp.data.total,
+        resp.data.previewApproximate
       );
     }
-    const err = resp.error || "Collections request failed";
+    const err = problem || resp.error || "Collections request failed";
     if (shouldThrowErrors) {
       throw new Error(err);
     }
@@ -310,8 +342,17 @@ export const createCollectionsClient = <TSchema = unknown>(
       filter: F.eq("id", id),
       limit: 1,
     });
-    if (rows.success !== true || !rows.data) {
-      const err = rows.error || "Collections request failed";
+    const problem =
+      rows.success === true && rows.data
+        ? previewProblem(
+            "getById",
+            collection,
+            rows.data.previewApproximate,
+            options?.strictPreview
+          )
+        : null;
+    if (rows.success !== true || !rows.data || problem) {
+      const err = problem || rows.error || "Collections request failed";
       if (shouldThrowErrors) {
         throw new Error(err);
       }
@@ -320,7 +361,12 @@ export const createCollectionsClient = <TSchema = unknown>(
     }
     const total = rows.data.total ?? 0;
     const rawRow = rows.data.entries[0] ?? null;
-    return transformSingle<Row, Format>(rawRow, format, total);
+    return transformSingle<Row, Format>(
+      rawRow,
+      format,
+      total,
+      rows.data.previewApproximate
+    );
   }
 
   // Add: first helper
@@ -350,12 +396,26 @@ export const createCollectionsClient = <TSchema = unknown>(
       limit: 1,
       previewKey,
     });
-    if (resp.success === true && resp.data) {
+    const problem =
+      resp.success === true && resp.data
+        ? previewProblem(
+            "first",
+            collection,
+            resp.data.previewApproximate,
+            options?.strictPreview
+          )
+        : null;
+    if (resp.success === true && resp.data && !problem) {
       const total = resp.data.total ?? resp.data.entries.length;
       const rawRow = resp.data.entries[0] ?? null;
-      return transformSingle<Row, Format>(rawRow, format, total);
+      return transformSingle<Row, Format>(
+        rawRow,
+        format,
+        total,
+        resp.data.previewApproximate
+      );
     }
-    const err = resp.error || "Collections request failed";
+    const err = problem || resp.error || "Collections request failed";
     if (shouldThrowErrors) {
       throw new Error(err);
     }
@@ -406,8 +466,17 @@ export const createCollectionsClient = <TSchema = unknown>(
       previewKey,
       // Do not set limit so we get all matches; server-side max still applies
     });
-    if (resp.success !== true || !resp.data) {
-      const err = resp.error || "Collections request failed";
+    const problem =
+      resp.success === true && resp.data
+        ? previewProblem(
+            "getManyByIds",
+            collection,
+            resp.data.previewApproximate,
+            options?.strictPreview
+          )
+        : null;
+    if (resp.success !== true || !resp.data || problem) {
+      const err = problem || resp.error || "Collections request failed";
       if (shouldThrowErrors) {
         throw new Error(err);
       }
@@ -420,7 +489,12 @@ export const createCollectionsClient = <TSchema = unknown>(
     const withKey = rawRows.map((r) => ({ r, k: String(r.id) }));
     withKey.sort((a, b) => rank.get(a.k)! - rank.get(b.k)!);
     const orderedRows = withKey.map((x) => x.r);
-    return transformRows<Row, Format>(orderedRows, format, resp.data.total);
+    return transformRows<Row, Format>(
+      orderedRows,
+      format,
+      resp.data.total,
+      resp.data.previewApproximate
+    );
   }
 
   return {
@@ -432,10 +506,14 @@ export const createCollectionsClient = <TSchema = unknown>(
   };
 };
 
+const previewMeta = (approximate?: boolean) =>
+  approximate ? { previewApproximate: true } : {};
+
 function transformRows<Row, Format extends CollectionsFormat = "data">(
   rows: CollectionsRawEntry<Row>[],
   format: CollectionsFormat | undefined,
-  total: number
+  total: number,
+  previewApproximate?: boolean
 ): CollectionsListResult<Row, Format> {
   const effectiveFormat = (format ?? "data") as Format;
   const safeTotal = typeof total === "number" ? total : rows.length;
@@ -451,7 +529,11 @@ function transformRows<Row, Format extends CollectionsFormat = "data">(
   }
   if (effectiveFormat === "dataWithMeta") {
     const mappedRows = rows.map((entry) => entry.data as Row);
-    return { rows: mappedRows, total: safeTotal } as CollectionsListResult<
+    return {
+      rows: mappedRows,
+      total: safeTotal,
+      ...previewMeta(previewApproximate),
+    } as CollectionsListResult<
       Row,
       Format
     >;
@@ -465,12 +547,17 @@ function transformRows<Row, Format extends CollectionsFormat = "data">(
 function transformSingle<Row, Format extends CollectionsFormat = "data">(
   row: CollectionsRawEntry<Row> | null,
   format: CollectionsFormat | undefined,
-  total: number
+  total: number,
+  previewApproximate?: boolean
 ): CollectionsSingleResult<Row, Format> {
   const effectiveFormat = (format ?? "data") as Format;
   if (!row) {
     if (effectiveFormat === "dataWithMeta") {
-      return { row: null, total } as CollectionsSingleResult<Row, Format>;
+      return {
+        row: null,
+        total,
+        ...previewMeta(previewApproximate),
+      } as CollectionsSingleResult<Row, Format>;
     }
     return null as CollectionsSingleResult<Row, Format>;
   }
@@ -484,7 +571,11 @@ function transformSingle<Row, Format extends CollectionsFormat = "data">(
     >;
   }
   if (effectiveFormat === "dataWithMeta") {
-    return { row: row.data as Row, total } as CollectionsSingleResult<
+    return {
+      row: row.data as Row,
+      total,
+      ...previewMeta(previewApproximate),
+    } as CollectionsSingleResult<
       Row,
       Format
     >;

@@ -39,6 +39,7 @@ export const CONTENT_ISSUE_CODES = [
   "duplicate-identity",
   "ambiguous-identity",
   "ambiguous-union",
+  "not-localizable",
 ] as const;
 export type ContentIssueCode = (typeof CONTENT_ISSUE_CODES)[number];
 const editorialCodes = new Set<ContentIssueCode>([

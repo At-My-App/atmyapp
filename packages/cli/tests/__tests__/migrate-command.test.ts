@@ -16,8 +16,8 @@ jest.mock("../../src/cli/utils", () => {
     planNeedsConfirmation: plans.planNeedsConfirmation,
     suggestedClearFromPlan: plans.suggestedClearFromPlan,
     readOperationsFile: jest.fn(),
-    saveLastMigration: jest.fn(),
-    readLastMigration: jest.fn(),
+    saveMigrationRecord: jest.fn(),
+    readMigrationRecord: jest.fn(),
   };
 });
 
@@ -29,19 +29,25 @@ jest.mock("../../src/runtime", () => ({
   reconcileRemoteMigration: jest.fn(),
 }));
 
-import { migrateCommand } from "../../src/cli/commands/migrate";
+import {
+  migrateCommand,
+  migrateStatusCommand,
+} from "../../src/cli/commands/migrate";
 import {
   findCanonicalSchemaFile,
   getMigrateConfig,
   loadCanonicalSchemaFile,
   logMigrationConflictGuidance,
+  readMigrationRecord,
   readOperationsFile,
-  saveLastMigration,
+  saveMigrationRecord,
   uploadDefinitions,
 } from "../../src/cli/utils";
 import {
   applyRemoteMigration,
+  getRemoteMigrationStatus,
   planRemoteMigration,
+  reconcileRemoteMigration,
   runCanonicalMigrate,
 } from "../../src/runtime";
 
@@ -117,12 +123,23 @@ describe("migrate command", () => {
     const applied = (applyRemoteMigration as jest.Mock).mock.calls[0][1];
     expect(applied).toMatchObject({ planDigest: "digest-1" });
     expect(applied.operationId).toMatch(/^cli-/);
+    expect(applied.acceptWarnings).toBe(true);
     // The operation is recorded before the request, so a lost response can be checked.
-    expect(saveLastMigration).toHaveBeenCalledWith(
-      expect.objectContaining({ operationId: applied.operationId }),
+    expect(saveMigrationRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: applied.operationId,
+        planDigest: "digest-1",
+        url: "https://edge.atmyapp.test",
+        branch: "staging",
+        output,
+        operations: [],
+      }),
+    );
+    expect(JSON.stringify((saveMigrationRecord as jest.Mock).mock.calls[0][0])).not.toContain(
+      "cli-ama-valid",
     );
     expect(
-      (saveLastMigration as jest.Mock).mock.invocationCallOrder[0],
+      (saveMigrationRecord as jest.Mock).mock.invocationCallOrder[0],
     ).toBeLessThan((applyRemoteMigration as jest.Mock).mock.invocationCallOrder[0]);
     expect(exit).not.toHaveBeenCalled();
   });
@@ -256,5 +273,106 @@ describe("migrate command", () => {
     });
     expect(planRemoteMigration).not.toHaveBeenCalled();
     expect(uploadDefinitions).not.toHaveBeenCalled();
+  });
+
+  it("prints exactly one JSON document on stdout with --json", async () => {
+    (planRemoteMigration as jest.Mock).mockResolvedValue(planned());
+    (applyRemoteMigration as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { updated: true },
+    });
+    const stdout = jest.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const logs = jest.spyOn(console, "log").mockImplementation(() => undefined);
+    const errors = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    await run("--json");
+    const printed = stdout.mock.calls.map(([chunk]) => String(chunk)).join("");
+    expect(JSON.parse(printed)).toMatchObject({ status: "applied" });
+    expect(logs).not.toHaveBeenCalled();
+    stdout.mockRestore();
+    logs.mockRestore();
+    errors.mockRestore();
+  });
+});
+
+describe("migrate-status command", () => {
+  let exit: jest.SpyInstance;
+  let stdout: jest.SpyInstance;
+  let errors: jest.SpyInstance;
+  const status = (...args: string[]) =>
+    migrateStatusCommand().parseAsync(["node", "migrate-status", ...args]);
+  const record = {
+    formatVersion: 1,
+    operationId: "cli-recorded-operation",
+    planDigest: "digest-1",
+    url: "https://edge.atmyapp.test/project-a",
+    branch: "main",
+    output: { version: 1, definitions: { posts: {} } },
+    operations: [
+      { type: "renameField", definition: "posts", from: "title", to: "headline" },
+    ],
+    acceptWarnings: true,
+    startedAt: "2026-10-19T00:00:00.000Z",
+  };
+  const printed = () =>
+    stdout.mock.calls.map(([chunk]: [unknown]) => String(chunk)).join("");
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    exit = jest.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    stdout = jest.spyOn(process.stdout, "write").mockImplementation(() => true);
+    errors = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    (getMigrateConfig as jest.Mock).mockReturnValue({
+      url: record.url,
+      token: "cli-ama-valid",
+    });
+    (readMigrationRecord as jest.Mock).mockReturnValue(record);
+    (getRemoteMigrationStatus as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { status: "committed", operationId: record.operationId, commitSha: "abc" },
+    });
+  });
+
+  afterEach(() => {
+    exit.mockRestore();
+    stdout.mockRestore();
+    errors.mockRestore();
+  });
+
+  it("prints valid JSON only", async () => {
+    await status("--json");
+    expect(JSON.parse(printed())).toMatchObject({ status: "committed" });
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it("reconciles with the recorded schema and operations, not the current files", async () => {
+    (reconcileRemoteMigration as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { status: "committed", reconcileNeeded: false },
+    });
+    await status("--reconcile", "--json");
+    expect(reconcileRemoteMigration).toHaveBeenCalledWith(
+      expect.objectContaining({ url: record.url, branch: "main" }),
+      record.operationId,
+      { output: record.output, operations: record.operations, clear: undefined },
+    );
+    expect(runCanonicalMigrate).not.toHaveBeenCalled();
+    expect(JSON.parse(printed())).toMatchObject({ reconcileNeeded: false });
+  });
+
+  it("refuses to check a migration against a different project", async () => {
+    (getMigrateConfig as jest.Mock).mockReturnValue({
+      url: "https://edge.atmyapp.test/project-b",
+      token: "other",
+    });
+    await status("--json");
+    expect(getRemoteMigrationStatus).not.toHaveBeenCalled();
+    expect(JSON.parse(printed())).toMatchObject({
+      status: "error",
+      error: expect.stringContaining("project-a"),
+    });
+    expect(exit).toHaveBeenCalledWith(1);
   });
 });

@@ -18,6 +18,8 @@ export interface LogEntry {
 interface LoggerOptions {
   silent?: boolean;
   onLog?: (entry: LogEntry) => void;
+  /** Writes every level to stderr, keeping stdout for machine-readable output. */
+  stderr?: boolean;
 }
 
 const LEVEL_CONFIG: Record<LogLevel, LevelConfig> = {
@@ -35,11 +37,13 @@ export class Logger {
   private readonly verbose: boolean;
   private readonly silent: boolean;
   private readonly onLog?: (entry: LogEntry) => void;
+  private readonly stderr: boolean;
 
   constructor(verbose: boolean, options: LoggerOptions = {}) {
     this.verbose = verbose;
     this.silent = options.silent ?? false;
     this.onLog = options.onLog;
+    this.stderr = options.stderr ?? false;
   }
 
   info(message: string): void {
@@ -84,7 +88,9 @@ export class Logger {
     for (const [index, line] of lines.entries()) {
       const output = index === 0 ? `${styledLabel} ${line}` : `${continuationPrefix}${line}`;
 
-      if (method === "warn") {
+      if (this.stderr) {
+        console.error(output);
+      } else if (method === "warn") {
         console.warn(output);
       } else if (method === "error") {
         console.error(output);

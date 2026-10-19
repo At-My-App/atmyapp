@@ -239,6 +239,64 @@ describe("Collections client", () => {
     ).resolves.toEqual([]);
   });
 
+  describe("approximate previews", () => {
+    const approximate = () =>
+      server.use(
+        http.get(`${API_BASE_URL}/collections/:collection/entries`, () =>
+          HttpResponse.json({
+            success: true,
+            data: {
+              entries: [{ id: 1, data: { title: "Draft" } }],
+              total: 1,
+              previewApproximate: true,
+            },
+          })
+        )
+      );
+
+    it("keeps the indicator in results and reports it", async () => {
+      approximate();
+      const onPreviewApproximate = jest.fn();
+      const client = createAtMyAppClient({
+        apiKey: "k",
+        baseUrl: API_BASE_URL,
+        previewKey: "preview",
+        onPreviewApproximate,
+      });
+      await expect(
+        client.collections.list("posts", { format: "dataWithMeta" })
+      ).resolves.toEqual({
+        rows: [{ title: "Draft" }],
+        total: 1,
+        previewApproximate: true,
+      });
+      await expect(client.collections.list("posts")).resolves.toEqual([
+        { title: "Draft" },
+      ]);
+      expect(onPreviewApproximate).toHaveBeenCalledWith({
+        collection: "posts",
+        method: "list",
+      });
+    });
+
+    it("treats an approximate preview as a failure with strictPreview", async () => {
+      approximate();
+      const client = createAtMyAppClient({
+        apiKey: "k",
+        baseUrl: API_BASE_URL,
+        previewKey: "preview",
+        strictPreview: true,
+        errorPolicy: "throw",
+      });
+      await expect(client.collections.list("posts")).rejects.toThrow(
+        /strictPreview/
+      );
+      await expect(
+        client.collections.list("posts", { strictPreview: false })
+      ).resolves.toEqual([{ title: "Draft" }]);
+    });
+  });
+
   it("supports throw mode for collection failures", async () => {
     server.use(
       http.get(`${API_BASE_URL}/collections/:collection/entries`, () => {

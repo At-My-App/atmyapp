@@ -184,7 +184,9 @@ Renames are never guessed. Declare them in an operations file:
 
 `renameField` moves stored values, including translations, and moves form layouts to the new name. `backfillField` fills the field only where it is missing.
 
-Each apply uses a new operation ID, saved to `.ama/last-migration.json` before the request is sent. If content changed after the plan was made, the CLI reports that nothing was written; run it again to review a fresh plan. If the response is lost, the migration may still have been applied. Check it with:
+A plan with content warnings, such as a shorter maximum length than some stored values, needs the same confirmation. Confirming approves exactly those warnings.
+
+Each apply uses a new operation ID. Before the request is sent, the CLI writes a record of it to `.ama/migrations/<operationId>.json`: the server URL, branch, compiled schema, operations and clears (never the token). Records are never changed afterwards. If content changed after the plan was made, the CLI reports that nothing was written; run it again to review a fresh plan. If the response is lost, the migration may still have been applied. Check it with:
 
 ### `atmyapp migrate-status`
 
@@ -192,7 +194,9 @@ Each apply uses a new operation ID, saved to `.ama/last-migration.json` before t
 atmyapp migrate-status [operationId] [--reconcile] [--operations <file>] [--json]
 ```
 
-This reports whether a migration was committed. The default operation is the last one started in this directory. `--reconcile` re-runs follow-up work, such as updating the read model or moving form layouts, for a committed migration. Use the same schema and operations file that the migration was applied with.
+This reports whether a migration was committed. The default operation is the last one started in this directory. `--reconcile` re-runs follow-up work, such as updating the read model, for a committed migration. It uses the recorded schema and operations, so later edits to your schema files do not matter. If your session now points at a different project or branch, the command stops instead of checking the wrong one. `--operations` is only needed for a migration started elsewhere, without a local record.
+
+With `--json`, stdout contains exactly one JSON document, also on failure; logs go to stderr.
 
 If no canonical schema file is found, the command exits with a clear error.
 

@@ -37,6 +37,8 @@ Integer values must be safe integers; all numbers must be finite. Dates are real
 
 Editable object arrays get reserved `_key` values unless `identityField` is declared. Initial legacy IDs are derived from immutable resource/array/base-item context; new IDs are random and must be retained in the saved operation. Recovery uses unique base matches, never edited position. Ambiguity, duplicate keys and stale deterministic identities reject the proposal without replacing IDs. Primitive arrays stay atomic. `_key` is delivered unchanged and optional in generated object-item types until the project is backfilled.
 
+Translations address source items by identity. A translation may set only `localize: true` fields; anything else fails with `not-localizable`. When the source deletes an item, its translated fragments are removed in the same write (`pruneDeletedItemTranslations`). A translation that names an item the source does not have is still rejected.
+
 Unknown schema kinds/versions/properties, malformed defaults/regexes/cardinalities, reserved fields and colliding aliases fail closed. `validateSchemaDocument` also checks semantic constraints, including targets and supported uniqueness scopes. Root transport metadata is excluded from semantic serialization. Top-level content properties removed from the editor remain stored; nested closed objects keep their declared additional-property policy and permit internal `_key`.
 
 AMA's rollout requires a read-only audit of tester snapshots and site builds before enabling enforcement. Untouched legacy content is not globally rewritten; pending item IDs are reported separately. Locales require an explicit project backfill and no pending content drafts. Migration warning acceptance is separate from publication consent.

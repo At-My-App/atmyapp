@@ -149,7 +149,12 @@ export interface AppliedMigration {
 /** Applies exactly the reviewed plan. Retrying with the same operation ID is safe. */
 export function applyRemoteMigration(
   target: MigrationTarget,
-  request: MigrationRequest & { planDigest: string; operationId: string },
+  request: MigrationRequest & {
+    planDigest: string;
+    operationId: string;
+    /** The owner reviewed and approved the plan's content warnings. */
+    acceptWarnings?: boolean;
+  },
 ) {
   return call<AppliedMigration>(target, "/apply", {
     method: "POST",
@@ -157,6 +162,7 @@ export function applyRemoteMigration(
       ...requestBody(request),
       planDigest: request.planDigest,
       operationId: request.operationId,
+      ...(request.acceptWarnings ? { acceptWarnings: true } : {}),
     },
   });
 }

@@ -1,13 +1,15 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
-import { resolve } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { join, resolve } from "path";
 import type { MigrationOperation } from "@atmyapp/structure";
 import type {
   RemoteMigrationPlan,
   UploadStructureClearRequest,
 } from "../../runtime";
 import { Logger } from "../logger";
+import type { OutputDefinition } from "../types/migrate";
 
 const LAST_MIGRATION_PATH = "./.ama/last-migration.json";
+const MIGRATIONS_DIRECTORY = "./.ama/migrations";
 
 /**
  * Reads declared operations, for example:
@@ -124,24 +126,62 @@ export function logMigrationPlan(plan: RemoteMigrationPlan, logger: Logger) {
   for (const block of plan.blocks) logger.error(`  Blocked: ${block.message}`);
 }
 
-export interface LastMigration {
+/**
+ * Everything needed to check or finish one migration later, exactly as it was
+ * requested: the target, the compiled schema and the operations. Written once
+ * per operation and never changed. Holds no credentials.
+ */
+export interface MigrationRecord {
+  formatVersion: 1;
   operationId: string;
   planDigest: string;
+  /** Server URL of the project session the migration was sent to. */
+  url: string;
   branch?: string;
-  operationsFile?: string;
+  output: OutputDefinition;
+  operations: MigrationOperation[];
   clear?: UploadStructureClearRequest;
+  /** The owner approved the plan's content warnings. */
+  acceptWarnings: boolean;
   startedAt: string;
 }
 
+const SAFE_OPERATION_ID = /^[A-Za-z0-9_.-]{8,128}$/;
+const recordPath = (operationId: string) =>
+  join(MIGRATIONS_DIRECTORY, `${operationId}.json`);
+
 /** Written before apply, so a lost response can still be checked and reconciled. */
-export function saveLastMigration(record: LastMigration) {
-  writeFileSync(LAST_MIGRATION_PATH, JSON.stringify(record, null, 2));
+export function saveMigrationRecord(record: MigrationRecord) {
+  if (!SAFE_OPERATION_ID.test(record.operationId))
+    throw new Error(`Invalid operation ID: ${record.operationId}`);
+  mkdirSync(MIGRATIONS_DIRECTORY, { recursive: true });
+  // "wx": a record is immutable; an existing one is never overwritten.
+  writeFileSync(recordPath(record.operationId), JSON.stringify(record, null, 2), {
+    flag: "wx",
+  });
+  writeFileSync(
+    LAST_MIGRATION_PATH,
+    JSON.stringify({ operationId: record.operationId }, null, 2),
+  );
 }
 
-export function readLastMigration(): LastMigration | null {
-  if (!existsSync(LAST_MIGRATION_PATH)) return null;
+/** The record of one operation, or of the last one started here when no ID is given. */
+export function readMigrationRecord(operationId?: string): MigrationRecord | null {
+  let id = operationId;
+  if (!id) {
+    try {
+      id = JSON.parse(readFileSync(LAST_MIGRATION_PATH, "utf8")).operationId;
+    } catch {
+      return null;
+    }
+  }
+  if (!id || !SAFE_OPERATION_ID.test(id) || !existsSync(recordPath(id)))
+    return null;
   try {
-    return JSON.parse(readFileSync(LAST_MIGRATION_PATH, "utf8")) as LastMigration;
+    const record = JSON.parse(readFileSync(recordPath(id), "utf8"));
+    return record?.formatVersion === 1 && record.operationId === id
+      ? (record as MigrationRecord)
+      : null;
   } catch {
     return null;
   }

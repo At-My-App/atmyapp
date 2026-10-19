@@ -1,9 +1,11 @@
-import { mkdtempSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
   planNeedsConfirmation,
+  readMigrationRecord,
   readOperationsFile,
+  saveMigrationRecord,
   suggestedClearFromPlan,
 } from "../../src/cli/utils/migration-plan";
 import {
@@ -125,5 +127,31 @@ describe("migration HTTP client", () => {
           ),
       ),
     ).toMatchObject({ ok: false, uncertain: false, code: "PLAN_STALE" });
+  });
+
+  it("writes one immutable record per migration and finds the last one", () => {
+    const cwd = process.cwd();
+    process.chdir(mkdtempSync(join(tmpdir(), "ama-records-")));
+    try {
+      mkdirSync(".ama");
+      const record = {
+        formatVersion: 1 as const,
+        operationId: "cli-first-operation",
+        planDigest: "d",
+        url: "https://edge.test/p",
+        output: { version: 1, definitions: {} } as never,
+        operations: [],
+        acceptWarnings: true,
+        startedAt: "now",
+      };
+      saveMigrationRecord(record);
+      expect(readMigrationRecord()).toEqual(record);
+      expect(readMigrationRecord("cli-first-operation")).toEqual(record);
+      expect(() => saveMigrationRecord({ ...record, planDigest: "changed" })).toThrow();
+      expect(readMigrationRecord("cli-first-operation")?.planDigest).toBe("d");
+      expect(readMigrationRecord("../escape")).toBeNull();
+    } finally {
+      process.chdir(cwd);
+    }
   });
 });
