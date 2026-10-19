@@ -1,5 +1,20 @@
 # @atmyapp/cli
 
+## 0.3.0
+
+### Minor Changes
+
+- d6d295e: Persist the normalized canonical schema directly from the CLI. Preserve paths and field metadata, remove generated audit timestamps from schema output, reject colliding aliases and unsupported versions, and expose deterministic contract serialization. Public submission schemas no longer accept secret literals; configure those on the server. The CLI includes TypeScript as a runtime dependency and accurately reports that removed-column values are retained.
+- d6d295e: Plan schema migrations against the target environment's content and apply exactly the reviewed plan. The CLI plans, confirms (`--yes` for CI), and applies with a plan digest and a durable operation ID, and adds `--operations` (renameField, backfillField), `--branch`, `--json` and `atmyapp migrate-status [--reconcile]`. The structure planner reports required-ness, enum, bound, format, rename, kind and path changes and exposes `validateMigrationOperations` and `applyMigrationOperations`. Legacy artifacts carrying `version: 1` are read as legacy, `isAssignedOnSave` identifies server-assigned order and sourced slug values, and JSON Schema `integer` columns read as whole numbers.
+
+### Patch Changes
+
+- Updated dependencies [d6d295e]
+- Updated dependencies [d6d295e]
+- Updated dependencies [d6d295e]
+  - @atmyapp/structure@0.4.0
+  - @atmyapp/core@0.5.0
+
 ## 0.2.3
 
 ### Patch Changes
