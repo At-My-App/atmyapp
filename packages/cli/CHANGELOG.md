@@ -1,5 +1,17 @@
 # @atmyapp/cli
 
+## 0.5.0
+
+### Minor Changes
+
+- e5e210b: `atmyapp submissions tail [type]` follows form submissions as they arrive: received ones with their environment, sender and a snippet; rejected ones with the reason; and inbox changes. `--json` prints NDJSON for scripts. Live visitor data is hidden unless `--include-live-data` is passed; test and local submissions always show in full.
+
+### Patch Changes
+
+- e5e210b: The `astro-tailwind` starter registers the `atmyapp()` integration (without it, builds failed to resolve `virtual:atmyapp/config`), depends on the current `@atmyapp/astro`, `@atmyapp/core` and `@atmyapp/structure`, and its `.env.example` uses `ATMYAPP_API_URL` with the content host. `atmyapp init` now prints `ATMYAPP_API_URL` with the content (`edge`) host instead of the CLI URL, and the generated client prefers it. `atmyapp --version` reports the installed version.
+- Updated dependencies [e5e210b]
+  - @atmyapp/core@0.7.0
+
 ## 0.4.0
 
 ### Minor Changes
