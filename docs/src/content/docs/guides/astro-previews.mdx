@@ -1,7 +1,9 @@
 ---
 title: Astro modes and previews
-description: Understand DEV_MODE, request-scoped previews, caching and server deployment.
+description: How the integration switches between static builds and per-request rendering, and how previews reach your pages.
 ---
+
+The integration renders your site in one of two modes. **Static** mode fetches content once, during `astro build`, and writes plain HTML. **Dynamic** mode renders each request on a server, which is what makes previews of unpublished drafts possible. You usually don't choose: `astro dev` and AtMyApp preview servers are dynamic, and production builds are static.
 
 ## Mode selection
 
@@ -18,7 +20,32 @@ The integration resolves the mode when Astro starts or builds:
 
 AMA preview servers default `DEV_MODE` to `true` unless you explicitly configure it or the alias. Normal production builds should leave both variables unset or set `DEV_MODE=false`. Changing the variable on an already-built static site cannot turn it into a dynamic server; rebuild it.
 
-The integration owns Astro's `output` setting. In dynamic mode it disables prerendering for routes so query context is available. For a deliberately mixed static/server application, use the core SDK directly and manage Astro's rendering modes yourself.
+The integration owns Astro's `output` setting. In dynamic mode it disables prerendering for every route, so each request can carry a preview key. For a deliberately mixed static/server application, use the core SDK directly and manage Astro's rendering modes yourself.
+
+## Pages that work in both modes
+
+A dynamic route such as `src/pages/blog/[slug].astro` needs two things:
+
+```astro title="src/pages/blog/[slug].astro"
+---
+import { getAtMyApp } from "@atmyapp/astro/server";
+import { CollectionsFilter as F } from "@atmyapp/core";
+import schema from "../../../atmyapp.schema";
+
+// Static builds: which pages to generate.
+export async function getStaticPaths() {
+  const posts = await getAtMyApp({ schema }).collections.list("posts");
+  return posts.map((post) => ({ params: { slug: post.slug } }));
+}
+
+// Both modes: load the entry for this URL.
+const ama = getAtMyApp(Astro, { schema });
+const post = await ama.collections.first("posts", { filter: F.eq("slug", Astro.params.slug!) });
+if (!post) return new Response("Not found", { status: 404 });
+---
+```
+
+In static mode Astro calls `getStaticPaths()` and renders each page once. In dynamic mode it skips `getStaticPaths()` and renders the page per request, so a draft post shows up in a preview before it's published. `getAtMyApp()` without `Astro` works only inside `getStaticPaths()` and other build-time code. Collections return at most 50 entries per request; for more, [paginate](/guides/collections/#paginate).
 
 ## Environment resolution
 
@@ -85,7 +112,7 @@ AMA's production hosting is static-first. A dynamic Node build needs a Node serv
 
 ## Troubleshooting
 
-- **Missing API URL:** use the complete project URL, not just `https://api.atmyapp.com`.
+- **Missing API URL:** use the Project API URL from **Settings → API keys**: `https://edge.atmyapp.com/v0/projects/<id>`.
 - **Preview looks published:** check dynamic mode, request URL and diagnostics. A static site cannot use request-time preview parameters.
 - **Metadata is old after publishing:** rebuild the static site. Dynamic preview refreshes should show the current edit.
 - **Preview cannot be verified:** reopen it from AtMyApp; check that both API and SDK support preview diagnostics.

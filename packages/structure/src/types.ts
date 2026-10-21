@@ -72,7 +72,11 @@ export interface EventDefinition {
   columns: string[];
 }
 
-export type SubmissionCaptchaProvider = "hcaptcha" | (string & {});
+export type SubmissionCaptchaProvider =
+  | "turnstile"
+  | "recaptcha"
+  | "hcaptcha"
+  | (string & {});
 
 export interface SubmissionCaptchaConfig {
   required?: boolean;

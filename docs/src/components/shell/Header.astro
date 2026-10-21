@@ -3,36 +3,41 @@ import Search from "virtual:starlight/components/Search";
 import ThemeSelect from "virtual:starlight/components/ThemeSelect";
 import ShellIcon from "./ShellIcon.astro";
 import logo from "../../assets/logo.png";
+
+const path = Astro.url.pathname;
+const section = path.startsWith("/reference/")
+  ? "reference"
+  : path === "/examples/"
+    ? "recipes"
+    : path === "/changelog/"
+      ? "changelog"
+      : "guides";
+const links = [
+  { id: "guides", label: "Guides", href: "/" },
+  { id: "reference", label: "Reference", href: "/reference/core/" },
+  { id: "recipes", label: "Recipes", href: "/examples/" },
+  { id: "changelog", label: "Changelog", href: "/changelog/" },
+];
 ---
 
 <div class="ama-topbar">
   <a class="ama-brand" href="/" aria-label="AtMyApp Docs home">
     <img src={logo.src} alt="" />
-    <span>AtMyApp Docs</span>
+    <span>AtMyApp</span>
+    <span class="ama-brand-tag">Docs</span>
   </a>
 
   <nav class="ama-topnav" aria-label="Primary">
-    <a
-      aria-current={!Astro.url.pathname.startsWith("/reference/") &&
-      !["/examples/", "/changelog/"].includes(Astro.url.pathname)
-        ? "page"
-        : undefined}
-      href="/">Documentation</a
-    >
-    <a
-      aria-current={Astro.url.pathname.startsWith("/reference/")
-        ? "page"
-        : undefined}
-      href="/reference/core/">API Reference</a
-    >
-    <a
-      aria-current={Astro.url.pathname === "/examples/" ? "page" : undefined}
-      href="/examples/">Examples</a
-    >
-    <a
-      aria-current={Astro.url.pathname === "/changelog/" ? "page" : undefined}
-      href="/changelog/">Changelog</a
-    >
+    {
+      links.map((link) => (
+        <a
+          href={link.href}
+          aria-current={section === link.id ? "page" : undefined}
+        >
+          {link.label}
+        </a>
+      ))
+    }
   </nav>
 
   <div class="ama-header-actions">
@@ -54,8 +59,8 @@ import logo from "../../assets/logo.png";
     <div class="ama-theme-wrap">
       <ThemeSelect />
     </div>
-    <a class="ama-cta" href="https://atmyapp.com">
-      <span>Go to AtMyApp</span>
+    <a class="ama-cta" href="https://app.atmyapp.com">
+      <span>Open dashboard</span>
       <ShellIcon name="arrow" />
     </a>
   </div>

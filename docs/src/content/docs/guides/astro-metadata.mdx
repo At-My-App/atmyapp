@@ -1,6 +1,6 @@
 ---
-title: Astro metadata
-description: Predictable page and website defaults with safe social and structured metadata.
+title: Metadata and SEO
+description: Page titles, descriptions, social cards, icons and structured data, managed by your client and rendered by AtMyAppHead.
 ---
 
 ## Website settings
@@ -67,8 +67,6 @@ The production homepage receives basic `WebSite` JSON-LD from the website name a
 />
 ```
 
-AI enrichment after publication is a separate upcoming hosting feature. It is not enabled by these settings yet.
-
 ## Other frameworks and direct reads
 
 The shared contract and resolver are exported from `@atmyapp/structure` and re-exported by `@atmyapp/core`:
@@ -87,8 +85,6 @@ const metadata = resolveWebsiteMetadata(
 );
 ```
 
-The experimental Astro-specific configuration has been replaced by `_SystemConfig/website/metadata.json` and `GET /system-config/website.metadata`. Update the SDK and backend together, and initialize Website settings. No old-path migration or compatibility alias is provided.
-
 ## Metadata availability
 
 By default, missing or unavailable metadata raises a clear error. For a website that intentionally tolerates unavailable managed metadata, use `metadataError="fallback"` and local `defaults`. Preview errors still fail so an editor is not shown misleading published defaults.
@@ -97,9 +93,18 @@ By default, missing or unavailable metadata raises a clear error. For a website 
 <AtMyAppHead metadataError="fallback" defaults={{ title: 'Example' }} />
 ```
 
-## Analytics
+## Browser client
 
-`<AtMyAppHead trackPageView />` enables page-view events. They are disabled on preview pages. For custom browser events, import `getClient` from `@atmyapp/astro/client`. The head component supplies public configuration. It does not load arbitrary external analytics scripts from metadata fields.
+`AtMyAppHead` also publishes the public configuration to the page, so browser scripts can read content with the same project and preview context:
+
+```astro
+<script>
+  import { getClient } from "@atmyapp/astro/client";
+  const home = await getClient().storage.getFromPath("home.json");
+</script>
+```
+
+`trackPageView` sends page-view events to AtMyApp's experimental content analytics. It's off by default; leave it off unless you're trying that feature.
 
 ## Sitemap and robots
 

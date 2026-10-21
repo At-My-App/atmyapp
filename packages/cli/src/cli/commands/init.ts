@@ -128,9 +128,31 @@ async function maybeCreateApiKey(
   logger.success(
     `Created API key "${apiKey.name}" for environment "${environment.name}".`,
   );
+  const contentApiUrl = getContentApiUrl(session.url, session.projectId);
   logger.info("Copy these lines into your env file:");
-  console.log(`ATMYAPP_URL=${session.url}`);
+  console.log(
+    `ATMYAPP_API_URL=${contentApiUrl ?? "<Project API URL from Settings → API keys>"}`,
+  );
   console.log(`ATMYAPP_API_KEY=${apiKey.id}`);
+}
+
+/**
+ * Websites read content from the edge host, while the CLI talks to the core
+ * API host. Returns null for hosts without a known edge counterpart.
+ */
+export function getContentApiUrl(cliUrl: string, projectId: string): string | null {
+  const edgeOrigins: Record<string, string> = {
+    "api.atmyapp.com": "https://edge.atmyapp.com",
+    "staging-api.atmyapp.com": "https://staging-edge.atmyapp.com",
+  };
+  let host: string;
+  try {
+    host = new URL(cliUrl).host;
+  } catch {
+    return null;
+  }
+  const origin = edgeOrigins[host];
+  return origin ? `${origin}/v0/projects/${encodeURIComponent(projectId)}` : null;
 }
 
 export function initCommand(): Command {

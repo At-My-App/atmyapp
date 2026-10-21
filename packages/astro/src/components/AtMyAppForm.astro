@@ -1,9 +1,14 @@
 ---
 import AtMyAppFormEnhancement from "./AtMyAppFormEnhancement.astro";
+import AtMyAppRecaptchaV3 from "./AtMyAppRecaptchaV3.astro";
 import type { HTMLAttributes } from "astro/types";
 import { getAtMyApp, getAtMyAppConfiguration } from "../server";
 import type { AstroClientOptions } from "../config";
 import { resolveForm } from "../forms";
+import {
+  SUBMISSION_HONEYPOT_FIELD,
+  SUBMISSION_RENDERED_AT_FIELD,
+} from "@atmyapp/core";
 interface Props extends Omit<
   HTMLAttributes<"form">,
   "action" | "method" | "enctype"
@@ -46,6 +51,42 @@ const form = await resolveForm(client, submission, {
         <slot />
         <slot name="captcha" />
       </>
+      {form.honeypot && (
+        <input
+          type="text"
+          name={SUBMISSION_HONEYPOT_FIELD}
+          tabindex="-1"
+          autocomplete="off"
+          aria-hidden="true"
+          style="position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden"
+        />
+      )}
+      <input type="hidden" name={SUBMISSION_RENDERED_AT_FIELD} value={String(Date.now())} />
+      {form.captcha &&
+        (form.captcha.invisible ? (
+          <input
+            type="hidden"
+            name={form.captcha.tokenField}
+            data-atmyapp-recaptcha={form.captcha.siteKey}
+          />
+        ) : (
+          <>
+            <div class={form.captcha.className} data-sitekey={form.captcha.siteKey} />
+            {/* Show the widget right above the submit button. */}
+            <script is:inline>
+              (function (script) {
+                var widget = script.previousElementSibling;
+                var form = script.closest("form");
+                var button =
+                  form &&
+                  form.querySelector(
+                    'button[type="submit"], input[type="submit"], button:not([type])',
+                  );
+                if (widget && button) button.before(widget);
+              })(document.currentScript);
+            </script>
+          </>
+        ))}
       {enhance && <p data-atmyapp-result role="status" aria-live="polite" />}
     </form>
   ) : (
@@ -59,4 +100,8 @@ const form = await resolveForm(client, submission, {
     </div>
   )
 }
+{form.enabled && form.captcha && (
+  <script is:inline src={form.captcha.scriptSrc} async defer />
+)}
+{form.enabled && form.captcha?.invisible && !enhance && <AtMyAppRecaptchaV3 />}
 {enhance && form.enabled && <AtMyAppFormEnhancement />}

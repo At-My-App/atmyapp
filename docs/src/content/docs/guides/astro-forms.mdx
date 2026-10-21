@@ -19,7 +19,9 @@ import AtMyAppForm from '@atmyapp/astro/form';
 </AtMyAppForm>
 ```
 
-The SDK resolves AtMyApp's public form action during rendering. Submissions go directly to that endpoint, including on static hosting. No API key is placed in a hidden form field. Styling, labels and field markup remain yours. Browser validation is a convenience; the receiving API remains authoritative.
+The SDK reads AtMyApp's public form address during rendering. The address is stable, so reading it never creates or changes anything. Submissions go directly to that endpoint, including on static hosting, and no API key is placed in the page. Styling, labels and field markup remain yours. Browser validation is a convenience; the receiving API remains authoritative.
+
+The component also adds the hidden spam trap (`_ama_hp`) and the render time (`_ama_t`) that [spam protection](/guides/form-spam-protection/) uses.
 
 `returnTo` may be relative to the configured production `site`. Off-site return URLs are rejected when `site` is configured. Without `returnTo`, the public endpoint displays its result page. With it, the normal HTML flow returns to your page with a success/error result; your page must handle both. Do not label every return as a success without reading the result.
 
@@ -37,15 +39,15 @@ The public endpoint uses `result=success|error`, with `error` for errors and `su
 
 Configure matching asset fields in the submission schema. The SDK infers the encoding when you pass a schema in `clientOptions`; otherwise it defaults to multipart, which supports uploads. `accept` only guides the file picker; server file validation and limits still apply.
 
-## Closed forms and CAPTCHA
+## Closed forms and captcha
 
-A closed form renders disabled with a message. This is a build-time hint on static websites: changing acceptance later is enforced by the receiving API, and rebuilding updates the displayed state.
+A closed form renders disabled with a message. On static websites this reflects the state at build time: the receiving API enforces the current state, and rebuilding updates what's shown.
 
-If CAPTCHA is required, the component disables submission until you provide a named `captcha` slot. Include your configured provider's widget and scripts there. The provider must populate the token field accepted by AtMyApp (for hCaptcha, `h-captcha-response`). Slot presence does not prove a valid CAPTCHA token; the API verifies it. Never include the provider's secret in the page.
+When the form requires a captcha, the component renders the configured widget (Turnstile, reCAPTCHA or hCaptcha) just above the submit button and loads the provider's script. reCAPTCHA v3 is invisible: a token is fetched when the visitor submits, with or without `enhance`. To place or style the widget yourself, put it in the named `captcha` slot. The automatic widget is then skipped, and the slot's widget must write the provider's own token field (for example `cf-turnstile-response`). The site key comes from the form's public settings; the secret never reaches the page. See [Spam protection](/guides/form-spam-protection/) for choosing a provider and setting up keys.
 
 ## Preview behavior
 
-Preview forms are disabled by default and do not resolve/provision a public form URL. Use `allowPreviewSubmit` only when you intentionally want **real** submissions. It is not a sandbox: successful requests enter the project's submissions workflow. Return redirects depend on the endpoint's origin policy, so a production `returnTo` may be unavailable from an external preview host.
+Preview forms are disabled by default. Use `allowPreviewSubmit` only when you intentionally want **real** submissions from a preview; when the service can tell they came from a preview, it labels them *preview* and keeps them out of the inbox and notifications. Return redirects depend on the endpoint's origin policy, so a production `returnTo` may be unavailable from an external preview host.
 
 ## Optional inline feedback
 
@@ -56,15 +58,30 @@ Preview forms are disabled by default and do not resolve/provision a public form
 </AtMyAppForm>
 ```
 
-`enhance` adds a small browser handler: pending status, duplicate-click protection, text errors, and inline success. It preserves entered values after an error and resets the form after success. Without JavaScript it still submits as HTML. Cross-origin enhancement needs the AtMyApp endpoint's CORS policy to allow the website origin.
+`enhance` submits with `fetch` using [`enhanceSubmissionForm`](/guides/forms/#2-enhance-the-form) from `@atmyapp/core/forms`:
 
-With `enhance` and `returnTo`, successful requests navigate to the return URL; errors remain on the form. This does not provide an exactly-once delivery guarantee after a lost network response. For CAPTCHA forms, reset/reissue the provider token after an attempt as required by that provider.
+- It disables the submit button while sending.
+- It marks invalid fields with `aria-invalid` and shows their errors.
+- It resets the captcha after a captcha error.
+- On success it shows a message (or follows `returnTo`) and resets the form.
+
+Entered values are kept after an error. Retrying after a lost connection reuses the same idempotency key, so the message is never stored twice. Without JavaScript the form still submits as HTML.
+
+To show an error next to a field, add an element with `data-atmyapp-error="<field>"`:
+
+```astro
+<label>Email <input name="email" type="email" required /></label>
+<small data-atmyapp-error="email"></small>
+```
+
+Errors for fields without such an element appear in the status line at the end of the form.
 
 ## Troubleshooting
 
 - **Type not found:** create the submission type and check the exact name.
 - **Fields missing:** check input `name` attributes against the schema; disabled fields are not submitted.
 - **Form is closed:** enable accepting responses in AtMyApp and rebuild if you want the static UI updated.
-- **CAPTCHA required:** provide the widget slot and configure provider verification in AtMyApp.
+- **Captcha errors:** use **Verify keys** in the form's settings, and make sure the provider's site lists your domain (and `localhost` for local testing).
+- **Not sure what's wrong:** send a test with `X-AMA-Test: 1` (or *Integrate → Send a test* in the dashboard) for a step-by-step report, or watch `atmyapp submissions tail`.
 - **Redirect unavailable:** use the configured website origin; confirm the public endpoint's origin policy.
 - **Inline request fails:** inspect CORS and network status; the plain HTML flow can work even if browser fetch is blocked.

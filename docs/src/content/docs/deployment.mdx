@@ -1,33 +1,113 @@
 ---
-title: Deploy your website
-description: Choose a content delivery strategy and verify production behavior.
+title: Deploy
+description: Ship on AtMyApp hosting with automatic rebuilds, or on any other static or server host.
 ---
 
-AtMyApp provides content; your website's rendering strategy determines how it reaches visitors.
+import { Aside, Steps } from "@astrojs/starlight/components";
 
-## Static production
+How your website is deployed decides when your client's published edits go live. Pick the setup that matches how you render.
 
-Fetch content during the build, generate HTML, and deploy the output directory through your host. Configure production project values in the build environment and keep preview keys out of production configuration. Use `errorPolicy: 'throw'` for required content so a failed read cannot silently become a successful empty build.
+| Setup | Published edits go live | You configure |
+| --- | --- | --- |
+| [AtMyApp hosting](#atmyapp-hosting) (static) | Automatically, after a rebuild | A GitHub repository and a build command |
+| [Another static host](#another-static-host) | When you rebuild | Environment variables and a rebuild trigger |
+| [A server](#server-rendering) | On the next request | Environment variables and caching |
 
-A published content change needs a rebuild and successful deployment before static HTML changes. Verify that your hosting workflow performs that step. Also generate dynamic routes and the sitemap from the same published content snapshot where your framework supports it.
+## AtMyApp hosting
 
-For Astro, production defaults to static. Do not set `DEV_MODE=true` on a static production build. Read [Astro modes](/guides/astro-previews/) before configuring a dynamic adapter.
+AtMyApp builds your repository and serves the result. When your client publishes, a new build starts, and the site switches over only when the build succeeds.
 
-## Server or browser rendering
+<Steps>
 
-Fetch content in a request loader or browser code and handle loading, empty, and error states. Make cache behavior deliberate. Keep preview clients scoped to individual requests and prevent shared caching of preview responses. Public website API keys can be included in browser code; CLI tokens cannot.
+1. In the dashboard, open **Settings → Hosting** and connect the GitHub repository.
+
+2. Set the build command (for example `npm run build`) and the output directory (`dist` for Astro).
+
+3. Start the first build. You can follow its log live.
+
+4. Add your domain and follow the DNS instructions shown there. Subdomains such as `www.example.com` point at AtMyApp with a CNAME record.
+
+</Steps>
+
+Builds receive these environment variables automatically, so you don't add your keys:
+
+| Variable | Value |
+| --- | --- |
+| `ATMYAPP_API_URL` | The Project API URL |
+| `ATMYAPP_API_KEY` | A project API key |
+| `ATMYAPP_CODE_COMMIT`, `ATMYAPP_BUILD_TIME` | Used by [diagnostics](/guides/diagnostics/) |
+
+Add any other variables your build needs in the hosting settings. Rebuild on publish is on by default for new websites; you can turn it off there too. Pushing to the connected branch also starts a build.
+
+<Aside type="tip">
+A failed build never replaces the live site. If content breaks a build, for example because a required read fails, the previous version stays online and the build log shows why.
+</Aside>
+
+## Another static host
+
+Netlify, Vercel, Cloudflare Pages, GitHub Pages and similar hosts work like any static build.
+
+<Steps>
+
+1. Add `ATMYAPP_API_URL` and `ATMYAPP_API_KEY` to the host's build environment. Use the values from **Settings → API keys**.
+
+2. Make sure the build fails on a failed read. In Astro this is the default. With `@atmyapp/core`, set `errorPolicy: "throw"`.
+
+3. Decide how rebuilds happen after your client publishes.
+
+</Steps>
+
+AtMyApp doesn't trigger builds on other hosts, so choose one:
+
+- **Rebuild on a schedule.** Most hosts offer a deploy hook URL. Call it periodically:
+
+  ```yaml title=".github/workflows/rebuild.yml"
+  name: Rebuild with fresh content
+  on:
+    schedule:
+      - cron: "*/30 * * * *" # every 30 minutes
+    workflow_dispatch:
+  jobs:
+    rebuild:
+      runs-on: ubuntu-latest
+      steps:
+        - run: curl -fsS -X POST "$DEPLOY_HOOK_URL"
+          env:
+            DEPLOY_HOOK_URL: ${{ secrets.DEPLOY_HOOK_URL }}
+  ```
+
+- **Rebuild by hand.** Fine for sites that change rarely. Tell your client who to ask.
+- **Render on the server** instead, so there's nothing to rebuild.
+
+Previews need a server. Static hosts can't show drafts, so keep previews on [AtMyApp preview servers](/guides/previews/#atmyapp-preview-servers).
+
+## Server rendering
+
+With an Astro adapter, Next.js, SvelteKit or any Node server, content is read per request.
+
+- Configure `ATMYAPP_API_URL` and `ATMYAPP_API_KEY` as runtime variables. Astro reads them through `astro:env` at runtime.
+- Published reads may be cached for up to 60 seconds. Add your own page caching on top if you need it.
+- Create a client per request when you support previews, and never cache preview responses. See [Drafts and previews](/guides/previews/).
+
+For Astro, build with `DEV_MODE=true` and an adapter. See [Dynamic production](/guides/astro-previews/#dynamic-production-example).
 
 ## Release schema and code together
 
-Review `atmyapp migrate --dry-run --verbose` against the intended project before applying a schema change. Deploy code compatible with existing content or backfill the content first. Preserve the previous working website deployment while the new build runs. Document how to roll back code and whether the schema change is backward compatible.
+A schema change and the code that uses it should go live together:
 
-## Verify production
+1. Run `npx atmyapp migrate` and review the plan. See [Change a live schema](/guides/schema-changes/).
+2. Deploy the code that reads the new fields.
+3. When removing a field, deploy code that no longer reads it **first**, then remove it from the schema.
 
-1. Open a known content page without preview parameters.
-2. Confirm the title, canonical URL, favicon, and expected content.
-3. Publish a small content edit and follow it through rebuild or cache refresh.
-4. Open a preview and confirm unpublished edits appear only there.
-5. Test a real form submission intentionally and confirm receipt.
-6. Run [optional diagnostics](/guides/diagnostics/) and distinguish build-time evidence from runtime evidence.
+## Production checklist
 
-Finally, walk through the [client handoff](/ai-assistant/). A passing build is not a substitute for testing the deployed website.
+- [ ] `site` (Astro) or your canonical URL setting points at the production domain.
+- [ ] A published page renders the expected content without `?amaPreviewKey`.
+- [ ] Page titles, descriptions, social image and favicon are right. Check with a link preview tool.
+- [ ] A small published edit reaches the live site (after a rebuild, for static sites).
+- [ ] A preview shows a draft, and the live site doesn't.
+- [ ] A real form submission arrives in the inbox. Use [test mode](/guides/forms/#try-it-without-filling-the-inbox) to avoid clutter.
+- [ ] The form's **Allowed websites** list includes the production domain. See [Spam protection](/guides/form-spam-protection/#allowed-websites).
+- [ ] `.ama/session.json` and `.env` are not in the repository.
+
+Then walk through [Hand over to your client](/ai-assistant/).

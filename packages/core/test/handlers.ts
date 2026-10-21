@@ -99,34 +99,25 @@ export const handlers = [
           accepting_responses: true,
           requires_captcha: false,
           captcha_provider: null,
-          static_form_url: "contact-form-id",
+          captcha: null,
+          honeypot: true,
+          form_url: "https://edge.atmyapp.com/forms/project/contact",
+          static_form_url: "https://edge.atmyapp.com/forms/project/contact",
         },
         {
           type: "closed",
           accepting_responses: false,
           requires_captcha: true,
           captcha_provider: "hcaptcha",
-          static_form_url: "closed-form-id",
+          captcha: { provider: "hcaptcha", siteKey: "site-key" },
+          honeypot: true,
+          form_url: "https://edge.atmyapp.com/forms/project/closed",
+          static_form_url: "https://edge.atmyapp.com/forms/project/closed",
         },
       ],
       error: "",
     });
   }),
-
-  http.post(
-    `${API_BASE_URL}/submissions/:submissionType/form-url`,
-    ({ params }) => {
-      const submissionType = params.submissionType as string;
-
-      return HttpResponse.json({
-        success: true,
-        data: {
-          formUrl: `https://edge.atmyapp.com/forms/project/${submissionType}`,
-        },
-        error: "",
-      });
-    }
-  ),
 
   http.post(
     `${API_BASE_URL}/submissions/:submissionType`,

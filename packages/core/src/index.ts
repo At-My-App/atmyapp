@@ -22,6 +22,14 @@ export type {
   SubmissionSubmitOptions,
   SubmissionSubmitResult,
   SubmissionTypeStatus,
+  SubmissionReportStep,
+  SubmissionReport,
+  SubmissionResult,
+  SubmissionValidationResult,
+  SubmissionUploadProgress,
+  SubmissionCaptchaProvider,
+  SubmissionCaptcha,
+  SubmissionCaptchaWidget,
   LocalDataSource,
   LocalDataSourceEntry,
   LocalStorageOptions,
@@ -38,7 +46,18 @@ export type {
 } from "./client/systemConfig";
 export type { AtMyAppConfig, AtMyAppConfigArgs } from "./client/configTypes";
 export { createCollectionsClient } from "./client/collections";
-export { createSubmissionsClient } from "./client/submissions";
+export type {
+  SubmissionErrorCode,
+  SubmissionFieldErrorCode,
+  SubmissionFieldErrors,
+} from "./client/submissionError";
+export {
+  createSubmissionsClient,
+  SubmissionError,
+  captchaWidget,
+  SUBMISSION_HONEYPOT_FIELD,
+  SUBMISSION_RENDERED_AT_FIELD,
+} from "./client/submissions";
 export { F as CollectionsFilter } from "./client/collections/filter-dsl";
 
 export type { AmaContent, AmaContentDef } from "./definitions/AmaContent";

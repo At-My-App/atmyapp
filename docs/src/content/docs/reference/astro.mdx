@@ -1,51 +1,171 @@
 ---
-title: Astro API reference
-description: Exports and options for the static-first AtMyApp Astro integration.
+title: "@atmyapp/astro"
+description: The Astro integration. Configuration, server and browser clients, and the head and form components.
 ---
 
-## Requirements and exports
+```sh
+npm install @atmyapp/astro
+```
 
-Astro 5+ and Node 22.14+. The integration is tested with the workspace's Astro version; use an adapter compatible with your installed Astro version.
+Requires Astro 5 or newer and Node 22.14 or newer. For a walkthrough, follow the [Astro tutorial](/guides/astro/).
 
-| Import                       | API                                                                                       |
-| ---------------------------- | ----------------------------------------------------------------------------------------- |
-| `@atmyapp/astro`             | Default `atmyapp(options?)` integration                                                   |
-| `@atmyapp/astro/server`      | `getAtMyApp`, `getAtMyAppConfiguration`, `fetchWebsiteMetadataOnce`, `AstroClientOptions` |
-| `@atmyapp/astro/client`      | Browser-only `getClient()`                                                                |
-| `@atmyapp/astro/components`  | Default `AtMyAppHead` component                                                           |
-| `@atmyapp/astro/form`        | Default `AtMyAppForm` component                                                           |
-| `@atmyapp/astro/diagnostics` | Manual `createAstroDiagnosticsRoute`, `atMyAppDiagnostics` helpers                        |
+| Import | Exports |
+| --- | --- |
+| `@atmyapp/astro` | `atmyapp()` integration (default export) |
+| `@atmyapp/astro/server` | `getAtMyApp`, `getAtMyAppConfiguration`, `fetchWebsiteMetadataOnce` |
+| `@atmyapp/astro/client` | `getClient` (browser only) |
+| `@atmyapp/astro/components` | `AtMyAppHead` (default export) |
+| `@atmyapp/astro/form` | `AtMyAppForm` (default export) |
+| `@atmyapp/astro/diagnostics` | `createAstroDiagnosticsRoute`, `atMyAppDiagnostics` |
 
-## `atmyapp(options)`
+## `atmyapp(options?)`
 
-Options: `apiKey?: string`, `baseUrl?: string`, `diagnostics?: boolean` (false by default). Environment configuration is usually enough. The integration configures output mode, shared environment defaults and optionally the diagnostics route. It does not install a server adapter or sitemap package.
+```js title="astro.config.mjs"
+import { defineConfig } from "astro/config";
+import atmyapp from "@atmyapp/astro";
 
-## `getAtMyApp(context, options?)`
+export default defineConfig({
+  site: "https://www.example.com",
+  integrations: [atmyapp()],
+});
+```
 
-Pass Astro's render/API context, including `url` and `locals`. Returns the normal core SDK client. Options accept core client configuration, with optional `apiKey`/`baseUrl`, `env` overrides and `previewKey: string | null`. Passing a canonical schema preserves inferred types. Explicit overrides win; null disables preview. Errors throw by default instead of returning placeholder content.
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `apiKey` | `ATMYAPP_API_KEY` | API key, if you don't use the environment variable |
+| `baseUrl` | `ATMYAPP_BASE_URL` or `ATMYAPP_API_URL` | Project API URL |
+| `diagnostics` | `false` | Serve a report at `/.well-known/atmyapp/diagnostics.json`. See [Verify an integration](/guides/diagnostics/). |
 
-The helper requires the integration's virtual configuration module. It is a server/build import, not a browser import. Browser consumers use `@atmyapp/astro/client` after a head component has initialized the page.
+The integration sets Astro's `output` to `static` or `server` depending on the [mode](/guides/astro-previews/#mode-selection). It doesn't install an adapter.
+
+### Environment variables
+
+Read from `.env`, `.env.local`, `.env.<mode>`, `.env.<mode>.local` and the process environment, later ones winning. Dynamic builds also read them at runtime through `astro:env`.
+
+| Variable | Meaning |
+| --- | --- |
+| `ATMYAPP_API_URL` | Project API URL. Set automatically on AtMyApp hosting. |
+| `ATMYAPP_BASE_URL` | Same, takes precedence over `ATMYAPP_API_URL` |
+| `ATMYAPP_API_KEY` | API key. Set automatically on AtMyApp hosting. |
+| `DEV_MODE` | `true` / `1` for dynamic rendering, `false` / `0` for static. Default: dynamic in `astro dev`, static in `astro build`. |
+| `IS_DYNAMIC` | Older name for `DEV_MODE`, used only when `DEV_MODE` is unset |
+| `ATMYAPP_PREVIEW_KEY` | A fixed preview key for a dedicated preview process |
+| `ATMYAPP_CODE_COMMIT`, `ATMYAPP_BUILD_TIME` | Shown in diagnostics |
+
+## `getAtMyApp(Astro, options?)`
+
+```astro
+---
+import { getAtMyApp } from "@atmyapp/astro/server";
+import schema from "../../atmyapp.schema";
+
+const ama = getAtMyApp(Astro, { schema });
+const home = await ama.storage.getValue("home");
+---
+```
+
+Returns a [core client](/reference/core/) configured from the environment, the current request and `options`. Within one request (dynamic mode) or one build (static mode), calls with the same options share a client.
+
+| Option | Meaning |
+| --- | --- |
+| `schema` | Your schema: typed results and `storage.getValue` |
+| `previewKey` | Override the preview key. `null` disables previews for this client. |
+| `apiKey`, `baseUrl` | Override the environment |
+| `env` | Extra environment values to resolve from |
+| any core option | `locale`, `mode`, `errorPolicy`, `customFetch`, … |
+
+Differences from a plain core client:
+
+- **Errors throw** (`errorPolicy: "throw"`), so a broken read fails the page or build.
+- **Previews:** in dynamic mode the `amaPreviewKey` query parameter is used automatically, then `ATMYAPP_PREVIEW_KEY`. The key is checked before the first read; an expired key throws instead of showing published content.
+- **Mode:** dynamic rendering uses `mode: "priority"`, static uses `"client"`.
+
+### `getAtMyApp(options?)` without context
+
+```ts
+export async function getStaticPaths() {
+  const posts = await getAtMyApp({ schema }).collections.list("posts");
+  return posts.map((post) => ({ params: { slug: post.slug } }));
+}
+```
+
+Build-time code such as `getStaticPaths()` has no `Astro` object. Call `getAtMyApp` with options only. This works in static builds only; in dynamic mode it throws, because previews need the request.
+
+### `getAtMyAppConfiguration(Astro, options?)`
+
+Returns `{ apiKey, baseUrl, previewKey, preview, dynamic }` for the current request, if you need to pass configuration somewhere yourself.
 
 ## `AtMyAppHead`
 
-Accepts [metadata fields](/guides/astro-metadata/) plus:
+```astro
+---
+import AtMyAppHead from "@atmyapp/astro/components";
+---
+<head>
+  <AtMyAppHead title="Menu" description="Seasonal dishes." image={coverUrl} />
+</head>
+```
 
-- `clientOptions`: same options used for your content client.
-- `defaults`: local fallback metadata.
-- `metadataError`: `throw` (default) or `fallback`; preview failures always throw.
-- `trackPageView`: false by default; ignored in preview context.
+Renders `<title>`, description, canonical, robots, Open Graph and Twitter tags, icons, manifest, theme colour and JSON-LD. Each value resolves **page prop → Website settings → `defaults`**. `null` clears a value. Guide: [Metadata and SEO](/guides/astro-metadata/).
+
+| Prop | Meaning |
+| --- | --- |
+| `title`, `description` | This page's title and description |
+| `titleMode` | `"template"` (default) adds the website name; `"absolute"` uses `title` as-is |
+| `titleTemplate` | Your own template, such as `"%s — Altana"` |
+| `image` | Sharing image for this page |
+| `ogTitle`, `ogDescription`, `ogImage`, `ogType`, `twitterCard` | Override social tags |
+| `canonical` | Canonical URL. Default: `site` + this page's path. `null` omits it. |
+| `robots` | Robots meta. Previews always get `noindex, nofollow`. |
+| `jsonLd` | Structured data object. `null` disables the default homepage `WebSite` data. |
+| `favicon`, `appleTouchIcon`, `manifest`, `themeColor`, `sitemap`, `googleSiteVerification` | Override the matching tags |
+| `defaults` | Local fallbacks for any of the above |
+| `metadataError` | `"throw"` (default) or `"fallback"`: use `defaults` when Website settings can't be loaded. Previews always throw. |
+| `clientOptions` | The same options you pass to `getAtMyApp`, if you override any |
+| `trackPageView` | Send page views to the experimental content analytics. Default `false`. |
+
+`AtMyAppHead` also publishes the public configuration for `getClient()`. Use one per page.
 
 ## `AtMyAppForm`
 
-- `submission`: required submission type name.
-- `returnTo`: optional result page URL.
-- `clientOptions`: shared client options including schema.
-- `allowPreviewSubmit`: false by default; true permits real submissions.
-- `enhance`: false by default; inline browser feedback.
-- Ordinary form attributes, such as `id`, `class` and `aria-label`.
+```astro
+---
+import AtMyAppForm from "@atmyapp/astro/form";
+---
+<AtMyAppForm submission="contact" returnTo="/thank-you/" enhance class="contact-form">
+  <input name="email" type="email" required />
+  <textarea name="message" required></textarea>
+  <button>Send</button>
+</AtMyAppForm>
+```
 
-The default slot contains developer-owned fields. The `captcha` slot contains an optional CAPTCHA widget. The component owns `action`, `method` and `enctype`.
+Renders a `<form>` that posts to the form's public address, with the spam trap, render time and captcha widget. Guide: [Astro forms](/guides/astro-forms/).
+
+| Prop | Default | Meaning |
+| --- | --- | --- |
+| `submission` | required | The form's name |
+| `returnTo` | — | Page to return to after submitting, resolved against `site` |
+| `enhance` | `false` | Send with `fetch`, show inline errors and a status message |
+| `allowPreviewSubmit` | `false` | Allow real submissions from previews |
+| `clientOptions` | — | Options passed to `getAtMyApp` |
+| any `<form>` attribute | — | `id`, `class`, `aria-label`, … (`action`, `method` and `enctype` are set for you) |
+
+| Slot | Content |
+| --- | --- |
+| default | Your fields and buttons |
+| `captcha` | Your own captcha widget, replacing the automatic one |
+
+When the form is closed, or in a preview without `allowPreviewSubmit`, the fields render disabled with a short message. Static sites reflect the state at build time.
+
+## `getClient()`
+
+```ts
+import { getClient } from "@atmyapp/astro/client";
+const ama = getClient();
+```
+
+A core client in the browser, using the configuration `AtMyAppHead` put on the page, including the preview key in previews. It throws outside the browser or without `AtMyAppHead`.
 
 ## Diagnostics
 
-Prefer `atmyapp({ diagnostics: true })`. Manual helpers remain available for custom client factories, but do not mount both approaches at the same path. Static reports describe the build; dynamic reports describe the current request. [Report fields and limitations](/guides/diagnostics/).
+Prefer `atmyapp({ diagnostics: true })`. For a custom client factory, mount `createAstroDiagnosticsRoute(factory, options)` from `@atmyapp/astro/diagnostics` at `src/pages/.well-known/atmyapp/diagnostics.json.ts` instead; don't use both. See [Verify an integration](/guides/diagnostics/).

@@ -1,11 +1,23 @@
-<div class="ama-two-column">
-  <aside class="right-sidebar-container print:hidden">
-    <div class="right-sidebar">
-      <slot name="right-sidebar" />
-    </div>
-  </aside>
-  <div class="main-pane">
-    <slot />
-  </div>
-</div>
+---
+// The home page uses the full width; every other page gets the right rail.
+const isHome = Astro.url.pathname === "/";
+---
 
+{
+  isHome ? (
+    <div class="main-pane">
+      <slot />
+    </div>
+  ) : (
+    <div class="ama-two-column">
+      <aside class="right-sidebar-container print:hidden">
+        <div class="right-sidebar">
+          <slot name="right-sidebar" />
+        </div>
+      </aside>
+      <div class="main-pane">
+        <slot />
+      </div>
+    </div>
+  )
+}

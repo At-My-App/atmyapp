@@ -49,11 +49,13 @@ Local sample data lives in `src/data/jokes.ts`. Once your AtMyApp project has da
 
 ## Environment
 
-Copy `.env.example` to `.env` when you are ready to connect the site to AtMyApp:
+Copy `.env.example` to `.env` and fill in the values from **Settings → API keys** in the AtMyApp dashboard:
 
 ```env
-ATMYAPP_API_KEY=your-public-api-key
-ATMYAPP_BASE_URL=https://api.atmyapp.com
+ATMYAPP_API_URL=https://edge.atmyapp.com/v0/projects/<project-id>
+ATMYAPP_API_KEY=<api-key>
 ```
 
-The layout uses `@atmyapp/astro` when `ATMYAPP_API_KEY` is present. Without credentials, the starter still builds as a static Astro site.
+Connect the CLI with the command from **Settings → CLI keys**, then upload the schema with `atmyapp:migrate`.
+
+The layout renders managed SEO tags with `@atmyapp/astro` when `ATMYAPP_API_KEY` is set. Without credentials, the starter still builds as a static Astro site. Next steps: [docs.atmyapp.com/guides/astro](https://docs.atmyapp.com/guides/astro/).

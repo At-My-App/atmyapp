@@ -39,5 +39,17 @@
   "dependencies": {
     "@atmyapp/structure": "workspace:^",
     "@better-fetch/fetch": "1.1.18"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./forms": {
+      "types": "./dist/forms/index.d.ts",
+      "default": "./dist/forms/index.js"
+    },
+    "./package.json": "./package.json",
+    "./dist/*": "./dist/*"
   }
 }

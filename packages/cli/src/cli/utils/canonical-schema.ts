@@ -337,10 +337,12 @@ import { schema } from "${schemaImportPath}";
 
 export { schema };
 
+// The Project API URL from Settings → API keys:
+// https://edge.atmyapp.com/v0/projects/<project-id>
 const baseUrl =
-  process.env.ATMYAPP_URL ||
   process.env.ATMYAPP_API_URL ||
   process.env.ATMYAPP_BASE_URL ||
+  process.env.ATMYAPP_URL ||
   "";
 
 const apiKey = process.env.ATMYAPP_API_KEY || "";

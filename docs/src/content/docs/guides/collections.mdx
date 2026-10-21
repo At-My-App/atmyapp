@@ -1,0 +1,163 @@
+---
+title: Collections
+description: List, filter, sort and paginate collection entries, fetch single entries, and resolve references.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A collection is a list of entries with the same fields: posts, services, team members. The examples use this schema and a client called `ama` created with it:
+
+```ts title="atmyapp.schema.ts"
+posts: defineCollection({
+  fields: {
+    title: s.string(),
+    slug: s.slug({ source: "title" }),
+    category: s.enum({ values: ["news", "guides"] }),
+    featured: s.boolean({ default: false }),
+    author: s.reference("authors"),
+    cover: s.image({ optional: true }),
+  },
+}),
+authors: defineCollection({
+  fields: { name: s.string(), avatar: s.image({ optional: true }) },
+}),
+```
+
+## List entries
+
+```ts
+const posts = await ama.collections.list("posts");
+// [{ title, slug, category, featured, author, cover }, …]
+```
+
+You get an array of entry values, **newest first**, up to **50 entries**. With a schema, each entry is typed. Image fields arrive as `{ url }`.
+
+## Filter
+
+Import the filter helpers from `@atmyapp/core`:
+
+```ts
+import { CollectionsFilter as F } from "@atmyapp/core";
+
+// featured guides
+await ama.collections.list("posts", {
+  filter: F.and(F.eq("category", "guides"), F.eq("featured", true)),
+});
+
+// news or guides
+await ama.collections.list("posts", {
+  filter: F.or(F.eq("category", "news"), F.eq("category", "guides")),
+});
+
+// one of several values
+await ama.collections.list("posts", { filter: F.in("category", ["news", "guides"]) });
+
+// created this year
+await ama.collections.list("posts", { filter: F.gte("created", new Date("2026-01-01")) });
+```
+
+| Helper | Matches when the field is… |
+| --- | --- |
+| `F.eq(field, value)` | equal to `value` |
+| `F.gt`, `F.gte`, `F.lt`, `F.lte` | greater / less than (or equal to) `value` |
+| `F.in(field, values)` | any of `values` |
+| `F.and(…)` | all conditions match |
+| `F.or(…)` | any condition matches |
+
+What you can filter on:
+
+- any **top-level field** of the entry, such as `category`, `featured` or `slug`,
+- the entry's `id`, `created` and `updated` times.
+
+Fields inside objects and lists can't be filtered. Neither can `F.and` inside `F.or`, or negation; the SDK throws an error for those. When you need them, filter the returned entries in your code.
+
+## Sort
+
+```ts
+await ama.collections.list("posts", { order: "updated.desc" });
+```
+
+You can sort by `created`, `updated` or `id`, ascending (`.asc`) or descending (`.desc`). The default is `created.desc`.
+
+To sort by a content field, sort the results in your code. For an order your client controls, use an [order field](/guides/structure/#editor-controlled-order).
+
+## Paginate
+
+Each request returns at most 50 entries. Ask for a page with `limit` and `offset`, and for the total count with `format: "dataWithMeta"`:
+
+```ts
+const perPage = 12;
+const page = 2;
+const { rows, total } = await ama.collections.list("posts", {
+  limit: perPage,
+  offset: (page - 1) * perPage,
+  format: "dataWithMeta",
+});
+const pageCount = Math.ceil(total / perPage);
+```
+
+To load every entry, for example to generate all pages in a static build, loop until a page comes back short:
+
+```ts
+async function allPosts() {
+  const posts = [];
+  for (let offset = 0; ; offset += 50) {
+    const page = await ama.collections.list("posts", { limit: 50, offset });
+    posts.push(...page);
+    if (page.length < 50) return posts;
+  }
+}
+```
+
+## Get one entry
+
+```ts
+// by slug (or any other field)
+const post = await ama.collections.first("posts", { filter: F.eq("slug", "hello-world") });
+
+// by ID
+const sameAuthor = await ama.collections.getById("authors", post.author);
+```
+
+Both return the entry, or `null` when nothing matches.
+
+## Entry IDs and timestamps
+
+The default results contain your fields only. To get each entry's `id` and its `created` and `updated` times, ask for raw entries:
+
+```ts
+const entries = await ama.collections.list("posts", { format: "raw" });
+// [{ id: "…", data: { title, … }, created: "…", updated: "…" }, …]
+```
+
+| `format` | `list` returns | `first` / `getById` return |
+| --- | --- | --- |
+| `"data"` (default) | `Entry[]` | `Entry \| null` |
+| `"raw"` | `{ id, data, created, updated }[]` | one raw entry or `null` |
+| `"dictionary"` | `{ [id]: Entry }` | a one-key dictionary or `null` |
+| `"dataWithMeta"` | `{ rows: Entry[], total }` | `{ row: Entry \| null, total }` |
+
+## Resolve references
+
+A reference field holds the ID of another entry, not the entry itself. Load the targets in one request with `getManyByIds`:
+
+```ts
+const posts = await ama.collections.list("posts", { limit: 12 });
+const authorIds = [...new Set(posts.map((post) => post.author))];
+const authors = await ama.collections.getManyByIds("authors", authorIds, { format: "dictionary" });
+
+for (const post of posts) {
+  const author = authors[post.author];
+  console.log(post.title, "by", author?.name);
+}
+```
+
+`getManyByIds` returns entries in the same order as the IDs you pass, up to 50 IDs per call. Fields with `multiple: true` hold a list of IDs.
+
+## Previews and collections
+
+In a preview, lists include your client's draft entries. Most queries are exact. For some (OR filters, very large collections), the preview can show the right entries but not always the exact order, count or membership that publishing will produce. The SDK warns in the console when that happens. To treat that as an error instead, set `strictPreview: true` on the client. See [Drafts and previews](/guides/previews/).
+
+<Aside type="tip" title="Not using JavaScript?">
+The same queries work over HTTP. See [Collections in the HTTP API](/reference/http-api/#collections).
+</Aside>

@@ -1,74 +1,174 @@
 ---
 title: Forms on any JavaScript website
-description: Collect submissions from static websites with HTML forms or JavaScript.
+description: Collect form submissions from any website, with a plain HTML form, a small enhancement script, or the Core SDK.
 ---
 
-Forms submit directly to AtMyApp. A static website does not need its own backend merely to collect responses. Astro projects can use [AtMyAppForm](/guides/astro-forms/).
+Forms post directly to AtMyApp, so a static website needs no backend to collect them. Submissions land in the project's inbox on the web and in the mobile app. Astro projects can use [AtMyAppForm](/guides/astro-forms/), which does everything on this page for you.
 
-## 1. Define the submission
+There are three ways to send a form. Pick the first one that fits:
 
-Add this under the schema's `submissions` map, then run `atmyapp migrate`:
+| Approach | Use it when | JavaScript |
+|---|---|---|
+| [Plain HTML form](#1-a-plain-html-form) | A static page, a page builder, or any site where you can only paste HTML | None |
+| [Enhanced form](#2-enhance-the-form) | You want inline errors and no page reload, with the HTML form as fallback | `@atmyapp/core/forms` (no API key) |
+| [Core SDK](#3-send-from-code) | Your own form UI (React, Vue, Svelte…), custom validation or uploads with progress | `@atmyapp/core` with your API key |
+
+## 1. A plain HTML form
+
+Create the submission type in AtMyApp (or define it in your schema and run `atmyapp migrate`), then copy its **form address** from the dashboard: *Submissions → your form → Integrate*. The address is stable. It only changes if someone chooses *Replace address* in the form's settings.
+
+```html
+<form action="https://edge.atmyapp.com/forms/PROJECT_ID/FORM_ID" method="POST">
+  <label>Email <input name="email" type="email" required /></label>
+  <label>Message <textarea name="message" required></textarea></label>
+  <!-- Spam trap: hidden from people, filled in by bots -->
+  <input type="text" name="_ama_hp" tabindex="-1" autocomplete="off" aria-hidden="true"
+         style="position:absolute;left:-10000px" />
+  <button type="submit">Send</button>
+</form>
+```
+
+- **Field names** are yours. With a [schema](#define-the-form-in-your-schema), unknown fields are dropped and declared fields are validated.
+- **Files** need `enctype="multipart/form-data"` and `<input type="file" name="…">`.
+- **Several values** for one field (checkboxes, multi-selects) arrive as a list. Repeat the name, or use `name="interests[]"`.
+- **Result page.** Without JavaScript, the visitor sees a short result page. Add `?returnTo=https://your-site.com/thank-you` to the action to send them back to your site; the page receives `result=success|error`, plus `submissionId` or `error` and `code`. Treat these values as display text, not as proof that a submission exists.
+
+To read the address at build time instead of copying it, use the SDK: `await ama.submissions.getFormParams("contact", { returnTo: "/thank-you" })` returns `{ action, method, encType }`. Reading it never creates or changes anything.
+
+## 2. Enhance the form
+
+`@atmyapp/core/forms` turns the same HTML form into an inline one:
+
+- It sends the form with `fetch` and disables the button while sending.
+- It shows field errors next to the fields, or as a summary.
+- After success it shows a message, or follows `returnTo`.
+- It resets the captcha after a captcha error.
+- Its retries are safe: a message is never stored twice.
+
+The form keeps working if the script fails to load. No API key is involved.
 
 ```ts
-import { defineSubmission, s } from "@atmyapp/structure";
+import { enhanceSubmissionForm } from "@atmyapp/core/forms";
 
-const contact = defineSubmission({
-  description: "Messages from the website contact page.",
-  fields: {
-    email: s.email(),
-    message: s.string({ min: 1, max: 5000 }),
-    attachment: s.file({ optional: true }),
+enhanceSubmissionForm(document.querySelector("#contact")!, {
+  // Optional: the form's captcha. Read it at build time with
+  // (await ama.submissions.getTypeStatus("contact"))?.captcha
+  captcha: { provider: "turnstile", siteKey: "0x4AAAAAAA…" },
+});
+```
+
+- **Spam fields.** The helper adds the spam trap and the render time if the form lacks them.
+- **Captcha.** When you pass the form's captcha, it adds the provider's widget above the submit button and loads its script. reCAPTCHA v3 is invisible: the token is fetched on submit.
+- **Field errors** go into an element with `data-atmyapp-error="<field>"` when the form has one, for example `<small data-atmyapp-error="email"></small>`. Otherwise they appear in a summary inside `[data-atmyapp-result]`; the helper adds one at the end of the form if it's missing. Invalid fields get `aria-invalid="true"`.
+- **Many forms:** `enhanceSubmissionForms("form[data-atmyapp-form]")` enhances every matching form.
+- **Options:** `messages` changes the wording (including per error code), `onSuccess` and `onError` let you take over. Both functions return a cleanup function.
+
+The helper is a few kilobytes with no dependencies. It runs anywhere your bundler does (Vite, webpack, Next.js client components, Vue, Svelte).
+
+## 3. Send from code
+
+With your own form UI, send values with the Core SDK. `submit` never throws for problems a visitor can cause. It returns a result:
+
+```ts
+import { createAtMyAppClient } from "@atmyapp/core";
+
+const ama = createAtMyAppClient({ apiKey: import.meta.env.PUBLIC_ATMYAPP_KEY, baseUrl, schema });
+
+const result = await ama.submissions.submit("contact", {
+  email: "jan@example.com",
+  message: "Do you deliver on Sundays?",
+});
+
+if (result.ok) {
+  showThanks(result.submissionId);
+} else if (result.error.fields) {
+  showFieldErrors(result.error.fields); // e.g. { email: "invalid_format" }
+} else {
+  showError(result.error.message, { canRetry: result.error.retryable });
+}
+```
+
+- **`result.error`** is a `SubmissionError`, so `throw result.error` works too. It has a stable `code` (see [limits and error codes](/reference/submissions/)), `fields` typed by your schema, the HTTP `status`, and `retryAfter` for rate limits.
+- **Retries.** Lost connections and brief outages are retried twice automatically (`retry: 0` turns this off). Every attempt carries the same idempotency key, so the service stores the message once. To make your own "Try again" button safe as well, create a key when the form opens and pass it as `idempotencyKey`.
+- **Files and lists.** Pass `File` objects (or `{ file, name }`); the SDK switches to multipart and keeps each file with its field. `onUploadProgress: ({ fraction }) => …` reports upload progress in browsers.
+- **Cancel** with `signal`; the result then has `code: "aborted"`.
+- **Captcha.** Forms with a captcha need a token. Render the provider's widget yourself and pass its token as `captchaToken`. `captchaWidget(status.captcha)` tells you the script, the class name and the token field for any provider.
+
+## Define the form in your schema
+
+A schema is optional, but it makes everything better: the service validates and cleans what visitors send, the inbox shows fields in your order with your labels, and `submit` is typed. Declare forms under `submissions` and run `atmyapp migrate`:
+
+```ts
+import { defineSchema, defineSubmission, s } from "@atmyapp/structure";
+
+export default defineSchema({
+  definitions: { /* … */ },
+  submissions: {
+    contact: defineSubmission({
+      description: "Contact form on /contact.",
+      fields: {
+        name: s.string({ optional: true, description: "How they'd like to be addressed" }),
+        email: s.email(),
+        topic: s.enum({ values: ["quote", "support", "other"] }),
+        message: s.longText({ min: 10, max: 5000 }),
+        services: s.array({ items: s.string(), optional: true }),
+        brief: s.file({ optional: true }), // an upload
+      },
+      captcha: { required: true, provider: "turnstile" },
+    }),
   },
 });
 ```
 
-The key in the map, such as `contact`, is the name passed to the SDK. Use input names that match the field names.
+- **Unknown fields are dropped.** Anything the schema doesn't declare is not stored; the inbox lists it under *Technical details → Ignored fields*, which is the quickest way to spot a misnamed input.
+- **Uploads** use `s.file()` or `s.image()` for one file, and `s.gallery()` for several. Allowed file types and size limits are set per form; see [limits](/reference/submissions/#limits).
+- **The sender.** The first `s.email()` field (or a field named `email`), and a `name`, `fullName` or `firstName` + `lastName` field, become the submission's contact. The inbox uses it for the sender, replies and "other submissions from this person".
+- **`captcha`** records that the form needs a captcha; the keys are set in the form's settings. See [Spam protection](/guides/form-spam-protection/#declaring-the-captcha-in-your-schema).
+- Without a schema, every field is accepted as sent (still within the [limits](/reference/submissions/#limits)).
 
-## 2. Get form parameters
+### Validate before sending
 
-Using the client from [JavaScript setup](/quick-start/):
+With a schema, `submit` checks the values before sending and returns `validation_failed` with field errors, without a request. These are the same checks the service runs. Use `validate` for instant feedback, for example on blur:
 
 ```ts
-const status = await ama.submissions.getTypeStatus("contact");
-const params = await ama.submissions.getFormParams("contact", {
-  returnTo: "https://www.example.com/contact/result/",
-});
+const check = ama.submissions.validate("contact", new FormData(form));
+if (!check.ok) markInvalid(check.fields);
 ```
 
-Check status before rendering an enabled form. A closed form should show a clear unavailable message. If CAPTCHA is required, provide the configured provider's widget/token integration before allowing submission.
+Field error codes include `required`, `invalid_format`, `invalid_type`, `invalid_enum`, `min_length`, `max_length`, `minimum`, `maximum` and `max_items`. Pass `validate: false` to `submit` to skip the local check; the service always validates.
 
-For a static site, run these calls during the build and insert `params.action`, `params.method`, and `params.encType` into your template's corresponding HTML attributes. The values are not hard-coded endpoint guesses. A form can close after the site was built; the endpoint remains authoritative.
+## Send from any HTTP client
 
-## 3. Add HTML inputs
+The form address also accepts requests from servers, scripts and other languages. No API key is needed.
 
-Once your template has supplied the actual action and encoding, the form can submit without JavaScript:
-
-```html
-<!-- Replace ACTION_FROM_SDK with params.action during generation. -->
-<form action="ACTION_FROM_SDK" method="POST" enctype="multipart/form-data">
-  <label>Email <input name="email" type="email" required /></label>
-  <label
-    >Message <textarea name="message" required maxlength="5000"></textarea>
-  </label>
-  <label>Attachment <input name="attachment" type="file" /></label>
-  <button type="submit">Send message</button>
-</form>
+```bash
+curl https://edge.atmyapp.com/forms/PROJECT_ID/FORM_ID \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -H "Idempotency-Key: 6f1c2b7e-order-1042" \
+  -d '{"email":"jan@example.com","message":"Do you deliver on Sundays?"}'
 ```
 
-Use the SDK's `encType` in your real template; multipart is necessary for file uploads. Client-side HTML constraints improve feedback but the submission service must still validate the request.
+- **Bodies:** JSON, `application/x-www-form-urlencoded`, or `multipart/form-data` for files.
+- **Response:** `{ "success": true, "data": { "submissionId": "…" } }`, or `{ "success": false, "error": "…", "code": "…", "fields": { … } }` with the [error codes](/reference/submissions/#error-codes). Form-encoded and multipart requests get a result page (or a redirect) instead, unless they send `Accept: application/json`.
+- **`Idempotency-Key`** (optional): repeat a request with the same key and the message is stored once; the response then has `"duplicate": true`.
+- **`X-AMA-Test: 1`** runs [test mode](#try-it-without-filling-the-inbox).
+- **Captcha:** send the token as `captchaToken`.
 
-## 4. Handle the result
+## Try it without filling the inbox
 
-When using `returnTo`, the endpoint redirects to that page with `result=success` or `result=error`, plus `submissionId` or `error` where applicable. A static result page can read those query parameters with JavaScript and display a success or error message. Treat them as untrusted display input; they are not proof that a particular submission exists.
+Test mode runs every check and stores the message as a **test**. Tests are kept for 24 hours, never trigger notifications or Actions, and only show under the inbox's *Test* filter. The response includes a step-by-step report, which is the quickest way to answer "why isn't my form working?".
 
-Choose a return URL on your own production website. Avoid carrying preview keys into it. Without `returnTo`, the response is handled directly by the submission endpoint.
+- From code: `submit(name, data, { test: true })`. The `report` is on the result, including on failure.
+- From any HTTP client: add the header `X-AMA-Test: 1`.
+- From the dashboard: *Integrate → Send a test*.
 
-## Optional JavaScript submission
+Submissions from `localhost` are stored as *local development* and kept out of the inbox and notifications as well. You can develop against the real form address.
 
-Use `ama.submissions.submit('contact', new FormData(form))` from your submit handler if you need inline feedback. Prevent the normal navigation, mark the form busy, prevent duplicate sends, catch errors, and only reset fields after success. Preserve input on failure and offer retry. The SDK accepts an `AbortSignal` in the third argument for cancellation.
+To watch submissions arrive, including rejected ones with their reason, run [`atmyapp submissions tail`](/reference/cli/#atmyapp-submissions-tail).
 
-CAPTCHA tokens may need resetting after each attempt. Provider secrets belong in protected project configuration, never in browser code or a public schema bundle. No SDK helper automatically installs a CAPTCHA widget.
+## Previews
 
-## Preview behavior
+The submission endpoints accept real submissions, including from preview pages. When the service can tell a submission came from a preview, it labels it *preview*. Disable forms in your preview UI unless you mean to send real messages. Astro's form component does this by default.
 
-The Core submission API sends real submissions. Disable forms in your preview UI unless testing real submissions is intentional. Astro's form component does this by default and exposes an explicit opt-in.
+See also: [Spam protection](/guides/form-spam-protection/) · [Limits and error codes](/reference/submissions/)

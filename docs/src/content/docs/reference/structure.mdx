@@ -1,41 +1,73 @@
 ---
-title: Structure SDK
-description: Author, compile, inspect, and validate a canonical content schema.
+title: "@atmyapp/structure"
+description: Schema builders, type inference, validation and introspection.
 ---
 
-`@atmyapp/structure` provides schema authoring and tooling. For examples, read [Define your content schema](/guides/structure/). For every builder option, use the [field reference](/reference/fields/).
+```sh
+npm install @atmyapp/structure
+```
 
-## Authoring exports
+The package that defines what a schema is. Websites use its builders in `atmyapp.schema.ts`; tools use its compiler and validators. `@atmyapp/core` re-exports all of it. Guides: [Design your schema](/guides/structure/) and the [field reference](/reference/fields/).
 
-`defineSchema`, `defineCollection`, `defineDocument`, `defineFile`, `defineImage`, `defineSystemConfig`, `defineSubmission`, `defineEvent`, and `defineBasicEvent` construct canonical definitions. `s` contains the field builders.
+## Building a schema
 
-A schema contains `definitions` and optional `description`, `localization`, `events`, `args`, `mdx`, and `submissions`. `defineSchema` supplies canonical version 1. `args` is application-specific metadata; it does not create an SDK environment-variable loader.
+| Export | Creates |
+| --- | --- |
+| `defineSchema({ definitions, submissions?, mdx?, localization?, description? })` | The schema |
+| `defineDocument({ fields, path?, description? })` | A document |
+| `defineCollection({ fields, description?, indexes? })` | A collection |
+| `defineSubmission({ fields, description?, captcha? })` | A form, under `submissions` |
+| `defineFile({ path })` / `defineImage({ path })` | A single managed asset |
+| `s` | Field builders: see the [field reference](/reference/fields/) |
+
+`defineDocument` and `defineCollection` also accept `name` (display metadata; the map key stays the identifier), `localize` and `systemFields` (advanced storage settings). `defineSystemConfig`, `defineEvent` and `defineBasicEvent` exist for framework presets and the experimental analytics; websites rarely need them.
+
+## Type inference
+
+```ts
+import type { InferDefinition, InferSubmission, InferSchemaTypes } from "@atmyapp/structure";
+import schema from "./atmyapp.schema";
+
+type Post = InferDefinition<"posts", typeof schema>;
+type ContactForm = InferSubmission<"contact", typeof schema>;
+type All = InferSchemaTypes<typeof schema>;
+```
+
+You rarely need these directly: a client created with `schema` already returns typed values. `InferSubmission` describes what a form accepts, so asset fields are `File`/`Blob` rather than URLs.
 
 ## Compile and validate
 
 ```ts
-import {
-  compileSchema,
-  validateContent,
-  validateSchemaDocument,
-} from "@atmyapp/structure";
-import schema from "../atmyapp.schema";
+import { compileSchema, validateSchemaDocument, validateContent } from "@atmyapp/structure";
+import schema from "./atmyapp.schema";
 
-const schemaResult = validateSchemaDocument(schema);
-if (!schemaResult.valid) {
-  throw new Error(JSON.stringify(schemaResult.issues));
-}
+const check = validateSchemaDocument(schema);
+if (!check.valid) throw new Error(JSON.stringify(check.issues, null, 2));
+
 const compiled = compileSchema(schema);
 const result = validateContent(compiled, "home", { headline: "Hello" });
-if (!result.valid) {
-  console.error(result.issues); // Each issue has a path and message.
-}
+if (!result.valid) console.error(result.issues); // [{ path, message, code }]
 ```
 
-Compilation builds definition/path lookups, flattened field information, references, assets, system fields, and the legacy platform structure. It does not upload your content. The CLI performs compilation as part of migration.
+| Export | Does |
+| --- | --- |
+| `validateSchemaDocument(schema)` | Checks the schema itself: reserved names, references to missing definitions, invalid options |
+| `compileSchema(schema)` | Normalises and indexes the schema for fast lookups |
+| `validateContent(compiled, name, value)` | Checks a document or entry value with the same rules AtMyApp uses |
+| `validateContentAtPath(compiled, path, raw, mimeType?)` | Same, for a raw stored file |
+| `serializeSchema(schema)` | Deterministic JSON, as uploaded by `atmyapp migrate` |
+| `parseSchema(json)` | Reads a serialised schema back |
 
-Local validation checks supported schema and value constraints. It is not a substitute for platform checks against existing entries, reference targets, or unique indexes. Read the field reference's validation limits before using a hint as a hard constraint.
+Checks that need other content, such as unique values across entries or references to existing entries, run in AtMyApp when content is saved and published.
 
-## Advanced tooling
+## Introspection
 
-The package also exports inference types, introspection helpers, migration planning, framework presets, and legacy conversion utilities. Use these when building schema tooling; ordinary websites generally need the authoring helpers and Core's typed reads. Migration plans describe compatibility work rather than automatically completing every content transformation.
+For tools that walk a compiled schema: `getDefinition`, `getCollection`, `getDocument`, `getField`, `getSubmission`, `listDefinitionsByKind`, `listReferences`, `listAssetFields`, `listSubmissions` and `resolveDefinitionForPath`.
+
+## Migrations
+
+`diffSchemas` and `planMigration` compare two schemas, and `validateMigrationOperations` checks `renameField` / `backfillField` operations. The CLI uses them; see [Change a live schema](/guides/schema-changes/).
+
+## Website settings
+
+`resolveWebsiteMetadata(page, settings, defaults, pageUrl, siteUrl)` turns page values and **Website settings** into final head tags, with the same rules as `AtMyAppHead`. `Metadata` is its type. See [Website settings](/guides/reading-content/#website-settings).

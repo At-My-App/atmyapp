@@ -1,0 +1,12 @@
+---
+"@atmyapp/core": minor
+"@atmyapp/astro": minor
+---
+
+**Breaking:** `submissions.submit` now resolves to a result instead of throwing. Success is `{ ok: true, submissionId, duplicate?, report? }`; failure is `{ ok: false, error }`, where `error` is a `SubmissionError` with a stable `code`, typed `fields`, `status`, `retryAfter` and `retryable`. Replace `try { const { submissionId } = await submit(…) } catch` with `const result = await submit(…); if (result.ok) …`. Network failures (after automatic retries) and cancellations are results too (`network_error`, `aborted`).
+
+`submit` generates an idempotency key when none is given and retries lost connections and brief outages with it (`retry`, default 2), so a submission is never stored twice. With a schema it checks values before sending (`validate`, default on); `submissions.validate(name, data)` runs the same checks on demand. `onUploadProgress` reports upload progress in browsers. The new `@atmyapp/core/forms` entry exports `enhanceSubmissionForm` and `enhanceSubmissionForms`: dependency-free inline submission for plain HTML forms, with field errors, captcha mounting and resets, and safe retries. `<AtMyAppForm enhance>` now uses it, and supports `data-atmyapp-error="<field>"` elements for per-field messages.
+
+Submissions v2. `getFormUrl` and `getFormParams` read the stable form address from the type list instead of calling the form-url endpoint, so rendering a form no longer creates or rotates a link. `getTypeStatus` adds the public captcha settings (`captcha: { provider, siteKey }`) and `honeypot`. `submit` accepts `idempotencyKey` and `test` (runs every check, keeps the submission as a 24-hour test, and returns a step `report`). The Astro `<AtMyAppForm>` renders the hidden spam-trap field and a render timestamp.
+
+Captcha widgets: `getTypeStatus().captcha` includes the reCAPTCHA `version`, `captchaWidget(captcha)` describes how to render any provider's widget in any framework, and `submit` accepts a `captchaToken` from a widget you render yourself. `<AtMyAppForm>` renders the configured Turnstile, reCAPTCHA (v2 or v3) or hCaptcha widget automatically (the `captcha` slot still overrides it). The `enhance` script disables the submit button while sending, marks invalid fields with `aria-invalid` and lists their errors, resets the captcha after a captcha error, and reuses an idempotency key when retrying after a network error.

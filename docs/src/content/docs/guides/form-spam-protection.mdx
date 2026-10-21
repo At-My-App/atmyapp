@@ -1,0 +1,165 @@
+---
+title: Spam protection
+description: How AtMyApp keeps bots out of your forms, and how to choose and set up a captcha.
+---
+
+Every form gets layered protection. The cheap checks run first, and a captcha is the last line of defence. Submissions that are turned away are counted, never stored: the dashboard shows "N spam blocked this week" with the reasons, and [`atmyapp submissions tail`](/reference/cli/#atmyapp-submissions-tail) shows each one as it happens.
+
+## Always on
+
+- **Spam trap.** A hidden field named `_ama_hp`. People never see it; bots fill it in. A filled trap gets a normal success response (so bots learn nothing), and nothing is stored. `AtMyAppForm` and `enhanceSubmissionForm` add it for you. In plain HTML, add it as shown in [JavaScript forms](/guides/forms/#1-a-plain-html-form).
+- **Too-fast check.** A hidden `_ama_t` field holds the time the form was shown. Submissions sent within 1.5 seconds of that are dropped the same quiet way. The check only applies when the field is present.
+- **Rate limit.** Each visitor can send a form 10 times per minute. After that they get `rate_limited` with a `Retry-After` header.
+- **Size limits.** See [limits and error codes](/reference/submissions/).
+
+## Allowed websites
+
+In the form's settings on the web, list the websites the form lives on, for example `https://example.com` and `https://www.example.com`. Submissions from any other website are refused with `origin_not_allowed`, and a captcha solved on another website is refused with `captcha_hostname`. Leave the list empty to accept submissions from anywhere.
+
+Local development (`localhost`) always works, and its submissions are kept apart from live ones.
+
+## Choosing a captcha
+
+| Provider | Choose it when | Visitors see |
+|---|---|---|
+| **Cloudflare Turnstile** (recommended) | You're starting fresh. It's free, privacy-friendly and works without a Google account | Usually nothing; sometimes a short check |
+| **Google reCAPTCHA** | The client already has reCAPTCHA keys, e.g. from a WordPress site (Contact Form 7, WPForms) | v3: nothing; each visit gets a score. v2: the "I'm not a robot" checkbox |
+| **hCaptcha** | The client wants a reCAPTCHA-style widget without Google | A checkbox, occasionally a puzzle |
+
+## Setting one up
+
+1. Create a site in the provider's dashboard and add your website's domains. For local testing, add `localhost` too, or use the provider's test keys.
+2. In AtMyApp open the form's settings and turn on **Require a captcha**. Choose the provider, paste the **site key** and the **secret key**, and press **Verify keys**. The check tells you whether the provider accepts the secret, whether the keys look swapped, and whether you're still using the provider's test keys.
+3. For reCAPTCHA, choose the key type you created: **v3** (invisible, score-based; default minimum score 0.5) or **v2** (checkbox).
+
+The secret key is stored encrypted and never sent to websites. The site key is public; the SDKs read it from the form's public settings.
+
+## Showing the widget
+
+The service reads the token from the provider's own field (`cf-turnstile-response`, `g-recaptcha-response` or `h-captcha-response`) or from `captchaToken`. Don't copy the token into a field of your own, such as `<input type="hidden" name="hcaptcha">`. A token under any other name isn't checked; it's stored as an ordinary answer and shows up in the inbox.
+
+### Astro
+
+`<AtMyAppForm>` renders the right widget automatically, just above the submit button. To place it yourself, put your own widget in the `captcha` slot. See [Astro forms](/guides/astro-forms/#closed-forms-and-captcha).
+
+### Plain HTML
+
+Add the provider's script and put its widget **inside** the form, so the browser sends the token along with the other fields. Use the site key from the form's settings.
+
+```html
+<!-- Cloudflare Turnstile -->
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<form action="https://edge.atmyapp.com/forms/PROJECT_ID/FORM_ID" method="POST">
+  <!-- your fields -->
+  <div class="cf-turnstile" data-sitekey="YOUR_SITE_KEY"></div>
+  <button type="submit">Send</button>
+</form>
+```
+
+For hCaptcha, load `https://js.hcaptcha.com/1/api.js` and use `<div class="h-captcha" data-sitekey="…">`. For reCAPTCHA v2, load `https://www.google.com/recaptcha/api.js` and use `<div class="g-recaptcha" data-sitekey="…">`.
+
+reCAPTCHA v3 has no widget. Fetch a token when the visitor submits, and put it in a hidden `g-recaptcha-response` field:
+
+```html
+<script src="https://www.google.com/recaptcha/api.js?render=YOUR_SITE_KEY"></script>
+<form id="contact" action="https://edge.atmyapp.com/forms/PROJECT_ID/FORM_ID" method="POST">
+  <!-- your fields -->
+  <input type="hidden" name="g-recaptcha-response" />
+  <button type="submit">Send</button>
+</form>
+<script>
+  const form = document.getElementById("contact");
+  form.addEventListener("submit", (event) => {
+    if (form.elements["g-recaptcha-response"].value) return;
+    event.preventDefault();
+    grecaptcha.ready(async () => {
+      form.elements["g-recaptcha-response"].value = await grecaptcha.execute("YOUR_SITE_KEY", { action: "submit" });
+      form.requestSubmit();
+    });
+  });
+</script>
+```
+
+### Any website with a bundler
+
+Pass the form's captcha to [`enhanceSubmissionForm`](/guides/forms/#2-enhance-the-form). It adds the widget, loads the script, fetches reCAPTCHA v3 tokens on submit and resets the widget after a captcha error:
+
+```ts
+import { enhanceSubmissionForm } from "@atmyapp/core/forms";
+
+const captcha = (await ama.submissions.getTypeStatus("contact"))?.captcha;
+enhanceSubmissionForm(document.querySelector("#contact")!, { captcha });
+```
+
+### Your own form UI
+
+Read the form's captcha, render the widget, and pass its token to `submit` as `captchaToken`. `captchaWidget` gives you everything the provider needs, whichever one the form uses:
+
+```ts
+import { captchaWidget } from "@atmyapp/core";
+
+const status = await ama.submissions.getTypeStatus("contact");
+const widget = status?.captcha ? captchaWidget(status.captcha) : null;
+// widget: { provider, siteKey, scriptSrc, className, tokenField, invisible }
+//  1. Load widget.scriptSrc once.
+//  2. Visible widgets: render <div class={widget.className} data-sitekey={widget.siteKey}> in the form.
+
+async function send(form: HTMLFormElement, values: Record<string, unknown>) {
+  const captchaToken = !widget
+    ? undefined
+    : widget.invisible
+      ? await grecaptcha.execute(widget.siteKey, { action: "submit" }) // reCAPTCHA v3
+      : (new FormData(form).get(widget.tokenField) as string | null) ?? undefined;
+
+  const result = await ama.submissions.submit("contact", values, { captchaToken });
+  if (!result.ok && result.error.code.startsWith("captcha_")) {
+    // Tokens are single-use: reset the widget, e.g. turnstile.reset() or hcaptcha.reset().
+  }
+  return result;
+}
+```
+
+Components from npm (for example `@marsidev/react-turnstile` or `@hcaptcha/react-hcaptcha`) work too: pass the token their `onVerify`/`onSuccess` callback gives you as `captchaToken`.
+
+### Direct HTTP
+
+Send the token as `captchaToken` (a JSON property or a form field), or under the provider's field name.
+
+Tokens are single-use. After a failed attempt, reset the widget; the enhancement helpers do this after captcha errors. Problems with the other fields are reported before the captcha is checked, so fixing a typo doesn't use up the visitor's token.
+
+## Declaring the captcha in your schema
+
+You can record in your schema that a form needs a captcha:
+
+```ts
+contact: defineSubmission({
+  fields: { email: s.email(), message: s.string({ min: 1 }) },
+  captcha: { required: true, provider: "turnstile" },
+}),
+```
+
+This is a declaration, not the setup. The keys live in the form's settings and never in your code. If the schema asks for a captcha and the form has none configured, submissions are still accepted, marked *captcha not verified*, and a [test submission](/guides/forms/#try-it-without-filling-the-inbox) reports the missing setup.
+
+## Testing locally
+
+Add `localhost` to the provider's site, or use the provider's published test keys in a test form. With test keys every visitor passes, so **Verify keys** warns you if you save them on a live form.
+
+| Provider | Site key | Secret key |
+|---|---|---|
+| Turnstile | `1x00000000000000000000AA` | `1x0000000000000000000000000000000AA` |
+| reCAPTCHA (v2) | `6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI` | `6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe` |
+| hCaptcha | `10000000-ffff-ffff-ffff-000000000001` | `0x0000000000000000000000000000000000000000` |
+
+## When the provider is down
+
+By default, submissions are accepted and marked *captcha not verified* in the inbox, so you don't lose real messages during an outage. Wrong or missing keys are treated the same way; use **Verify keys** to catch them early. In the form's settings you can choose to turn them away instead (`captcha_unavailable`, with a request to try again later).
+
+## Troubleshooting
+
+| You see | Likely cause |
+|---|---|
+| A long `P1_…`, `0.…` or `03A…` value in the inbox, under a field like *Hcaptcha* or *Captcha* | The site copies the token into its own field. Remove that field; the widget already sends the provider's field. |
+| `captcha_missing` | The widget isn't inside the `<form>`, its script didn't load, or (from code) `captchaToken` wasn't passed. |
+| `captcha_hostname` | The provider's site doesn't list this domain, or the domain isn't in the form's allowed websites. |
+| `captcha_invalid` or `captcha_duplicate` on the second try | The widget wasn't reset after a failed attempt. |
+| Submissions marked *captcha not verified* | The provider was unreachable, or the keys are wrong. Press **Verify keys** in the form's settings. |

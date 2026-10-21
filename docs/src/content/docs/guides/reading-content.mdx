@@ -1,0 +1,120 @@
+---
+title: Documents and media
+description: Read documents, images and files with @atmyapp/core, handle missing content, and control caching.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Everything on this page works the same in Astro (`getAtMyApp(Astro, { schema })`) and with `createAtMyAppClient()` from `@atmyapp/core`. The examples call the client `ama`.
+
+## Read a document
+
+```ts
+const home = await ama.storage.getValue("home");
+
+home.headline; // string
+home.hero?.url; // image URL, if set
+```
+
+`getValue` takes the document's name from your schema and returns its fields, typed from the schema. It needs the client to have been created with `schema`.
+
+You can also pass the document's path, with or without `.json`. These are the same:
+
+```ts
+await ama.storage.getValue("home");
+await ama.storage.getValue("home.json");
+```
+
+## Images and files
+
+Image and file fields arrive as objects with a `url`:
+
+```ts
+const home = await ama.storage.getValue("home");
+```
+
+```astro
+{home.hero && <img src={home.hero.url} alt={home.hero.alt ?? ""} />}
+```
+
+`s.gallery()` fields arrive as a list of the same objects. URLs point at AtMyApp's CDN and are safe to use directly in `src` and `href`.
+
+For an image or file defined on its own with `defineImage` or `defineFile`, `getValue` returns `{ url }`:
+
+```ts
+const priceList = await ama.storage.getValue("priceList");
+// <a href={priceList.url}>Download the price list</a>
+```
+
+## When content is missing or a read fails
+
+What happens depends on the client's `errorPolicy`:
+
+| Policy | A failed or missing read… | Use it for |
+| --- | --- | --- |
+| `"throw"` | throws an `Error` with the reason | Static builds and server rendering. The default in `@atmyapp/astro`. |
+| `"quiet-empty"` | logs a warning and returns a placeholder built from your schema's defaults and empty values | Browser widgets, where a blank section is better than a broken page. The default in `@atmyapp/core`. |
+
+A document that was never published counts as missing. In static builds, prefer `"throw"`: a failed build is better than a live page with empty text.
+
+```ts
+const ama = createAtMyAppClient({ baseUrl, apiKey, schema, errorPolicy: "throw" });
+```
+
+## Caching and freshness
+
+Reads go to AtMyApp's edge network. By default (`mode: "client"`) responses may be cached for up to 60 seconds, which keeps sites fast and usage low.
+
+When a server request must see a publish immediately, use `mode: "priority"`. It skips caches and counts as heavier usage, so don't make it the default for public traffic. Previews set it for you.
+
+```ts
+const ama = createAtMyAppClient({ baseUrl, apiKey, schema, mode: "priority" });
+```
+
+Static sites don't need either: they read content once, at build time.
+
+## Translations
+
+If your project uses [localization](/guides/structure/#translations), pass a locale per client or per read:
+
+```ts
+const ama = createAtMyAppClient({ baseUrl, apiKey, schema, locale: "de" });
+const homeInPolish = await ama.storage.getValue("home", { locale: "pl" });
+```
+
+`ama.localization.getStorageLocales("home.json")` lists the available languages and how complete each one is.
+
+## Website settings
+
+The website name, default title and description, sharing image and icons that your client manages in **Settings → Website settings** are available too:
+
+```ts
+import { resolveWebsiteMetadata, type Metadata } from "@atmyapp/core";
+
+const { config } = await ama.systemConfig.get<Metadata>({ systemKey: "website.metadata" });
+const meta = resolveWebsiteMetadata(
+  { title: "Menu" },             // this page's values
+  config,                         // website settings
+  {},                             // local fallbacks
+  new URL("https://example.com/menu"),
+  new URL("https://example.com/"),
+);
+// meta.title, meta.description, meta.ogImage, meta.favicon, meta.canonical, …
+```
+
+In Astro, `AtMyAppHead` does all of this for you. See [Metadata and SEO](/guides/astro-metadata/).
+
+## Lower-level reads
+
+You rarely need these, but they exist:
+
+| Method | Returns | When to use it |
+| --- | --- | --- |
+| `storage.getValue(name)` | The document's fields, or `{ url }` for an asset | Almost always |
+| `storage.get(name)` | A wrapper: `{ data, … }` for documents, `{ src, … }` for images | Code written for older SDK versions |
+| `storage.getFromPath(path)` | The stored value at a path, untyped | Paths outside your schema |
+| `storage.getStaticUrl(path)` | A CDN URL for a stored file | Files outside your schema |
+
+<Aside>
+Without a schema the client still works, but `getValue` isn't available and results are untyped. Pass `schema` whenever your code has one.
+</Aside>

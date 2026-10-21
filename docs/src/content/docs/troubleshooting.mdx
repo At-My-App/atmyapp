@@ -1,38 +1,86 @@
 ---
 title: Troubleshooting
-description: Diagnose configuration, content, preview, form, and documentation-search failures.
+description: Find the cause of a problem by its symptom, with the exact error messages and the fix for each.
 ---
 
-Start with a known document and the exact project URL. Turn on `errorPolicy: 'throw'` while investigating storage or collection reads; the Core default can return empty values or placeholders on failure.
+import { Aside } from "@astrojs/starlight/components";
 
-| Symptom                          | Check                                                       | Next action                                                          |
-| -------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------- |
-| API key rejected                 | Website key belongs to the selected project/environment     | Replace the key; do not substitute a CLI token                       |
-| Requests go to the wrong route   | `baseUrl` includes the full project API path                | Copy the URL from project configuration                              |
-| Document missing                 | Stored path, schema definition, and published content agree | Create/publish the content; migration alone does not fill every file |
-| `getValue` unavailable           | A runtime schema was passed to `createAtMyAppClient`        | Pass `schema`, not just a TypeScript generic                         |
-| Collection appears empty         | Error policy, filters, locale, and preview selection        | Try an unfiltered known collection with errors enabled               |
-| Static website shows old content | New content build was deployed                              | Inspect the build and hosting workflow                               |
-| Preview shows published content  | Dynamic rendering and per-request preview key               | Inspect the query, runtime mode, and cache policy                    |
-| Preview expired                  | Capability validity                                         | Reopen the preview; avoid published-content fallback                 |
-| Astro metadata missing           | Astro preset and `website.metadata` configuration           | Enable the preset and read the metadata guide                        |
-| Form is unavailable              | Submission open state and CAPTCHA requirements              | Check type status and widget configuration                           |
-| Upload fails                     | File field names, encoding, and submission configuration    | Use SDK-generated form parameters and multipart for files            |
+Start by making errors visible. With `@atmyapp/core`, set `errorPolicy: "throw"` while you investigate; the default quietly returns empty values and only logs a warning to the console. `@atmyapp/astro` throws by default.
 
-## Schema and CLI failures
+## Connection and keys
 
-Run the CLI from the connected workspace. Confirm `.ama/session.json` exists, check the selected project, and use `atmyapp migrate --dry-run --verbose`. Use a canonical `atmyapp.schema.ts` (or supported JS/JSON equivalent) and inspect the reported field path. [Field options](/reference/fields/) documents constraints such as immutable slugs and localized array identities.
+| You see | Cause | Fix |
+| --- | --- | --- |
+| `Invalid API key` | The key is wrong, revoked, or a CLI key was used | Copy an API key from **Settings → API keys**. CLI keys don't work for content. |
+| `API key does not belong to this project` | The URL and the key are from different projects | Copy both from the same project. |
+| `404` on every read, or HTML instead of JSON | The base URL is wrong | Use `https://edge.atmyapp.com/v0/projects/<id>`, including `/v0/projects/<id>`. Not `api.atmyapp.com`. |
+| `AtMyApp: set ATMYAPP_API_KEY.` | Astro can't find the key | Add it to `.env`, or to your host's build environment. Restart `astro dev` after editing `.env`. |
+| `AtMyApp: set ATMYAPP_BASE_URL or ATMYAPP_API_URL to your project API URL.` | Astro can't find the URL | Add `ATMYAPP_API_URL` the same way. |
+| `AtMyApp: invalid project API URL.` | The URL has a query string, a fragment or credentials | Use the plain URL from the dashboard. |
 
-## Diagnostics
+## Content
 
-[Optional diagnostics](/guides/diagnostics/) helps compare SDK versions, build metadata, connectivity, and preview state. A static report describes build time; its timestamp is not a continuously running health check. A successful connection report does not prove every content path or submission works.
+| You see | Cause | Fix |
+| --- | --- | --- |
+| `File not found` / empty document | The document was never published, or its path differs from the schema | Publish it in the dashboard. Check the definition name and `path`. |
+| Empty values and a console warning `returning quiet empty state` | A read failed under the default `quiet-empty` policy | Set `errorPolicy: "throw"` to see the real error. |
+| `getValue is not a function` | The client was created without `schema` | Pass `schema` to `createAtMyAppClient` or `getAtMyApp`. |
+| A collection returns 50 entries when there are more | 50 is the per-request maximum | [Paginate](/guides/collections/#paginate). |
+| `AND inside OR is not supported` / `NOT is not supported` | The filter can't be expressed in a query | Filter the results in your code. See [Filter](/guides/collections/#filter). |
+| A filter on a nested field matches nothing | Only top-level fields can be filtered | Filter in your code, or move the field to the top level. |
+| A reference field shows an ID, not the entry | References store IDs | [Resolve references](/guides/collections/#resolve-references). |
+| Locale-specific reads fail for images | Files aren't translated | Read images without `locale`. |
+
+## Publishing and freshness
+
+| You see | Cause | Fix |
+| --- | --- | --- |
+| A published edit doesn't appear on a static site | The site wasn't rebuilt | On AtMyApp hosting, check the build in **Settings → Hosting**. Elsewhere, rebuild. See [Deploy](/deployment/). |
+| An edit takes up to a minute on a server-rendered site | Published reads are cached for up to 60 seconds | Expected. Use `mode: "priority"` only where you must see it at once. |
+| A build fails after your client published | The new content broke a read, or a required value is missing | Read the build log. The previous version stays live meanwhile. |
+
+## Previews
+
+| You see | Cause | Fix |
+| --- | --- | --- |
+| The preview shows published content | The page was rendered statically | Previews need dynamic rendering. Use an AtMyApp preview server, or `astro dev`. See [Astro modes](/guides/astro-previews/). |
+| `AtMyApp: preview access could not be verified. Reopen the preview from AtMyApp.` | The preview key expired or the session ended | Click **Preview** again in the dashboard. |
+| `A signed, scoped content-staging capability is required for preview access.` | `amaPreviewKey` was edited or copied incorrectly | Reopen the preview from the dashboard. |
+| Drafts disappear after clicking a link | The link dropped `amaPreviewKey` | AtMyApp preview servers keep it. On your own host, carry it through internal links. |
+| `AtMyApp: pass Astro's context in dynamic mode` | `getAtMyApp()` was called without `Astro` outside `getStaticPaths()` | Call `getAtMyApp(Astro)` in page code. |
+
+## Schema and CLI
+
+| You see | Cause | Fix |
+| --- | --- | --- |
+| `AtMyApp session not configured. Run 'atmyapp use' first…` | The CLI isn't connected in this folder | Run `npx atmyapp use` in the project root. |
+| `CLI key belongs to project '…'` | The CLI URL and key are from different projects | Copy the command from **Settings → CLI keys** again. |
+| No schema file found | The file name isn't recognised | Name it `atmyapp.schema.ts` (or `.mts`, `.js`, `.mjs`, `.json`) in the project root. |
+| `The migration is blocked. Nothing was changed.` | The change would make stored content invalid | Read the plan. See [What the plan blocks](/guides/schema-changes/#what-the-plan-blocks-and-how-to-unblock-it). |
+| `This plan changes stored content. Review it and run again with --yes` | A confirmation was needed without a terminal | Review the plan, then rerun with `--yes`. |
+| `Content or schema changed after this plan was made` | Someone edited content during the migration | Run `migrate` again to review a fresh plan. |
+| `The server did not confirm the migration` | The connection dropped | Run `npx atmyapp migrate-status <operation-id>`. |
+
+## Forms
+
+| You see | Cause | Fix |
+| --- | --- | --- |
+| `AtMyApp: submission type "…" was not found.` | The form doesn't exist in the project | Define it under `submissions` and run `migrate`, or create it in the dashboard. Check the spelling. |
+| "This form is currently closed." | The form isn't accepting responses | Open it in the form's settings. Static sites show the state from build time. |
+| `origin_not_allowed` | The website isn't in the form's **Allowed websites** | Add the exact origin, such as `https://www.example.com`. |
+| `captcha_*` codes | Widget, keys or domains | See [Spam protection → Troubleshooting](/guides/form-spam-protection/#troubleshooting). |
+| A field arrives empty or under *Ignored fields* | The input `name` doesn't match the schema | Match the field names exactly. |
+
+For a step-by-step report of what happened to a submission, send it in [test mode](/guides/forms/#try-it-without-filling-the-inbox), or watch `npx atmyapp submissions tail`. All error codes are listed in [Form limits and errors](/reference/submissions/#error-codes).
 
 ## Search in these docs
 
-Search uses a generated Pagefind index. In a local `astro dev` session, Starlight shows a development notice instead of search results. Build the docs and run `astro preview` to test real search. The deployed output must include the `pagefind` directory and `_astro` assets.
+Search is built during `astro build`. In `astro dev` it shows a notice instead of results; run `astro build && astro preview` to try it.
 
-If deployed search fails, check the browser network panel for missing Pagefind assets and confirm the HTML and search index were deployed together. You can also use the sidebar's complete guide and reference index.
+## Still stuck?
 
-## Ask for help
+Email [contact@atmyapp.com](mailto:contact@atmyapp.com) with the page or command, what you expected, and the exact error. A [diagnostics report](/guides/diagnostics/) helps a lot. Never send CLI keys or preview URLs.
 
-Send the affected page, the operation you tried, and a sanitized error or diagnostics report to [support](mailto:contact@atmyapp.com). Include whether it happens locally, during a build, or on the deployed site. Do not include CLI tokens or raw preview keys.
+<Aside>
+API keys are public, so sharing one in a support email is fine. CLI keys are not.
+</Aside>

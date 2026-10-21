@@ -1,0 +1,91 @@
+---
+title: How AtMyApp works
+description: The five ideas you need before writing code. Projects, schemas, content, publishing, and the keys that connect your website.
+---
+
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+
+AtMyApp splits a website into two halves that change at different speeds. **You own the code**: layout, components, routing, styling. **Your client owns the content**: headlines, articles, team members, images, form responses. The schema in your repository is the contract between the two.
+
+## The pieces
+
+| Piece | What it is | Who changes it |
+| --- | --- | --- |
+| **Project** | One website's content, settings, forms and hosting, in the dashboard at [app.atmyapp.com](https://app.atmyapp.com). | You create it. Your client works in it. |
+| **Schema** | `atmyapp.schema.ts` in your repository. It lists every editable document, collection and form, with field types and limits. | You, in code. `atmyapp migrate` uploads it. The dashboard shows it read-only. |
+| **Content** | The values your client enters: documents, collection entries, images and files. Every publish is versioned. | Your client, in the dashboard or with the AI assistant. |
+| **Website** | Your Astro, Next.js, SvelteKit or other site. It reads content through the SDK or the HTTP API. | You. |
+| **Forms** | Submissions from your website. They go straight to AtMyApp and land in an inbox on the web and on mobile. | Visitors send them. Your client reads them. |
+
+## Documents and collections
+
+Content comes in two shapes. Choosing the right one is most of schema design.
+
+- A **document** is one structured file, such as the homepage, the footer or the contact details. You read it whole: `ama.storage.getValue("home")`.
+- A **collection** is a list of entries that share fields, such as blog posts, services or team members. Each entry has its own ID, and you query the list: `ama.collections.list("posts")`.
+
+Both can contain text, numbers, dates, images, files, nested objects, lists and references to collection entries. See [Design your schema](/guides/structure/).
+
+## From edit to live website
+
+<Steps>
+
+1. **Your client edits a draft.** Changes in the dashboard are saved as drafts. The AI assistant can also propose edits, but it can only stage them. A person always publishes.
+
+2. **They preview it on your real site.** The dashboard opens your website with a short-lived preview key in the URL (`?amaPreviewKey=…`). Pages rendered with that key show the drafts. See [Drafts and previews](/guides/previews/).
+
+3. **They publish.** AtMyApp checks the content against your schema and records a new version.
+
+4. **Your website picks it up.** How fast depends on how you render:
+   - **Static site on AtMyApp hosting**: publishing starts a new build, and the site switches over when the build succeeds.
+   - **Static site elsewhere**: you rebuild and redeploy it yourself.
+   - **Server-rendered or browser-rendered**: the next request reads the new content. Reads may be cached for up to 60 seconds.
+
+</Steps>
+
+## Keys and URLs
+
+Your website and your terminal talk to different hosts with different credentials. Mixing them up is the most common setup mistake.
+
+| Value | Where to find it | Used by | Keep it secret? |
+| --- | --- | --- | --- |
+| **Project API URL** `https://edge.atmyapp.com/v0/projects/<id>` | **Settings → API keys** | Your website (`baseUrl`, `ATMYAPP_API_URL`) | No |
+| **API key** | **Settings → API keys** | Your website (`apiKey`, `ATMYAPP_API_KEY`) | No. It reads published content and sends forms, so it can ship in browser code. |
+| **CLI URL** `https://api.atmyapp.com/v0/projects/<id>` | **Settings → CLI keys** | `atmyapp use --url` | No |
+| **CLI key** | **Settings → CLI keys** | `atmyapp use --token`, CI | **Yes.** It can change your schema. Keep it out of the repository and out of browser code. |
+| **Preview key** | Added to preview URLs by AtMyApp | Requests that render drafts | Treat it as private. It expires on its own. |
+
+<Aside type="caution" title="Two hosts, on purpose">
+Content reads go to `edge.atmyapp.com`, and the CLI talks to `api.atmyapp.com`. If content requests return 404 or "Invalid API key", check that your website uses the **edge** URL, including the `/v0/projects/<id>` path.
+</Aside>
+
+`atmyapp use` stores the CLI key in `.ama/session.json` and adds that file to `.gitignore`. On AtMyApp hosting, builds receive `ATMYAPP_API_URL` and `ATMYAPP_API_KEY` automatically.
+
+## Rendering strategies
+
+| Strategy | Where content is read | When published edits appear | Good for |
+| --- | --- | --- | --- |
+| **Static** | During the build | After the next build is deployed | Marketing sites, blogs, most client websites |
+| **Server-rendered** | In each request | On the next request | Large catalogues, personalised pages, live previews |
+| **Browser** | In the visitor's browser | On the next read | Widgets inside an existing app |
+
+Static is the default for Astro and the best fit for AtMyApp hosting. Previews always need a server-rendered (dynamic) page, because the preview key arrives with each request. The Astro integration handles this for you: your local dev server and AtMyApp preview servers render dynamically, and production builds are static.
+
+## Packages
+
+| Package | Install it when |
+| --- | --- |
+| `@atmyapp/astro` | Your site uses Astro. It includes everything below that a website needs. |
+| `@atmyapp/core` | You use any other JavaScript framework, or a Node server. |
+| `@atmyapp/structure` | You write a schema. Core re-exports it, so websites rarely install it directly. |
+| `@atmyapp/cli` | Always, as a dev dependency. It connects the project and uploads the schema. |
+| `create-atmyapp` | You want a new Astro starter: `npm create atmyapp@latest`. |
+
+Not using JavaScript at all? Read content and send forms over plain HTTP. See the [HTTP API](/reference/http-api/).
+
+## Next
+
+<CardGrid>
+  <LinkCard title="Tutorial: Astro website" description="Build and deploy a complete site, step by step." href="/guides/astro/" />
+  <LinkCard title="Any JavaScript website" description="Connect Next.js, SvelteKit, Nuxt or a Node server." href="/quick-start/" />
+</CardGrid>

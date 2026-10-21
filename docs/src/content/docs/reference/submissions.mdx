@@ -1,0 +1,67 @@
+---
+title: Form limits and error codes
+description: What a single form submission may contain, and the stable error codes for everything the service refuses.
+---
+
+The same rules apply to every way of sending a form: plain HTML, `enhanceSubmissionForm`, the Core SDK and direct HTTP. Refusals carry a stable `code`. The SDK exposes it as `result.error.code`; HTTP responses return `{ "success": false, "error": "<message>", "code": "<code>", "fields": { … } }`.
+
+## Limits
+
+| Limit | Default | Maximum a form can be set to |
+|---|---|---|
+| Request size without files | 1 MB | 1 MB |
+| Request size with files | 25 MB | 50 MB |
+| Files per submission | 10 | 25 (or 0 to refuse files) |
+| Size of one file | 10 MB | 25 MB |
+| Fields | 100 | 500 |
+| Nesting depth | 8 | 16 |
+| Length of one text value | 20,000 characters | 100,000 |
+| Submissions per visitor and form | 10 per minute | — |
+
+The file limits can be lowered in the form's settings on the web.
+
+Accepted file types by default are images, PDF, plain text and CSV, and Word, Excel, PowerPoint and OpenDocument files. Files are checked by their content, not only their name; executables and files whose content doesn't match their type are refused.
+
+Empty values (blank text, empty lists) count as "not filled in". A submission with nothing filled in is refused.
+
+## Keeping submissions
+
+| Kind | Kept |
+|---|---|
+| Live submissions | Forever, or as long as the form's *Keep submissions* setting says |
+| Trash | 30 days |
+| Tests (`X-AMA-Test: 1` or `test: true`) | 24 hours |
+| Local development and previews | 7 days |
+
+## Error codes
+
+| Code | HTTP | Meaning | What to do |
+|---|---|---|---|
+| `validation_failed` | 422 | Fields are missing or invalid; see `fields` | Show the field errors |
+| `empty_submission` | 422 | Nothing was filled in | — |
+| `too_many_fields`, `too_deep`, `field_too_long` | 422 | Over a limit above | Shorten the input |
+| `payload_too_large`, `file_too_large`, `too_many_files` | 413 | Over a size limit | Ask for smaller files |
+| `file_type_not_allowed` | 415 | The file's type isn't accepted | — |
+| `unsupported_content_type`, `invalid_body` | 415, 400 | The request isn't JSON, a form post or multipart | Fix the integration |
+| `not_accepting` | 409 | The form is paused | Show "this form is closed" |
+| `form_not_found` | 404 | The form address or type doesn't exist (or was replaced) | Update the address |
+| `origin_not_allowed` | 403 | Sent from a website not in the form's allowed list | Add the website in the form's settings |
+| `rate_limited` | 429 | Too many submissions from this visitor | Wait for `Retry-After` |
+| `captcha_missing` | 400 | The form requires a captcha and no token was sent | Render the widget |
+| `captcha_invalid`, `captcha_expired`, `captcha_duplicate` | 400 | The token was wrong, too old or already used | Reset the widget and try again |
+| `captcha_hostname` | 400 | The captcha was solved on another website | Check the allowed websites and the provider's domains |
+| `captcha_low_score` | 400 | reCAPTCHA v3 rated the visitor as likely automated | — |
+| `captcha_unavailable` | 503 | The provider couldn't be reached (or the keys are wrong) and the form is set to refuse in that case | Try again later; check the keys with **Verify keys** |
+| `try_again` | 503 | A temporary problem; nothing was stored | Retry (the SDK does this for you) |
+| `network_error`, `aborted` | — | SDK only: no answer arrived, or your `signal` cancelled the request | Offer a retry |
+
+Field error codes in `fields` include `required`, `invalid_format`, `invalid_type`, `invalid_integer`, `invalid_date`, `invalid_enum`, `min_length`, `max_length`, `minimum`, `maximum`, `pattern`, `min_items`, `max_items` and `unexpected_property`.
+
+Spam-trap and too-fast submissions get a normal success response and are not stored (see [Spam protection](/guides/form-spam-protection/)).
+
+## Upgrading from earlier versions
+
+- **`submit` returns a result.** It used to throw. Replace `try { const { submissionId } = await submit(…) } catch` with `const result = await submit(…); if (result.ok) …`. See [Send from code](/guides/forms/#3-send-from-code).
+- **Captcha keys live in the form's settings.** Choose the provider and paste both keys there (see [Setting one up](/guides/form-spam-protection/#setting-one-up)). A schema can still declare the captcha, as `captcha: { required: true, provider: "turnstile" }`. The older `requiresCaptcha` and `captchaProvider` options keep working, but a secret in the schema (`hcaptchaSecret`, `captcha.secret`) is refused.
+- **Token fields.** The service reads the provider's own field (`cf-turnstile-response`, `g-recaptcha-response`, `h-captcha-response`) or `captchaToken`. If your site copies the token into a field of its own, such as a hidden `hcaptcha` input, remove that field; otherwise the token is stored as an answer and isn't checked.
+- **Form addresses are stable.** `getFormUrl` and `getFormParams` no longer create or rotate the address when a page renders. `returnTo` is the redirect parameter; `callbackUrl` and `callback` still work.

@@ -19,6 +19,20 @@ it("does not provision or send forms while previewing", async () => {
   ).toBe(false);
   expect(client.submissions.getTypeStatus).not.toHaveBeenCalled();
 });
+it("renders the configured captcha widget unless the page brings its own", async () => {
+  const status = {
+    acceptingResponses: true,
+    requiresCaptcha: true,
+    captcha: { provider: "turnstile", siteKey: "0x4AAA" },
+  };
+  const auto = await resolveForm(makeClient(status), "contact");
+  expect(auto).toMatchObject({
+    enabled: true,
+    captcha: { className: "cf-turnstile", siteKey: "0x4AAA", invisible: false },
+  });
+  const custom = await resolveForm(makeClient(status), "contact", { hasCaptcha: true });
+  expect(custom).toMatchObject({ enabled: true, captcha: null });
+});
 it("handles closed and CAPTCHA forms", async () => {
   expect(
     (await resolveForm(makeClient({ acceptingResponses: false }), "contact"))
@@ -39,7 +53,7 @@ it("resolves relative return URLs without requiring a browser", async () => {
     returnTo: "/thanks?amaPreviewKey=secret",
     site: new URL("https://site.example"),
   });
-  expect(value.enabled).toBe(true);
+  expect(value).toMatchObject({ enabled: true, honeypot: true });
   expect(client.submissions.getFormParams).toHaveBeenCalledWith("contact", {
     returnTo: "https://site.example/thanks",
   });

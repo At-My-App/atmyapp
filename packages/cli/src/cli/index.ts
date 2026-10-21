@@ -7,11 +7,15 @@ import { uploadCommand } from "./commands/upload";
 import { generateCommand } from "./commands/generate";
 import { snapshotCommand } from "./commands/snapshot";
 import { createCommand } from "./commands/create";
+import { submissionsCommand } from "./commands/submissions";
+
+// Resolves from both src/cli and dist/cli to the package root.
+const { version } = require("../../package.json") as { version: string };
 
 const program = new Command()
   .name("atmyapp")
   .description("AtMyApp CLI Tool")
-  .version("0.1.0");
+  .version(version);
 
 program.addCommand(initCommand());
 program.addCommand(createCommand());
@@ -21,6 +25,7 @@ program.addCommand(migrateStatusCommand());
 program.addCommand(uploadCommand());
 program.addCommand(generateCommand());
 program.addCommand(snapshotCommand());
+program.addCommand(submissionsCommand());
 
 program.parseAsync(process.argv).catch((err) => {
   console.error("Error:", err.message);

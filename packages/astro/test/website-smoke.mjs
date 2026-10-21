@@ -59,15 +59,11 @@ const api = createServer((req, res) => {
             type: "contact",
             accepting_responses: true,
             requires_captcha: false,
+            captcha: null,
+            honeypot: true,
+            form_url: "https://forms.example/contact",
           },
         ],
-      }),
-    );
-  if (url.pathname.endsWith("/form-url"))
-    return res.end(
-      JSON.stringify({
-        success: true,
-        data: { formUrl: "https://forms.example/contact" },
       }),
     );
   res.statusCode = 404;
@@ -96,7 +92,14 @@ try {
       "utf8",
     );
     assert.match(enhanced, /data-atmyapp-enhance/);
-    assert.match(enhanced, /addEventListener/);
+    // The enhancement may be inlined or bundled into a module script.
+    const scriptSources = [...enhanced.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
+    const bundled = await Promise.all(
+      scriptSources.map((src) => readFile(new URL(`dist${src}`, root), "utf8").catch(() => "")),
+    );
+    assert.match([enhanced, ...bundled].join("\n"), /data-atmyapp-enhance/);
+    assert.match([enhanced, ...bundled].join("\n"), /Idempotency-Key/);
+    assert.match(enhanced, /name="_ama_hp"/);
     const report = JSON.parse(
       await readFile(
         new URL("dist/.well-known/atmyapp/diagnostics.json", root),
@@ -104,6 +107,11 @@ try {
       ),
     );
     assert.equal(report.execution, "build");
+    const listed = await readFile(
+      new URL("dist/pages/from-build/index.html", root),
+      "utf8",
+    );
+    assert.match(listed, /from-build: Published content/);
   } else if (mode === "server-build") {
     process.env.ASTRO_TEST_SSR = "1";
     await build({ root });
@@ -178,6 +186,11 @@ try {
     ).json();
     assert.equal(report.execution, "runtime");
     assert.equal(report.preview.revision, 2);
+    // Dynamic routes render per request; getStaticPaths() is not called.
+    assert.match(
+      await (await fetch(origin + "/pages/draft-only/?amaPreviewKey=A")).text(),
+      /draft-only: Content A 2/,
+    );
   }
   console.log(`${mode} website smoke passed`);
 } finally {

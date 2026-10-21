@@ -1,19 +1,17 @@
 ---
 title: Changelog
-description: See what changed in AtMyApp packages and documentation.
+description: What changed in each package, straight from the release notes.
 ---
 
-This page is a curated placeholder for the first docs release.
+import PackageChangelogs from "../../components/changelog/PackageChangelogs.astro";
 
-## Current package baseline
+Packages are released independently with [Changesets](https://github.com/changesets/changesets). The newest version of each is shown next to its name. Update related packages together; for example, `@atmyapp/astro` expects the matching `@atmyapp/core`.
 
-- `@atmyapp/core` `0.1.4`
-- `@atmyapp/structure` `0.1.4`
-- `@atmyapp/cli` `0.1.5`
-- `@atmyapp/astro` `0.0.2`
+```sh
+npm install @atmyapp/astro@latest @atmyapp/core@latest @atmyapp/structure@latest
+npm install --save-dev @atmyapp/cli@latest
+```
 
-## Release process
+<PackageChangelogs />
 
-Package releases are managed with Changesets from the monorepo. A normal commit to `main` does not publish npm packages unless it includes a changeset and the generated version PR is merged.
-
-Docs deploy separately to GitHub Pages.
+Breaking changes are called out in the notes. Before `1.0`, a minor version (`0.5` → `0.6`) may include them.

@@ -1,71 +1,231 @@
 ---
-title: Examples
-description: Practical AtMyApp examples for common project shapes.
+title: Recipes
+description: Copy-ready patterns for things most websites need. Navigation, a paginated blog, team pages, Markdown and more.
 ---
 
-Use these examples as starting points for real projects.
+Each recipe shows the schema part and the code that renders it. Astro examples use `getAtMyApp(Astro, { schema })`; with another framework, use a client from `createAtMyAppClient` in the same way.
 
-Start with the complete [JavaScript integration](/quick-start/) or [Astro setup](/guides/astro/). These schemas illustrate alternative content models; migrate them and create real content before reading it.
+## Navigation and footer
 
-## Minimal site settings
+One document holds everything that appears on every page.
 
-```ts
-import { defineDocument, defineSchema, s } from "@atmyapp/structure";
+```ts title="atmyapp.schema.ts"
+site: defineDocument({
+  description: "Navigation and footer, shown on every page.",
+  fields: {
+    nav: s.array({
+      maxItems: 6,
+      items: s.object({
+        fields: {
+          label: s.string({ max: 24 }),
+          href: s.string({ description: "A path such as /menu, or a full URL." }),
+        },
+      }),
+    }),
+    footerText: s.string({ max: 200 }),
+    instagram: s.url({ optional: true }),
+  },
+}),
+```
 
-export default defineSchema({
-  definitions: {
-    settings: defineDocument({
-      fields: {
-        siteTitle: s.string({ default: "My Website" }),
-        supportEmail: s.string({ format: "email" }),
-      },
+```astro title="src/layouts/BaseLayout.astro"
+---
+const ama = getAtMyApp(Astro, { schema });
+const site = await ama.storage.getValue("site");
+---
+<nav>
+  {site.nav.map((item) => <a href={item.href}>{item.label}</a>)}
+</nav>
+<slot />
+<footer>
+  <p>{site.footerText}</p>
+  {site.instagram && <a href={site.instagram}>Instagram</a>}
+</footer>
+```
+
+## Blog with pages and authors
+
+```ts title="atmyapp.schema.ts"
+authors: defineCollection({
+  fields: { name: s.string(), avatar: s.image({ optional: true }) },
+}),
+posts: defineCollection({
+  fields: {
+    title: s.string({ max: 90 }),
+    slug: s.slug({ source: "title" }),
+    excerpt: s.string({ max: 200 }),
+    cover: s.image({ optional: true }),
+    body: s.markdown(),
+    author: s.reference("authors"),
+  },
+}),
+```
+
+A paginated index at `/blog/`, `/blog/2/`, … that works in static builds and in previews:
+
+```astro title="src/pages/blog/[...page].astro"
+---
+import { getAtMyApp } from "@atmyapp/astro/server";
+import schema from "../../../atmyapp.schema";
+
+// Static builds: one page per 10 posts.
+export async function getStaticPaths() {
+  const { total } = await getAtMyApp({ schema }).collections.list("posts", {
+    limit: 1,
+    format: "dataWithMeta",
+  });
+  const pages = Math.max(1, Math.ceil(total / 10));
+  return Array.from({ length: pages }, (_, i) => ({
+    params: { page: i === 0 ? undefined : String(i + 1) },
+  }));
+}
+
+const perPage = 10;
+const page = Number(Astro.params.page ?? 1);
+const ama = getAtMyApp(Astro, { schema });
+const { rows: posts, total } = await ama.collections.list("posts", {
+  limit: perPage,
+  offset: (page - 1) * perPage,
+  format: "dataWithMeta",
+});
+const lastPage = Math.ceil(total / perPage);
+---
+{posts.map((post) => (
+  <article>
+    {post.cover && <img src={post.cover.url} alt="" />}
+    <a href={`/blog/${post.slug}/`}>{post.title}</a>
+    <p>{post.excerpt}</p>
+  </article>
+))}
+{page > 1 && <a href={page === 2 ? "/blog/" : `/blog/${page - 1}/`}>Newer</a>}
+{page < lastPage && <a href={`/blog/${page + 1}/`}>Older</a>}
+```
+
+`getStaticPaths()` runs in its own scope, so it can't use `perPage`; keep the two numbers in sync.
+
+The post page, with its author:
+
+```astro title="src/pages/blog/[slug].astro"
+---
+import { getAtMyApp } from "@atmyapp/astro/server";
+import { CollectionsFilter as F } from "@atmyapp/core";
+import { marked } from "marked";
+import schema from "../../../atmyapp.schema";
+
+export async function getStaticPaths() {
+  const posts = await getAtMyApp({ schema }).collections.list("posts");
+  return posts.map((post) => ({ params: { slug: post.slug } }));
+}
+
+const ama = getAtMyApp(Astro, { schema });
+const post = await ama.collections.first("posts", { filter: F.eq("slug", Astro.params.slug!) });
+if (!post) return new Response("Not found", { status: 404 });
+const author = await ama.collections.getById("authors", post.author);
+---
+<article>
+  <h1>{post.title}</h1>
+  <p>By {author?.name}</p>
+  <Fragment set:html={marked.parse(post.body)} />
+</article>
+```
+
+Markdown comes from your client, so decide what HTML it may contain. If editors shouldn't use raw HTML, sanitise the output (for example with DOMPurify) or configure your Markdown library to escape it.
+
+## Team page in an order your client chooses
+
+```ts title="atmyapp.schema.ts"
+team: defineCollection({
+  description: "People on the About page, in the order shown.",
+  fields: {
+    name: s.string({ max: 60 }),
+    role: s.string({ max: 60 }),
+    photo: s.image({ config: { ratioHint: { x: 1, y: 1 } } }),
+    position: s.order(),
+  },
+}),
+```
+
+```astro
+---
+const team = (await ama.collections.list("team")).sort((a, b) => a.position - b.position);
+---
+{team.map((person) => (
+  <figure>
+    <img src={person.photo.url} alt={person.name} width="320" height="320" />
+    <figcaption>{person.name}, {person.role}</figcaption>
+  </figure>
+))}
+```
+
+## FAQ
+
+```ts title="atmyapp.schema.ts"
+faq: defineDocument({
+  fields: {
+    questions: s.array({
+      items: s.object({
+        fields: { question: s.string({ max: 140 }), answer: s.longText() },
+      }),
     }),
   },
-});
+}),
 ```
 
-## Blog collection
+```astro
+---
+const { questions } = await ama.storage.getValue("faq");
+---
+{questions.map((item) => (
+  <details>
+    <summary>{item.question}</summary>
+    <p>{item.answer}</p>
+  </details>
+))}
+```
+
+## Featured items
+
+Let your client flag what appears on the homepage, then filter for it:
 
 ```ts
-import {
-  defineCollection,
-  defineDocument,
-  defineSchema,
-  s,
-} from "@atmyapp/structure";
-
-export default defineSchema({
-  definitions: {
-    authors: defineCollection({
-      fields: {
-        name: s.string(),
-        avatar: s.image({ optional: true }),
-      },
-    }),
-    posts: defineCollection({
-      fields: {
-        title: s.string({ min: 3 }),
-        slug: s.slug({ source: "title" }),
-        excerpt: s.string({ format: "long", default: "" }),
-        cover: s.image({ optional: true }),
-        publishedAt: s.date({ optional: true }),
-      },
-    }),
-    home: defineDocument({
-      fields: {
-        headline: s.string(),
-        intro: s.string({ format: "long" }),
-      },
-    }),
-  },
-});
+featured: s.boolean({ default: false, description: "Show on the homepage." }),
 ```
 
-## CLI workflow
+```ts
+import { CollectionsFilter as F } from "@atmyapp/core";
 
-```bash
-atmyapp use --token cli_... --url https://edge.atmyapp.com/projects/your-project-id
-atmyapp init --template blog
-atmyapp migrate --dry-run --verbose
-atmyapp migrate
+const featured = await ama.collections.list("services", { filter: F.eq("featured", true), limit: 3 });
 ```
+
+## Next.js: static pages per entry
+
+```tsx title="app/blog/[slug]/page.tsx"
+import { notFound } from "next/navigation";
+import { CollectionsFilter as F } from "@atmyapp/core";
+import { ama } from "@/lib/atmyapp";
+
+export const revalidate = 300;
+
+export async function generateStaticParams() {
+  const posts = await ama.collections.list("posts", { limit: 50 });
+  return posts.map((post) => ({ slug: post.slug }));
+}
+
+export default async function Post({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const post = await ama.collections.first("posts", { filter: F.eq("slug", slug) });
+  if (!post) notFound();
+  return <h1>{post.title}</h1>;
+}
+```
+
+With `revalidate`, published edits appear within five minutes without a redeploy, and new posts get pages on first visit.
+
+## Read content without JavaScript
+
+```sh
+curl "https://edge.atmyapp.com/v0/projects/<id>/storage/f/home.json" \
+  -H "Authorization: Bearer <api-key>"
+```
+
+See the [HTTP API](/reference/http-api/) for collections, filters and forms.

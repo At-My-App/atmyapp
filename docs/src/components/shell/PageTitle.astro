@@ -2,24 +2,37 @@
 import CopyMarkdown from "@wave-rf/starlight-llm-tools/components/CopyMarkdown.astro";
 import LlmDropdown from "@wave-rf/starlight-llm-tools/components/LlmDropdown.astro";
 
-const { entry } = Astro.locals.starlightRoute;
+const { entry, sidebar } = Astro.locals.starlightRoute;
 const isHome = Astro.url.pathname === "/";
 const slug = Astro.url.pathname.replace(/^\/|\/$/g, "") || "index";
-const showLlmTools = !isHome && Boolean(slug);
+
+// The sidebar group that holds this page, shown above the title.
+type Entry = (typeof sidebar)[number];
+const findGroup = (entries: Entry[]): string | undefined => {
+  for (const item of entries) {
+    if (item.type !== "group") continue;
+    if (item.entries.some((child) => child.type === "link" && child.isCurrent))
+      return item.label;
+    const nested = findGroup(item.entries);
+    if (nested) return nested;
+  }
+};
+const group = findGroup(sidebar);
+const description = entry.data.description;
 ---
 
 {
   isHome ? (
     <span id="_top" class="sr-only">{entry.data.title}</span>
   ) : (
-    <>
-      {showLlmTools && (
-        <div class="ama-page-tools">
-          <CopyMarkdown slug={slug} />
-          <LlmDropdown />
-        </div>
-      )}
+    <div class="ama-page-heading">
+      {group && <span class="ama-crumb">{group}</span>}
       <h1 id="_top">{entry.data.title}</h1>
-    </>
+      {description && <p class="ama-lead">{description}</p>}
+      <div class="ama-page-tools">
+        <CopyMarkdown slug={slug} />
+        <LlmDropdown />
+      </div>
+    </div>
   )
 }

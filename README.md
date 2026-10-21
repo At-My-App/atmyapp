@@ -1,13 +1,18 @@
-# AtMyApp Packages
+# AtMyApp SDKs
 
-Public monorepo for the AtMyApp npm packages.
+Packages for connecting websites to [AtMyApp](https://atmyapp.com), where developers build the site and their clients edit the content.
 
-## Packages
+**Documentation: [docs.atmyapp.com](https://docs.atmyapp.com)**
 
-- `@atmyapp/structure`
-- `@atmyapp/core`
-- `@atmyapp/cli`
-- `@atmyapp/astro`
+| Package | Use it for |
+| --- | --- |
+| [`@atmyapp/astro`](packages/astro) | Astro integration: content, previews, SEO tags and forms |
+| [`@atmyapp/core`](packages/core) | Any other JavaScript framework or runtime |
+| [`@atmyapp/structure`](packages/structure) | Writing the content schema |
+| [`@atmyapp/cli`](packages/cli) | Connecting a project and uploading schemas |
+| [`create-atmyapp`](packages/create-atmyapp) | `npm create atmyapp@latest` |
+
+The docs site lives in [`docs/`](docs).
 
 ## Development
 
@@ -17,40 +22,25 @@ pnpm build
 pnpm test
 ```
 
-Internal package dependencies use the `workspace:` protocol during development and are rewritten to regular semver ranges when published.
+Internal dependencies use the `workspace:` protocol and are rewritten to semver ranges on publish. Run the docs locally with `pnpm --filter @atmyapp/docs dev`.
 
 ## Releases
 
-Releases are managed with Changesets. A push to `main` always runs CI and the
-release workflow, but it does not publish a new npm version unless there is a
-pending changeset.
-
-For a change that should be released, run:
+Releases use [Changesets](https://github.com/changesets/changesets). For a change that should be released:
 
 ```sh
 pnpm changeset
 ```
 
-Choose the changed package, select the semver bump, and commit the generated
-file under `.changeset/` with your code change.
+Pick the packages and the version bump, and commit the generated file in `.changeset/` with your change. Then:
 
-The release flow is:
+1. Merge a PR that includes the changeset.
+2. The **Release** workflow opens or updates a version PR.
+3. Merge the version PR.
+4. The workflow publishes the bumped packages to npm.
 
-1. Merge a PR that includes one or more `.changeset/*.md` files.
-2. The `Release` workflow opens or updates a version PR.
-3. Review and merge the version PR.
-4. The `Release` workflow publishes the bumped packages to npm.
+Commits without a changeset run CI but publish nothing. Docs deploy separately to GitHub Pages when `docs/` changes, and need no changeset.
 
-Commits without changeset files still run CI, but they do not create package
-versions and do not publish anything.
+Publishing uses the `NPM_TOKEN` secret (as `NODE_AUTH_TOKEN`). It needs publish access to the `@atmyapp` scope; with 2FA, use a granular token with 2FA bypass.
 
-Publishing uses the `NPM_TOKEN` GitHub Actions secret through `NODE_AUTH_TOKEN`.
-The token must have permission to publish the `@atmyapp` packages. If the npm
-account or packages require 2FA, use a granular token with publish access and
-2FA bypass enabled.
-
-## Canonical Astro SDK
-
-`packages/astro` in the At-My-App/atmyapp repository is the only maintained source for `@atmyapp/astro`. The standalone At-My-App/astro repository is retired. Changes and releases use this workspace and its Changesets workflow.
-
-The shared validation, defaults, nullability and item identity rules are documented in [Content validation and normalization](docs/content-contract.md).
+`packages/astro` is the only maintained source of `@atmyapp/astro`; the standalone At-My-App/astro repository is retired. Shared validation, defaults, nullability and item identity rules are described in [Content validation and normalization](docs/content-contract.md).

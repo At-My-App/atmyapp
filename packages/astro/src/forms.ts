@@ -1,4 +1,4 @@
-import type { AtMyAppClient } from "@atmyapp/core";
+import { captchaWidget, type AtMyAppClient } from "@atmyapp/core";
 export async function resolveForm(
   client: Pick<AtMyAppClient, "submissions">,
   submission: string,
@@ -23,7 +23,13 @@ export async function resolveForm(
       enabled: false,
       reason: "This form is currently closed.",
     } as const;
-  if (status.requiresCaptcha && !options.hasCaptcha)
+  // The configured widget is rendered automatically unless the page brings
+  // its own through the captcha slot.
+  const captcha =
+    status.captcha?.siteKey && !options.hasCaptcha
+      ? captchaWidget(status.captcha)
+      : null;
+  if (status.requiresCaptcha && !options.hasCaptcha && !captcha)
     return {
       enabled: false,
       reason:
@@ -48,5 +54,10 @@ export async function resolveForm(
   const params = await client.submissions.getFormParams(submission, {
     returnTo,
   });
-  return { enabled: true, ...params } as const;
+  return {
+    enabled: true,
+    ...params,
+    honeypot: status.honeypot !== false,
+    captcha,
+  } as const;
 }

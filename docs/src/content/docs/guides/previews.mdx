@@ -1,0 +1,75 @@
+---
+title: Drafts and previews
+description: How your client sees unpublished edits on your real website, and what your code needs to do for it.
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+Your client's edits are drafts until they publish. A preview shows those drafts on your actual website, with your real layout, before anything goes live.
+
+## How a preview reaches your page
+
+<Steps>
+
+1. Your client clicks **Preview** in the dashboard.
+
+2. AtMyApp opens your website with a **preview key** in the URL: `?amaPreviewKey=…`. The key is signed, scoped to that editing session, and expires on its own.
+
+3. Your page reads the key from the request and passes it to the SDK.
+
+4. Every read made with that key returns the drafts layered over the published content.
+
+</Steps>
+
+That means previews need a page that renders **per request**. A static HTML file built yesterday can't show today's draft. The usual setup is a static production site plus a dynamic preview server.
+
+## AtMyApp preview servers
+
+Under **Settings → Dev servers**, AtMyApp can run your repository's dev server for previews. Each preview gets its own address, such as `https://p-…-preview.atmyapp.com`. The preview proxy keeps `amaPreviewKey` in the URL while your client clicks around the site, including client-side navigation, so links between pages keep showing drafts.
+
+With `@atmyapp/astro` this needs no code: preview servers run Astro in dynamic mode, and `getAtMyApp(Astro)` picks up the key from each request. See [Astro modes and previews](/guides/astro-previews/).
+
+## Previews in your own code
+
+With `@atmyapp/core`, create a client for each request, with the key from that request:
+
+```ts
+import { createAtMyAppClient } from "@atmyapp/core";
+import schema from "../atmyapp.schema";
+
+export function amaForRequest(url: URL) {
+  const previewKey = url.searchParams.get("amaPreviewKey") ?? undefined;
+  return createAtMyAppClient({
+    baseUrl: process.env.ATMYAPP_API_URL!,
+    apiKey: process.env.ATMYAPP_API_KEY!,
+    schema,
+    previewKey,
+    mode: previewKey ? "priority" : "client",
+    errorPolicy: "throw",
+  });
+}
+```
+
+You can also pass the key to a single read: `ama.storage.getValue("home", { previewKey })`.
+
+<Aside type="caution" title="Rules for preview code">
+- **One client per request.** A preview key stored in a shared, module-level client would leak drafts to every visitor.
+- **Never cache preview responses publicly.** AtMyApp marks preview responses `no-store`; keep it that way in your CDN.
+- **Fail loudly.** If a preview key is invalid or expired, show an error. Falling back to published content would make your client think their edit is live.
+- **Keep the key in links** if you run your own preview host. AtMyApp's preview proxy does this for you; elsewhere, add `amaPreviewKey` to internal links or store it in a session.
+</Aside>
+
+## What else changes in a preview
+
+The SDKs adjust a few behaviours when a preview key is present:
+
+| | In a preview |
+| --- | --- |
+| **Search engines** | `AtMyAppHead` adds `noindex, nofollow`. |
+| **Forms** | `AtMyAppForm` is disabled unless you add `allowPreviewSubmit`. Submissions that do get through are labelled *preview* and kept out of the inbox. |
+| **Analytics** | Page views are not tracked. |
+| **Collections** | Lists include draft entries. A few complex queries (OR filters, very large collections) may not match publishing exactly; the SDK warns when that happens. |
+
+## Publishing
+
+When your client publishes, drafts become the published content. Static sites on AtMyApp hosting rebuild automatically; other setups refresh as described in [How AtMyApp works](/concepts/how-it-works/#from-edit-to-live-website).

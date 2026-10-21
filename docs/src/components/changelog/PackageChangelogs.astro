@@ -1,0 +1,35 @@
+---
+// Renders each package's Changesets CHANGELOG.md, newest version first.
+import { getCollection, render } from "astro:content";
+
+const order = ["@atmyapp/core", "@atmyapp/astro", "@atmyapp/structure", "@atmyapp/cli", "create-atmyapp"];
+const entries = await Promise.all(
+  (await getCollection("changelogs")).map(async (entry) => {
+    const body = entry.body ?? "";
+    const name = body.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? entry.id;
+    const version = body.match(/^##\s+(\d+\.\d+\.\d+\S*)/m)?.[1];
+    const { Content } = await render(entry);
+    return { name, version, Content };
+  }),
+);
+entries.sort((a, b) => {
+  const rank = (name: string) => (order.indexOf(name) + 1 || order.length + 1);
+  return rank(a.name) - rank(b.name);
+});
+---
+
+<div class="ama-changelog not-content">
+  {
+    entries.map(({ name, version, Content }, index) => (
+      <details open={index === 0}>
+        <summary>
+          <code>{name}</code>
+          {version && <span class="ama-version">{version}</span>}
+        </summary>
+        <div class="ama-changelog-body sl-markdown-content">
+          <Content />
+        </div>
+      </details>
+    ))
+  }
+</div>

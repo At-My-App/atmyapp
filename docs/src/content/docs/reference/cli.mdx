@@ -1,36 +1,205 @@
 ---
-title: CLI Reference
-description: Curated reference for @atmyapp/cli commands and package entrypoints.
+title: CLI
+description: Every atmyapp command and option, from connecting a project to following form submissions.
 ---
 
-`@atmyapp/cli` publishes the `atmyapp` binary.
+import { Aside } from "@astrojs/starlight/components";
 
-## Install
+Install the CLI as a dev dependency, so everyone on the project uses the same version:
 
-```bash
-npm install -g @atmyapp/cli
+```sh
+npm install --save-dev @atmyapp/cli
+npx atmyapp --help
 ```
 
-## Binary
+| Command | Does |
+| --- | --- |
+| [`create`](#atmyapp-create) | Create a new website from a starter |
+| [`use`](#atmyapp-use) | Connect this folder to a project |
+| [`init`](#atmyapp-init) | Write a starter schema |
+| [`migrate`](#atmyapp-migrate) | Plan and apply schema changes |
+| [`migrate-status`](#atmyapp-migrate-status) | Check a migration whose result was lost |
+| [`submissions tail`](#atmyapp-submissions-tail) | Follow form submissions live |
+| [`snapshot`](#atmyapp-snapshot) | Download content for offline fallback |
+| [`upload`](#atmyapp-upload), [`generate`](#atmyapp-generate) | Write files to project storage directly (advanced) |
 
-```bash
-atmyapp --help
+Commands that talk to the project use the session saved by `atmyapp use`. Most also accept `--url`, `--token` and `--project-id` to override it, and `--verbose` for detailed logs.
+
+## `atmyapp create`
+
+```sh
+npm create atmyapp@latest            # same thing, without installing the CLI
+npx atmyapp create my-site
+npx atmyapp create my-site --pm pnpm --no-git --yes
 ```
 
-## Commands
+Creates an Astro + Tailwind CSS website with `@atmyapp/astro` installed, a starter `atmyapp.schema.ts`, two pages and package scripts for migrations.
 
-- `atmyapp use` authenticates a local workspace.
-- `atmyapp init` creates starter schema and client files.
-- `atmyapp migrate` compiles and uploads schema definitions.
-- `atmyapp upload` uploads local files to project storage.
-- `atmyapp generate` creates a placeholder file for a storage path.
-- `atmyapp snapshot` works with project snapshots.
+| Option | Meaning |
+| --- | --- |
+| `[project-name]` | Folder to create |
+| `--template <name>` | `astro-tailwind` (the only template today) |
+| `--pm <manager>` | `npm`, `pnpm`, `yarn` or `bun` |
+| `--install` / `--no-install` | Install dependencies (asks by default) |
+| `--git` / `--no-git` | Initialise a git repository (asks by default) |
+| `--force` | Allow a non-empty folder |
+| `-y, --yes` | Accept all defaults |
 
-## Programmatic exports
+## `atmyapp use`
 
-The package exposes:
+```sh
+npx atmyapp use --url https://api.atmyapp.com/v0/projects/<id> --token <cli-key>
+```
 
-- `@atmyapp/cli`
-- `@atmyapp/cli/browser`
+Verifies the CLI key, saves the session to `.ama/session.json` and adds that file to `.gitignore`. Copy the full command from **Settings → CLI keys**. Without options it asks for both values.
 
-These exports are primarily for shared implementation and tooling scenarios. Most projects should use the `atmyapp` binary.
+| Option | Meaning |
+| --- | --- |
+| `-u, --url <url>` | The CLI URL from **Settings → CLI keys** |
+| `-t, --token <key>` | The CLI key |
+| `-p, --project-id <id>` | Only needed when the URL doesn't contain `/projects/<id>` |
+
+<Aside type="caution">
+The CLI URL (`api.atmyapp.com`) is not the Project API URL your website uses (`edge.atmyapp.com`). See [Keys and URLs](/concepts/how-it-works/#keys-and-urls).
+</Aside>
+
+## `atmyapp init`
+
+```sh
+npx atmyapp init                     # minimal template
+npx atmyapp init --template blog
+```
+
+Writes `atmyapp.schema.ts` and, for `minimal` and `blog`, a client file. If the CLI is connected, it offers to create an API key and prints the environment variables to copy.
+
+| Option | Meaning |
+| --- | --- |
+| `--template <name>` | `empty` (schema only), `minimal` (one document) or `blog` (a document and a posts collection) |
+| `--path <file>` | Schema file name, such as `atmyapp.schema.json` |
+| `--force` | Overwrite existing files |
+
+## `atmyapp migrate`
+
+```sh
+npx atmyapp migrate --dry-run        # compile and validate locally only
+npx atmyapp migrate                  # plan, confirm, apply
+```
+
+Finds the schema (`atmyapp.schema.{ts,mts,js,mjs,json}`, or `ama.schema.*`), compiles it to `.ama/definitions.json`, asks the project for a plan, and applies it after confirmation. Guide: [Change a live schema](/guides/schema-changes/).
+
+| Option | Meaning |
+| --- | --- |
+| `--dry-run` | Compile and validate locally. Doesn't contact the server. |
+| `--operations <file>` | JSON list of `renameField` / `backfillField` operations |
+| `-y, --yes` | Apply plans that change stored content without asking. Needed without a terminal. |
+| `--json` | Print the plan and result as one JSON document (logs go to stderr) |
+| `--branch <name>` | Target content branch. Default `main`. |
+| `--clear-collection <name>` | Confirm deleting a removed collection's entries. Repeatable. |
+| `--clear-content <name>` | Confirm deleting a removed document. Repeatable. |
+| `--clear-column <collection.field>` | Confirm hiding a removed field. Its values are kept. Repeatable. |
+| `--dangerously-resolve-all-conflicts` | Re-plan with every clear the plan asks for. Deletes content. |
+
+Before applying, the CLI writes `.ama/migrations/<operation-id>.json` with the server, compiled schema and operations (never the key).
+
+An optional `atmyapp.config.ts` (or `.js`) can add a `description`, `args` and `metadata` to the uploaded schema.
+
+## `atmyapp migrate-status`
+
+```sh
+npx atmyapp migrate-status                    # last migration started in this folder
+npx atmyapp migrate-status <operation-id> --reconcile
+```
+
+Reports whether a migration was committed. Use it when `migrate` couldn't confirm the result.
+
+| Option | Meaning |
+| --- | --- |
+| `[operation-id]` | Default: the last migration started here |
+| `--reconcile` | Finish follow-up work for a committed migration, using its recorded schema and operations |
+| `--operations <file>` | Only for a migration started elsewhere, without a local record |
+| `--branch <name>` | Target content branch |
+| `--json` | One JSON document on stdout, also on failure |
+
+## `atmyapp submissions tail`
+
+```bash
+npx atmyapp submissions tail            # every form
+npx atmyapp submissions tail contact    # one form
+npx atmyapp submissions tail --json | jq 'select(.event.kind == "rejected")'
+```
+
+```
+14:02:11  contact  ✔ received 3f9c1a2b  test  jan@example.com  "Hello, I'd like a quote…"  1 file
+14:02:40  contact  ✖ rejected  captcha_expired  dev  origin=http://localhost:4321
+14:03:05  contact  ✔ received 81ab77c0  dev  ada@example.com  dropped: utm_source
+14:05:12  contact  • 81ab77c0 marked done
+```
+
+Shows the last 10 events, then checks for new ones every 2 seconds:
+
+- **Received submissions** show their environment (`live`, `test`, `dev`, `preview`), the sender and a snippet.
+- **Rejected submissions** show the reason, for example a failed captcha or a blocked website. Spam-trap hits are counted but not listed.
+- **Inbox changes** (done, tags, notes, snoozes) appear as they happen.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `[type]` | all forms | Only this form |
+| `--json` | off | One JSON object per line (NDJSON), for scripts |
+| `--include-live-data` | off | Show what visitors sent on the live website. Without it, live submissions show only their id, environment and file count, which keeps personal data out of your terminal history. Test and local submissions always show in full. |
+| `--interval <seconds>` | 2 | How often to check |
+| `--backlog <count>` | 10 | Recent events to show first (0 for none) |
+| `--once` | off | Show recent events and exit |
+
+Pair it with [test mode](/guides/forms/#try-it-without-filling-the-inbox) or a local dev server to see exactly what your form sends.
+
+## `atmyapp snapshot`
+
+```sh
+npx atmyapp snapshot create          # build a snapshot on the server (can take a few minutes)
+npx atmyapp snapshot download        # save the latest one to .ama/local
+```
+
+Snapshots feed the core client's [offline fallback](/reference/core/#offline-snapshots).
+
+| Option | Meaning |
+| --- | --- |
+| `-b, --branch <name>` | Content branch. Default `main`. |
+| `-o, --output <path>` | `download` only: target folder. Default `.ama/local`. |
+| `--force-sync` | `create` only: full instead of incremental sync |
+
+## `atmyapp upload`
+
+```sh
+npx atmyapp upload "content/**/*" --base-path content --commit "Import old site"
+```
+
+Writes local files straight into project storage, bypassing drafts and review. Useful for one-off imports; for everyday edits, use the dashboard.
+
+| Option | Meaning |
+| --- | --- |
+| `[inputs...]` | Files or glob patterns |
+| `-b, --base-path <path>` | Remote folder to upload into |
+| `--branch <name>` | Target branch. Default `main`. |
+| `--commit <message>` | Message recorded with the change |
+| `--delete <path>` | Remote file to delete. Repeatable. |
+| `--no-stream` | Disable live progress output |
+
+## `atmyapp generate`
+
+```sh
+npx atmyapp generate --path home.json --save ./home.json
+```
+
+Asks the project to generate placeholder content for a storage path, based on the schema.
+
+| Option | Meaning |
+| --- | --- |
+| `--path <path>` | Required. The storage path. |
+| `--save <file>` | Also save the result locally |
+| `--json` | Print the raw response |
+| `--warnings-as-error` | Fail on validation warnings |
+| `--branch <name>` | Target branch |
+
+## Programmatic use
+
+`@atmyapp/cli` also exports `compileCanonicalSource`, `generateCanonicalOutput` and `runCanonicalMigrate` for build tools. Most projects only need the binary.

@@ -1,88 +1,520 @@
 ---
+import { Code } from "@astrojs/starlight/components";
 import ShellIcon from "../shell/ShellIcon.astro";
-const cards = [
+
+const schemaCode = `export default defineSchema({
+  definitions: {
+    home: defineDocument({
+      fields: {
+        headline: s.string({ max: 80 }),
+        hero: s.image({ optional: true }),
+      },
+    }),
+    services: defineCollection({
+      fields: { title: s.string(), slug: s.slug({ source: "title" }) },
+    }),
+  },
+});`;
+
+const pageCode = `---
+import { getAtMyApp } from "@atmyapp/astro/server";
+import schema from "../../atmyapp.schema";
+
+const ama = getAtMyApp(Astro, { schema });
+const home = await ama.storage.getValue("home");
+const services = await ama.collections.list("services");
+---
+<h1>{home.headline}</h1>
+{services.map((s) => <a href={\`/services/\${s.slug}/\`}>{s.title}</a>)}`;
+
+const steps = [
+  {
+    title: "Model",
+    body: "Describe what your client may edit in atmyapp.schema.ts. One CLI command uploads it.",
+  },
+  {
+    title: "Connect",
+    body: "Add the project URL and a public key. Read typed content with one call.",
+  },
+  {
+    title: "Edit and preview",
+    body: "Your client edits drafts in the dashboard and previews them on your real site.",
+  },
+  {
+    title: "Publish",
+    body: "Publishing rebuilds a static site on AtMyApp hosting. Server-rendered sites update on the next request.",
+  },
+];
+
+const paths = [
+  {
+    title: "Astro tutorial",
+    tag: "Recommended",
+    body: "From an empty folder to a deployed site with content, pages, SEO and a contact form.",
+    href: "/guides/astro/",
+    icon: "rocket",
+    action: "Start the tutorial",
+  },
   {
     title: "Any JavaScript website",
-    description:
-      "Connect your project, define content, and render your first page. Works with any framework.",
+    body: "Next.js, SvelteKit, Nuxt, Remix, Vite or a Node server. Read content with @atmyapp/core.",
     href: "/quick-start/",
     icon: "code",
-    action: "Start integrating",
+    action: "Connect your site",
   },
   {
-    title: "Built with Astro",
-    description:
-      "Start static. Add shared clients, live previews, metadata, and ordinary HTML forms.",
-    href: "/guides/astro/",
-    icon: "bolt",
-    action: "Set up Astro",
-  },
-  {
-    title: "Model your content",
-    description:
-      "Documents, collections, relationships, and every field option. Give editors clear boundaries.",
-    href: "/guides/structure/",
-    icon: "layers",
-    action: "Define your schema",
+    title: "Just a form",
+    body: "Collect submissions from any HTML page. No backend and no API key needed.",
+    href: "/guides/forms/",
+    icon: "message",
+    action: "Add a form",
   },
 ] as const;
+
+const topics = [
+  { title: "How AtMyApp works", body: "Projects, keys, drafts and publishing", href: "/concepts/how-it-works/", icon: "layers" },
+  { title: "Design your schema", body: "Documents, collections, references", href: "/guides/structure/", icon: "file" },
+  { title: "Query collections", body: "Filters, pages, sorting, references", href: "/guides/collections/", icon: "list" },
+  { title: "Drafts and previews", body: "Show unpublished edits safely", href: "/guides/previews/", icon: "eye" },
+  { title: "Change a live schema", body: "Plans, renames and backfills", href: "/guides/schema-changes/", icon: "wrench" },
+  { title: "Spam protection", body: "Captcha, allowed sites, rate limits", href: "/guides/form-spam-protection/", icon: "shield" },
+  { title: "Deploy", body: "AtMyApp hosting or your own host", href: "/deployment/", icon: "globe" },
+  { title: "Troubleshooting", body: "Symptoms, causes and fixes", href: "/troubleshooting/", icon: "search" },
+] as const;
+
+const packages = [
+  { name: "@atmyapp/core", body: "Read content, collections and settings; send forms.", href: "/reference/core/" },
+  { name: "@atmyapp/astro", body: "Astro integration: config, previews, head tags, forms.", href: "/reference/astro/" },
+  { name: "@atmyapp/structure", body: "Schema builders, validation and type inference.", href: "/reference/structure/" },
+  { name: "@atmyapp/cli", body: "Connect a project, upload schemas, watch forms.", href: "/reference/cli/" },
+];
 ---
 
-<div class="not-content">
-  <section class="ama-home-hero">
-    <p class="ama-eyebrow">ATMYAPP FOR DEVELOPERS</p>
-    <h1>Your website.<br /><span>Your client’s content.</span></h1>
-    <p>
-      Add editable content to the website you already build. Keep control of the
-      code, give clients control of their content.
-    </p>
-    <a class="ama-start" href="/quick-start/"
-      >Build your first integration <ShellIcon name="arrow" /></a
-    >
-  </section>
-  <section class="ama-home-section">
-    <div class="ama-section-heading">
-      <h2>Choose your starting point</h2><p>
-        From a first connection to a website ready for your client.
+<div class="not-content ama-home">
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Developer documentation</p>
+      <h1>Build the website.<br />Your client edits the content.</h1>
+      <p class="lead">
+        Describe editable content in a TypeScript schema, read it from any
+        JavaScript framework, and give your client a dashboard to edit, preview
+        and publish. They never touch your code.
+      </p>
+      <div class="actions">
+        <a class="button primary" href="/guides/astro/">
+          Start the Astro tutorial <ShellIcon name="arrow" />
+        </a>
+        <a class="button" href="/quick-start/">Use another framework</a>
+      </div>
+      <p class="create">
+        <span>New project?</span>
+        <code>npm create atmyapp@latest</code>
       </p>
     </div>
-    <div class="ama-home-cards">
+    <div class="hero-code">
+      <Code code={schemaCode} lang="ts" title="atmyapp.schema.ts" wrap />
+      <Code code={pageCode} lang="astro" title="src/pages/index.astro" wrap />
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>How it fits together</h2>
+    <ol class="steps">
       {
-        cards.map((card) => (
-          <a class="ama-home-card" href={card.href}>
-            <>
-              <span class="ama-home-card-icon">
-                <ShellIcon name={card.icon} />
-              </span>
-              <h3>{card.title}</h3>
-              <p>{card.description}</p>
-              <span>
-                {card.action} <ShellIcon name="arrow" />
-              </span>
-            </>
+        steps.map((step, index) => (
+          <li>
+            <span class="num">{index + 1}</span>
+            <h3>{step.title}</h3>
+            <p>{step.body}</p>
+          </li>
+        ))
+      }
+    </ol>
+    <a class="more" href="/concepts/how-it-works/">
+      Read how AtMyApp works <ShellIcon name="arrow" />
+    </a>
+  </section>
+
+  <section class="section">
+    <h2>Pick a starting point</h2>
+    <div class="paths">
+      {
+        paths.map((path) => (
+          <a class="path" href={path.href}>
+            <span class="icon">
+              <ShellIcon name={path.icon} />
+            </span>
+            <span class="path-title">
+              {path.title}
+              {"tag" in path && <span class="tag">{path.tag}</span>}
+            </span>
+            <span class="path-body">{path.body}</span>
+            <span class="path-action">
+              {path.action} <ShellIcon name="arrow" />
+            </span>
           </a>
         ))
       }
     </div>
   </section>
-  <section class="ama-home-section">
-    <div class="ama-section-heading"><h2>Build, verify, hand over</h2></div>
-    <div class="ama-guide-table">
-      <a href="/reference/fields/"
-        ><strong>Find the right field</strong><span
-          >Text, media, references, nested content, and validation.</span
-        ><span>01 ↗</span></a
-      >
-      <a href="/guides/diagnostics/"
-        ><strong>Check your integration</strong><span
-          >Confirm connectivity, content builds, and preview state.</span
-        ><span>02 ↗</span></a
-      >
-      <a href="/ai-assistant/"
-        ><strong>Prepare the client handoff</strong><span
-          >Make editing, previewing, and publishing predictable.</span
-        ><span>03 ↗</span></a
-      >
+
+  <section class="section split">
+    <div>
+      <h2>Explore the guides</h2>
+      <div class="topics">
+        {
+          topics.map((topic) => (
+            <a class="topic" href={topic.href}>
+              <ShellIcon name={topic.icon} />
+              <span>
+                <strong>{topic.title}</strong>
+                <span>{topic.body}</span>
+              </span>
+            </a>
+          ))
+        }
+      </div>
+    </div>
+    <div>
+      <h2>Packages</h2>
+      <ul class="packages">
+        {
+          packages.map((pkg) => (
+            <li>
+              <a href={pkg.href}>
+                <code>{pkg.name}</code>
+                <span>{pkg.body}</span>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
     </div>
   </section>
 </div>
+
+<style>
+  .ama-home {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 1rem 0 4rem;
+  }
+  h2 {
+    margin: 0 0 1.25rem;
+    font-size: 1.25rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    color: var(--sl-color-white);
+  }
+
+  /* Hero */
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    gap: 3rem;
+    align-items: start;
+    padding: 1rem 0 3.5rem;
+  }
+  .eyebrow {
+    margin: 0 0 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ama-accent);
+  }
+  .hero h1 {
+    margin: 0;
+    font-size: clamp(2.3rem, 4vw, 3.3rem);
+    line-height: 1.08;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: var(--sl-color-white);
+  }
+  .lead {
+    margin: 1.25rem 0 0;
+    max-width: 34rem;
+    font-size: 1.08rem;
+    line-height: 1.65;
+    color: var(--ama-muted);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 2rem;
+  }
+  .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.1rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--ama-hairline);
+    background: var(--ama-surface);
+    color: var(--ama-text);
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .button:hover {
+    border-color: color-mix(in srgb, var(--ama-accent) 45%, var(--ama-hairline));
+  }
+  .button.primary {
+    border-color: transparent;
+    background: var(--ama-accent);
+    color: #fff;
+  }
+  :global(:root:not([data-theme="light"])) .button.primary {
+    color: #0d0f14;
+  }
+  .button.primary:hover {
+    filter: brightness(1.08);
+  }
+  .create {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 1.5rem 0 0;
+    font-size: 0.85rem;
+    color: var(--ama-muted);
+  }
+  .create code {
+    font-family: var(--sl-font-mono);
+    font-size: 0.82rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 0.45rem;
+    border: 1px solid var(--ama-hairline);
+    background: var(--ama-surface);
+    color: var(--ama-text);
+  }
+  .hero > * {
+    min-width: 0;
+  }
+  .hero-code {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  .hero-code :global(.expressive-code) {
+    margin: 0;
+    --ec-codeFontSize: 0.78rem;
+  }
+  .hero-copy {
+    padding-top: 1.5rem;
+  }
+
+  /* Sections */
+  .section {
+    padding: 2.75rem 0 0;
+    border-top: 1px solid var(--ama-hairline);
+    margin-top: 0.5rem;
+  }
+  .section + .section {
+    margin-top: 2.75rem;
+  }
+
+  /* How it fits together */
+  .steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.75rem;
+  }
+  .num {
+    display: inline-grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    background: var(--ama-accent-soft);
+    color: var(--ama-accent-strong);
+    font-size: 0.82rem;
+    font-weight: 650;
+  }
+  .steps h3 {
+    margin: 0.85rem 0 0.35rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--sl-color-white);
+  }
+  .steps p {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--ama-muted);
+  }
+  .more {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 1.5rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--ama-accent);
+    text-decoration: none;
+  }
+
+  /* Starting paths */
+  .paths {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .path {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1.35rem;
+    border: 1px solid var(--ama-hairline);
+    border-radius: 0.8rem;
+    background: var(--ama-surface);
+    text-decoration: none;
+    box-shadow: var(--ama-shadow);
+  }
+  .path:hover {
+    border-color: color-mix(in srgb, var(--ama-accent) 50%, var(--ama-hairline));
+  }
+  .icon {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 0.55rem;
+    margin-bottom: 0.4rem;
+    border-radius: 0.55rem;
+    background: var(--ama-accent-soft);
+    color: var(--ama-accent);
+  }
+  .path-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--sl-color-white);
+  }
+  .tag {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    color: var(--ama-success);
+    background: color-mix(in srgb, var(--ama-success) 14%, transparent);
+  }
+  .path-body {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--ama-muted);
+  }
+  .path-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: auto;
+    padding-top: 0.5rem;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--ama-accent);
+  }
+
+  /* Topics and packages */
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 3rem;
+  }
+  .topics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem 1rem;
+  }
+  .topic {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.7rem 0.75rem;
+    margin-inline: -0.75rem;
+    border-radius: 0.6rem;
+    text-decoration: none;
+    color: var(--ama-accent);
+  }
+  .topic:hover {
+    background: var(--ama-surface-2);
+  }
+  .topic :global(.shell-icon) {
+    margin-top: 0.15rem;
+  }
+  .topic > span {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+  .topic strong {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--ama-text);
+  }
+  .topic span span {
+    font-size: 0.84rem;
+    color: var(--ama-muted);
+  }
+  .packages {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .packages li + li {
+    border-top: 1px solid var(--ama-hairline);
+  }
+  .packages a {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.75rem 0;
+    text-decoration: none;
+  }
+  .packages code {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: var(--sl-font-mono);
+    font-size: 0.86rem;
+    color: var(--ama-text);
+  }
+  .packages a:hover code {
+    color: var(--ama-accent);
+  }
+  .packages span {
+    font-size: 0.84rem;
+    color: var(--ama-muted);
+  }
+
+  @media (max-width: 72rem) {
+    .hero {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+    .steps {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 52rem) {
+    .paths,
+    .split {
+      grid-template-columns: 1fr;
+    }
+    .split {
+      gap: 2.5rem;
+    }
+  }
+  @media (max-width: 36rem) {
+    .hero {
+      padding-top: 1rem;
+    }
+    .steps,
+    .topics {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

@@ -20,6 +20,11 @@ const buildClients: {
   options: AtMyAppClientOptions;
   client: AtMyAppClient<any, any>;
 }[] = [];
+const isContext = (value: unknown): value is AtMyAppContext =>
+  typeof value === "object" &&
+  value !== null &&
+  "url" in value &&
+  "locals" in value;
 export function getAtMyApp<const T extends CanonicalSchemaInput>(
   context: AtMyAppContext,
   options: AstroClientOptions & { schema: T },
@@ -28,10 +33,27 @@ export function getAtMyApp(
   context: AtMyAppContext,
   options?: AstroClientOptions,
 ): AtMyAppClient;
+/**
+ * Without Astro's context, for build-time code that has none, such as
+ * `getStaticPaths()`. Only static builds run that code: dynamic mode needs
+ * the request to resolve previews.
+ */
+export function getAtMyApp<const T extends CanonicalSchemaInput>(
+  options: AstroClientOptions & { schema: T },
+): AtMyAppClient<T, true>;
+export function getAtMyApp(options?: AstroClientOptions): AtMyAppClient;
 export function getAtMyApp(
-  context: AtMyAppContext,
-  overrides: AstroClientOptions = {},
+  contextOrOptions?: AtMyAppContext | AstroClientOptions,
+  maybeOverrides?: AstroClientOptions,
 ): AtMyAppClient<any, any> {
+  const context = isContext(contextOrOptions) ? contextOrOptions : undefined;
+  const overrides =
+    (context ? maybeOverrides : (contextOrOptions as AstroClientOptions)) ??
+    {};
+  if (!context && defaults.dynamic)
+    throw new Error(
+      "AtMyApp: pass Astro's context in dynamic mode: getAtMyApp(Astro). Call it without the context only in build-time code such as getStaticPaths().",
+    );
   const env = { ...defaults.env };
   if (defaults.dynamic)
     for (const key of ENV_KEYS) {
@@ -40,14 +62,14 @@ export function getAtMyApp(
     }
   const options = resolveClientOptions(
     env,
-    context.url,
+    context?.url,
     defaults.dynamic,
     overrides,
   );
-  let entries = defaults.dynamic ? contexts.get(context.locals) : buildClients;
+  let entries = defaults.dynamic ? contexts.get(context!.locals) : buildClients;
   if (!entries) {
     entries = [];
-    contexts.set(context.locals, entries);
+    contexts.set(context!.locals, entries);
   }
   const existing = entries.find(
     (entry) =>

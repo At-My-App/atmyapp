@@ -1,3 +1,4 @@
+import type { SubmissionError, SubmissionFieldErrors } from "./submissionError";
 import {
   AmaCustomEvent,
   AmaCustomEventDef,
@@ -252,6 +253,10 @@ type CollectionRow<
 
 type EventName<TSchema> = keyof ExtractEvents<TSchema> & string;
 type SubmissionName<TSchema> = keyof ExtractSubmissions<TSchema> & string;
+
+/** Field names of one submission, for typed `error.fields`. */
+type SubmissionFieldName<TSchema, TName extends SubmissionName<TSchema>> =
+  keyof ExtractSubmissionFields<TSchema, TName> & string;
 
 type EventColumns<
   TSchema,
@@ -541,19 +546,110 @@ export type SubmissionFormOptions = {
   returnTo?: string;
 };
 
-export type SubmissionSubmitOptions = {
-  signal?: AbortSignal;
+export type SubmissionUploadProgress = {
+  loaded: number;
+  total: number;
+  /** 0–1. */
+  fraction: number;
 };
 
+export type SubmissionSubmitOptions = {
+  signal?: AbortSignal;
+  /**
+   * Sending again with the same key never stores the submission twice.
+   * Generated per call when omitted; pass your own to make retries you do
+   * yourself (e.g. a "Try again" button) safe too.
+   */
+  idempotencyKey?: string;
+  /**
+   * Automatic retries after a lost connection or a brief outage (default 2).
+   * Refusals such as validation errors are never retried.
+   */
+  retry?: number | false;
+  /**
+   * Check the values against the schema before sending (default true when
+   * the client has a schema). Problems come back without a request.
+   */
+  validate?: boolean;
+  /** Upload progress for submissions with files (browsers; uses XMLHttpRequest). */
+  onUploadProgress?: (progress: SubmissionUploadProgress) => void;
+  /**
+   * Token from a captcha widget you render yourself. Forms that post the
+   * provider's own field (e.g. `cf-turnstile-response`) don't need this.
+   */
+  captchaToken?: string;
+  /**
+   * Test mode: runs every check and stores the submission as a test (kept for
+   * 24 hours, no notifications or Actions). The result includes a step report.
+   */
+  test?: boolean;
+};
+
+export type SubmissionReportStep = {
+  step: "resolve" | "guard" | "parse" | "protect" | "validate" | "store";
+  ok: boolean;
+  detail: string;
+  data?: Record<string, unknown>;
+};
+
+export type SubmissionReport = { steps: SubmissionReportStep[] };
+
+/** A stored submission. */
 export type SubmissionSubmitResult = {
   submissionId: string;
+  /** The same submission was already received (idempotency key replay). */
+  duplicate?: boolean;
+  /** Present in test mode. */
+  report?: SubmissionReport;
+};
+
+/**
+ * What `submit` resolves to. Every failure a visitor can hit (invalid
+ * fields, captcha, rate limits, a lost connection) is a value; only
+ * programming mistakes throw.
+ */
+export type SubmissionResult<Fields extends string = string> =
+  | ({ ok: true } & SubmissionSubmitResult)
+  | { ok: false; error: SubmissionError<Fields>; report?: SubmissionReport };
+
+export type SubmissionValidationResult<Fields extends string = string> =
+  /** `checked` is false when the client has no schema for this submission. */
+  | { ok: true; checked: boolean }
+  | { ok: false; checked: true; fields: SubmissionFieldErrors<Fields> };
+
+export type SubmissionCaptchaProvider = "turnstile" | "recaptcha" | "hcaptcha";
+
+export type SubmissionCaptcha = {
+  provider: SubmissionCaptchaProvider;
+  siteKey: string;
+  /** reCAPTCHA only: v2 shows a checkbox, v3 is invisible. */
+  version?: "v2" | "v3";
+};
+
+/** Everything needed to render a captcha widget in any framework. */
+export type SubmissionCaptchaWidget = SubmissionCaptcha & {
+  scriptSrc: string;
+  /** Class the provider's script turns into a widget (visible widgets only). */
+  className: string;
+  /** Form field the provider writes its token to. */
+  tokenField: string;
+  /**
+   * reCAPTCHA v3: nothing is rendered; call
+   * `grecaptcha.execute(siteKey, { action: "submit" })` on submit and put the
+   * token in `tokenField`.
+   */
+  invisible: boolean;
 };
 
 export type SubmissionTypeStatus = {
   type: string;
   acceptingResponses: boolean;
   requiresCaptcha: boolean;
-  captchaProvider: string | null;
+  captchaProvider: SubmissionCaptchaProvider | null;
+  /** Public widget settings when a captcha is configured. */
+  captcha: SubmissionCaptcha | null;
+  /** Render the hidden spam-trap field (`_ama_hp`). */
+  honeypot: boolean;
   formUrl: string | null;
 };
 
@@ -562,12 +658,21 @@ export type SubmissionsClient<TSchema = unknown> = {
     submission: Name,
     data: SubmissionPayload<TSchema, Name> | FormData,
     options?: SubmissionSubmitOptions,
-  ): Promise<SubmissionSubmitResult>;
+  ): Promise<SubmissionResult<SubmissionFieldName<TSchema, Name>>>;
   submit(
     submission: SubmissionName<TSchema> extends never ? string : never,
     data: Record<string, unknown> | FormData,
     options?: SubmissionSubmitOptions,
-  ): Promise<SubmissionSubmitResult>;
+  ): Promise<SubmissionResult>;
+  /** The schema's field checks without sending anything, e.g. on blur. */
+  validate<Name extends SubmissionName<TSchema>>(
+    submission: Name,
+    data: Partial<SubmissionPayload<TSchema, Name>> | FormData,
+  ): SubmissionValidationResult<SubmissionFieldName<TSchema, Name>>;
+  validate(
+    submission: SubmissionName<TSchema> extends never ? string : never,
+    data: Record<string, unknown> | FormData,
+  ): SubmissionValidationResult;
   getFormUrl<Name extends SubmissionName<TSchema>>(
     submission: Name,
     options?: SubmissionFormOptions,

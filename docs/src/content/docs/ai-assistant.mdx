@@ -1,30 +1,67 @@
 ---
-title: Hand the website over to your client
-description: Design a clear editing experience and verify preview and publishing together.
+title: Hand over to your client
+description: Make the editing experience clear, test it with real content, and leave your client confident they can run the site.
 ---
 
-The developer defines what can change and how it renders. The client uses AtMyApp to update content, review it, and publish it. Integrating the SDK does not automatically embed a chat interface into your website.
+import { Steps } from "@astrojs/starlight/components";
 
-## Make the schema understandable
+A website is handed over when your client can change it without calling you. That depends less on code and more on how understandable the schema is, how the site behaves with real content, and whether they know the edit-preview-publish loop.
 
-Give documents and collections a concrete purpose: homepage, services, team members. Add field descriptions that explain where copy appears and what makes it useful. Use length limits for real layout constraints, optional fields for genuinely optional content, and references for shared information.
+## Make the schema readable
 
-Avoid asking clients to edit raw HTML, technical IDs, or configuration that can break the site. Render missing optional content cleanly. Keep implementation details in the website code.
+Your client sees definition and field names, descriptions and limits. So does the AI assistant, which uses them to make sensible edits.
 
-## Prepare representative content
+- **Name things the way your client does.** "Services", not `offerings_v2`.
+- **Describe where each field appears.** `"Shown in bold under the photo on the homepage."`
+- **Set real limits.** If a heading breaks the layout past 60 characters, use `max: 60`.
+- **Mark optional things optional,** and make sure the page looks fine without them.
+- **Hide technical choices.** No raw HTML, CSS classes or IDs. Offer an `s.enum()` with readable values instead.
+- **Remove fields that do nothing.** Every field should visibly change something on the site.
 
-Populate the site with realistic text and media before handoff. Test long headings, missing images, empty collections, multiple entries, and mobile layouts. Check that each editable field actually changes something on the website; unused fields create confusing promises.
+Changing names later is possible but needs a [migration](/guides/schema-changes/), so it pays to get them right before handover.
 
-## Walk through one complete edit
+## Test with realistic content
 
-1. Ask the client to update a headline or add a service in AtMyApp.
-2. Open its preview and confirm content and metadata reflect the change.
-3. Explain what is still unpublished and how to review the change.
-4. Publish it and confirm when the public website updates.
-5. Repeat with an image, a collection entry, and a form if the site uses them.
+Placeholder text hides problems. Before handover, fill the site with the real thing, then try the awkward cases:
 
-For static hosting, explain that the public site updates after its new build is deployed. An expired preview should lead to reopening a preview, not guessing whether old content is current.
+- the longest heading the limits allow,
+- an entry without its optional image,
+- an empty collection, and one with many entries,
+- every page on a phone.
 
-## Leave a small handoff note
+## Walk through one complete edit together
 
-Record the project and production URLs, where the client edits each section, how publishing reaches the website, who handles deployment failures, and where form responses are reviewed. Keep administrative credentials out of this note. Give the client a support contact and a clear way to report a page that did not update.
+<Steps>
+
+1. Ask your client to change a headline in the dashboard.
+
+2. Have them click **Preview** and find the change on the site. Point out that nothing is live yet.
+
+3. Have them publish. On AtMyApp hosting, show them the build finishing and the change appearing a minute or two later.
+
+4. Repeat with an image, a new collection entry and, if the site has one, a form submission in the inbox.
+
+5. Show them the AI assistant: "Add a new service called Catering with a short description." It prepares the change as a draft; they review and publish it.
+
+</Steps>
+
+## Leave a short handover note
+
+Write down, in plain language:
+
+- the dashboard address and the live website address,
+- which dashboard section edits which part of the site,
+- how long a published change takes to appear,
+- where form messages arrive and who gets notified,
+- who to contact when something looks wrong.
+
+Keep credentials out of the note. Your client signs in with their own account; CLI keys stay with you.
+
+## Before you leave
+
+- [ ] Every editable field has a description and sensible limits.
+- [ ] Realistic content is published, and the site handles missing optional values.
+- [ ] Previews work, and the live site shows only published content.
+- [ ] Forms arrive in the inbox, notifications go to the right people, and **Allowed websites** is set.
+- [ ] Website settings (name, description, sharing image, icon) are filled in.
+- [ ] Your client has published at least one change themselves.

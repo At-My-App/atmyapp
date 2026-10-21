@@ -1,0 +1,123 @@
+---
+title: Change a live schema
+description: Add, rename and remove fields on a site that already has content, without losing what your client wrote.
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+Schemas change as websites grow. `atmyapp migrate` makes those changes safe: it compares your new schema with the content that is already stored, shows you a plan, and changes nothing until you approve it.
+
+## The everyday flow
+
+<Steps>
+
+1. Edit `atmyapp.schema.ts`.
+
+2. Check it locally. This compiles and validates the schema without contacting the server:
+
+   ```sh
+   npx atmyapp migrate --dry-run
+   ```
+
+3. Run the migration:
+
+   ```sh
+   npx atmyapp migrate
+   ```
+
+   The CLI asks the project for a **plan**. The plan lists the schema changes, how many stored items they rewrite, anything removed, and content problems the change would cause. Problems that existed before are listed separately.
+
+4. Read the plan and confirm. If the change touches stored content, the CLI asks before applying it. Applying runs exactly the plan you saw. If someone edited content in the meantime, nothing is written, and you run it again to review a fresh plan.
+
+5. Deploy the code that uses the new fields.
+
+</Steps>
+
+Changes that don't touch stored content, such as adding an optional field, a new document or a new collection, apply without a question.
+
+## What the plan blocks, and how to unblock it
+
+A plan is **blocked** when applying it would leave stored content invalid. Nothing is changed. The common cases:
+
+| You changed | Why it's blocked | Fix |
+| --- | --- | --- |
+| Added a **required** field | Existing entries don't have it | Make it `optional: true`, or [backfill it](#fill-a-new-required-field) |
+| Made an optional field required | Some entries are empty | Backfill it, or fill the entries in the dashboard first |
+| Removed a **collection** | Its entries would be deleted | Confirm with `--clear-collection <name>` |
+| Removed a **document** | Its content would be deleted | Confirm with `--clear-content <name>` |
+| Removed a **field** | Editors would lose it | Confirm with `--clear-column <collection.field>`. The field is hidden; its stored values are kept. |
+
+**Warnings** are softer. A shorter `max` than some stored values, for example, doesn't block the plan, but you must confirm it. Your client will need to shorten those values before they can publish them again.
+
+## Rename a field
+
+The CLI never guesses renames. A field that disappears and another that appears are a removal plus an addition, which would lose the old values. Declare the rename in an operations file instead:
+
+```json title="migrations/rename-title.json"
+[
+  { "type": "renameField", "definition": "posts", "from": "title", "to": "headline" }
+]
+```
+
+Rename the field in your schema, then run:
+
+```sh
+npx atmyapp migrate --operations migrations/rename-title.json
+```
+
+`renameField` moves the stored values, including translations, and moves the dashboard's form layout to the new name. Update your website code in the same release.
+
+## Fill a new required field
+
+To add a required field to entries that already exist, give them a value as part of the migration:
+
+```json title="migrations/add-summary.json"
+[
+  { "type": "backfillField", "definition": "posts", "field": "summary", "value": "" }
+]
+```
+
+`backfillField` fills the field only where it's missing. Pick a value that renders well, or one your client will recognise and replace. A `default` in the schema is not a backfill: it only applies to new content.
+
+Operations can be combined in one file. Each field can appear in only one operation.
+
+## Run migrations in CI
+
+Store the CLI URL and key as CI secrets, connect, then migrate:
+
+```sh
+npx atmyapp use --url "$ATMYAPP_CLI_URL" --token "$ATMYAPP_CLI_KEY"
+npx atmyapp migrate --yes --json
+```
+
+Without a terminal, a plan that needs confirmation stops with `confirmation-required`. Add `--yes` only to pipelines that should apply such plans, after a person has reviewed them. With `--json`, the plan and the result are printed as one JSON document.
+
+<Aside type="caution">
+Run migrations against the project your website code expects. If you keep separate projects for staging and production, use a separate CLI key for each.
+</Aside>
+
+## If the connection drops
+
+Before it applies anything, the CLI saves a record in `.ama/migrations/<operation-id>.json`. It includes the server, the compiled schema and the operations, but never your token. If the response is lost, the migration may or may not have been applied. Ask:
+
+```sh
+npx atmyapp migrate-status            # the last migration started here
+npx atmyapp migrate-status <operation-id>
+```
+
+If it reports the migration as committed but its follow-up work as unfinished, finish it with:
+
+```sh
+npx atmyapp migrate-status <operation-id> --reconcile
+```
+
+`--reconcile` uses the recorded schema and operations, so later edits to your schema file don't matter.
+
+## Safe habits
+
+- **Add first, remove later.** Add the new field, ship the code that reads it, move the content, and remove the old field in a later release.
+- **Commit operations files** next to the schema change they belong to.
+- **Keep code tolerant during the switch.** For one release, handle both the old and new shape, or deploy right after the migration.
+- **Never use `--dangerously-resolve-all-conflicts` on a client's project** unless you mean to delete everything the plan lists.
+
+See every option in the [CLI reference](/reference/cli/#atmyapp-migrate).

@@ -1,95 +1,178 @@
 ---
-title: Core SDK
-description: Runtime configuration, content reads, collections, submissions, and diagnostics.
+title: "@atmyapp/core"
+description: The client for any JavaScript runtime. Every option, method and export.
 ---
 
-Install `@atmyapp/core` for JavaScript and TypeScript websites. Start with the [JavaScript walkthrough](/quick-start/) for a complete integration.
+```sh
+npm install @atmyapp/core
+```
 
-## Create a client
+Works in Node 18+, edge runtimes and browsers. For a walkthrough, start with [Connect any JavaScript website](/quick-start/).
+
+## `createAtMyAppClient(options)`
 
 ```ts
 import { createAtMyAppClient } from "@atmyapp/core";
 import schema from "../atmyapp.schema";
 
 const ama = createAtMyAppClient({
-  apiKey: "YOUR_PUBLIC_WEBSITE_API_KEY",
-  baseUrl: "YOUR_PROJECT_API_URL",
+  baseUrl: process.env.ATMYAPP_API_URL!,
+  apiKey: process.env.ATMYAPP_API_KEY!,
   schema,
   errorPolicy: "throw",
 });
 ```
 
-Core does not look up environment variables or query parameters automatically. Pass resolved values explicitly. Instantiate preview clients per request.
+Core never reads environment variables or the URL on its own; pass values in.
 
-| Option            | Meaning                                                                                               |
-| ----------------- | ----------------------------------------------------------------------------------------------------- |
-| `apiKey`          | Required public website API key                                                                       |
-| `baseUrl`         | Required full project API URL                                                                         |
-| `schema`          | Runtime schema for inferred content names, shapes, and helpers                                        |
-| `previewKey`      | Optional preview capability for this client                                                           |
-| `locale`          | Default locale for localized reads                                                                    |
-| `mode`            | `client` for cached reads; `priority` for direct priority reads                                       |
-| `errorPolicy`     | Storage/collection failures: `quiet-empty` (default) or `throw`                                       |
-| `customFetch`     | Fetch implementation for transport customization                                                      |
-| `plugins`         | Optional content-processing plugin names                                                              |
-| `clientMode`      | `online` (default), `with-fallback`, or `local`                                                       |
-| `localStorage`    | Snapshot path (default `.ama/local`) and fallback `timeoutMs` (default 5000)                          |
-| `localDataSource` | Browser-compatible adapter with `readFile`, `readJson`, `listCollection`, and optional `getStaticUrl` |
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `baseUrl` | required | Project API URL: `https://edge.atmyapp.com/v0/projects/<id>` |
+| `apiKey` | required | Public API key from **Settings → API keys** |
+| `schema` | — | Your schema. Enables `storage.getValue`, typed results and form validation. |
+| `errorPolicy` | `"quiet-empty"` | `"throw"`: failed reads throw. `"quiet-empty"`: they log a warning and return empty values. |
+| `previewKey` | — | Show drafts for this preview session. Create a client per request. |
+| `mode` | `"client"` | `"client"`: reads may be cached up to 60 s. `"priority"`: skip caches (heavier usage). |
+| `locale` | — | Default language for translated content. |
+| `strictPreview` | `false` | Treat an [approximate collection preview](/guides/collections/#previews-and-collections) as a failed read. |
+| `onPreviewApproximate` | console warning | Called when a collection preview is approximate. |
+| `plugins` | `["asset-object"]` | Collection response plugins. Replacing the list drops the default. |
+| `customFetch` | global `fetch` | Your own `fetch`, for logging, retries or tests. |
+| `clientMode` | `"online"` | `"with-fallback"` or `"local"` read from a local snapshot. See [Offline snapshots](#offline-snapshots). |
 
-`mode` selects a request path; `clientMode` selects the online/local data strategy. They are independent. Core's filesystem snapshots need a suitable server runtime. Use `localDataSource` for a browser. Do not use stale local fallback to hide an invalid preview.
+## `ama.storage`
 
-## Storage
+Documents, and files defined with `defineFile` / `defineImage`. Guide: [Documents and media](/guides/reading-content/).
 
-```ts
-const home = await ama.storage.getValue("home");
-const wrappedHome = await ama.storage.get("home");
-const raw = await ama.storage.getFromPath("home.json");
-const imageUrl = await ama.storage.getStaticUrl("images/cover.jpg");
-```
+| Method | Returns |
+| --- | --- |
+| `getValue(name, options?)` | The document's fields, or `{ url }` for an asset. Requires `schema`. |
+| `get(name, options?)` | A wrapper: `{ data, … }` for documents, `{ src, … }` for images |
+| `getFromPath(path, options?)` | The stored value at a path, untyped |
+| `getStaticUrl(path, options?)` | A public URL for a stored file |
 
-`getValue` requires a runtime schema and returns document data or an asset `{ url }`. `get` returns `AmaContent`, `AmaFile`, or `AmaImage` wrappers. `getFromPath` returns `unknown` and does not infer a shape from your path string. These methods accept per-read `previewKey` and `locale` where supported by their signatures.
+`name` is a definition name or its path (`"home"` or `"home.json"`). Options: `previewKey`, `locale`.
 
-The older `get(path, type, options)` overload remains available for legacy definition types. Prefer schema-aware access in new sites. Inspect wrapper error state when using wrapper APIs; not every wrapper-returning read behaves like a thrown exception.
+## `ama.collections`
 
-## Collections
+Guide: [Collections](/guides/collections/).
 
-```ts
-const posts = await ama.collections.list("posts", { limit: 12, offset: 0 });
-const post = await ama.collections.getById("posts", "ENTRY_ID");
-const firstPost = await ama.collections.first("posts");
-const selected = await ama.collections.getManyByIds("posts", [
-  "FIRST_ID",
-  "SECOND_ID",
-]);
-```
+| Method | Returns |
+| --- | --- |
+| `list(name, options?)` | Entries (newest first, at most 50) |
+| `first(name, options?)` | The first matching entry, or `null` |
+| `getById(name, id, options?)` | One entry, or `null` |
+| `getManyByIds(name, ids, options?)` | Entries in the order of `ids` (up to 50) |
+| `listRaw(name, options?)` | The raw response: `{ success, data: { entries, total } }` |
 
-The default result format is `data`: an array of values for lists, a value or null for a single result. Other formats are `raw` (entry metadata), `dictionary` (ID-keyed values), and `dataWithMeta` (values with total count). Use raw results when you need stable entry IDs.
-
-List options include `limit`, `offset`, `range`, `filter`, `select`, `order`, `format`, `previewKey`, `locale`, and `plugins`. The current `order` option supports system fields `id`, `created`, and `updated`, optionally suffixed with `.asc` or `.desc`; it is not an arbitrary content-field sort expression.
-
-## Forms and submissions
-
-- `submissions.getFormParams(name, { returnTo? })` returns `{ action, method, encType }` for an HTML form.
-- `submissions.getFormUrl(name, options?)` returns just the public action URL.
-- `submissions.getTypeStatus(name)` checks whether a type is accepting responses and requires CAPTCHA.
-- `submissions.isAcceptingResponses(name)` checks its open state.
-- `submissions.submit(name, data, { signal? })` submits typed data or `FormData` and returns the submission result.
-
-Submissions are real writes, including from preview pages. See [JavaScript forms](/guides/forms/) for status handling and static-site setup.
-
-## Framework configuration
+| Option | Meaning |
+| --- | --- |
+| `filter` | A filter built with `CollectionsFilter` (`F.eq`, `F.gt`, `F.gte`, `F.lt`, `F.lte`, `F.in`, `F.and`, `F.or`) |
+| `order` | `"created" \| "updated" \| "id"`, optionally `.asc` / `.desc`. Default `created.desc`. |
+| `limit`, `offset` | Page size (max 50) and start |
+| `range` | `[first, last]`, an alternative to `limit` / `offset` |
+| `format` | `"data"` (default), `"raw"`, `"dictionary"` or `"dataWithMeta"` |
+| `previewKey`, `locale`, `plugins`, `strictPreview` | Per-call versions of the client options |
 
 ```ts
-const metadata = await ama.systemConfig.get({
-  framework: "astro",
-  systemKey: "website.metadata",
+import { CollectionsFilter as F } from "@atmyapp/core";
+
+const { rows, total } = await ama.collections.list("posts", {
+  filter: F.and(F.eq("category", "news"), F.gte("created", new Date("2026-01-01"))),
+  order: "created.desc",
+  limit: 10,
+  format: "dataWithMeta",
 });
 ```
 
-The result includes `framework`, `systemKey`, `displayName`, `path`, and `config`. In Astro, prefer its head component, which handles metadata precedence and preview context.
+## `ama.submissions`
 
-## Other client namespaces
+Guide: [Forms on any website](/guides/forms/).
 
-`analytics` provides event tracking, `localization` exposes locale discovery/status, and `diagnostics` provides an optional integration report. [Diagnostics](/guides/diagnostics/) explains report fields and mounting a route. Do not assume a successful diagnostics request proves every content path or form works.
+- `submit(name, data, options?)` sends typed data or `FormData` and resolves to a result. On success it's `{ ok: true, submissionId, duplicate?, report? }`. Otherwise it's `{ ok: false, error, report? }`, where `error` is a `SubmissionError` with `code`, `fields`, `status`, `retryAfter` and `retryable`. Problems a visitor can cause never throw. Options:
+  - `idempotencyKey`: generated when omitted. Retries reuse it, so a submission is stored once.
+  - `retry`: automatic retries after a lost connection or brief outage (default 2, or `false`).
+  - `validate`: check against the schema first (default true when the client has one).
+  - `captchaToken`: a token from a widget you render yourself.
+  - `test`: test mode, which keeps the submission as a 24-hour test and returns a step `report`.
+  - `onUploadProgress`: upload progress in browsers.
+  - `signal`: cancels the request.
+- `validate(name, data)` runs the schema's field checks locally and returns `{ ok: true, checked }` or `{ ok: false, fields }`.
+- `getFormParams(name, { returnTo? })` returns `{ action, method, encType }` for an HTML form.
+- `getFormUrl(name, options?)` returns just the stable public form address.
+- `getTypeStatus(name)` returns `acceptingResponses`, `captcha` (`{ provider, siteKey, version? }` or null), `honeypot` and `formUrl`.
+- `isAcceptingResponses(name)` checks whether the form is open.
 
-Schema helpers are re-exported from Core. Use [Structure](/reference/structure/) directly for schema tooling without the runtime client.
+Related exports:
+
+- `captchaWidget(captcha)` returns how to render any provider's widget: `scriptSrc`, `className`, `tokenField` and `invisible` (reCAPTCHA v3, where you call `grecaptcha.execute` on submit). [Example](/guides/form-spam-protection/#your-own-form-ui).
+- `SubmissionError` is the error class on failed results; `SubmissionErrorCode`, `SubmissionFieldErrorCode` and `SubmissionFieldErrors` type its `code` and `fields`.
+- `SUBMISSION_HONEYPOT_FIELD` (`_ama_hp`) and `SUBMISSION_RENDERED_AT_FIELD` (`_ama_t`) name the [spam-protection fields](/guides/form-spam-protection/#always-on) for forms you render yourself.
+
+### `@atmyapp/core/forms`
+
+A separate, dependency-free entry for browsers. It needs no API key.
+
+- `enhanceSubmissionForm(form, options?)` enhances one HTML form. Options:
+  - `captcha`: the form's captcha from `getTypeStatus`; its widget and script are added unless the form already has one.
+  - `honeypot`: add the spam trap when missing (default true).
+  - `messages`: `sending`, `success`, `network`, `fields` (the lead-in before field problems) and `fieldCodes` (text per field error code).
+  - `onSuccess(result)`: return `false` to skip the default success handling (message, reset, `returnTo`).
+  - `onError(error)`: receives the `SubmissionError`.
+- `enhanceSubmissionForms(selector?, options?)` enhances every form matching the selector (default `form[data-atmyapp-form]`).
+
+Both return a cleanup function. Limits and codes: [Form limits and errors](/reference/submissions/).
+
+## `ama.systemConfig`
+
+```ts
+const { config } = await ama.systemConfig.get<Metadata>({ systemKey: "website.metadata" });
+```
+
+Returns `{ systemKey, path, config, … }` for **Settings → Website settings**. Pass `config` to `resolveWebsiteMetadata(page, config, defaults, pageUrl, siteUrl)` to get final head tags. In Astro, `AtMyAppHead` does this. See [Website settings](/guides/reading-content/#website-settings).
+
+## `ama.localization`
+
+For projects with [translations](/guides/structure/#translations):
+
+| Method | Returns |
+| --- | --- |
+| `getStorageLocales(path)` | Languages of a document and how complete each is |
+| `getCollectionLocales(name)` | Per-language counts for a collection |
+| `getCollectionEntryLocales(name, id)` | Languages of one entry |
+
+Each returns `{ defaultLocale, locales }`. A locale's status is `missing`, `incomplete`, `current` or `outdated`.
+
+## `ama.diagnostics`
+
+`ama.diagnostics.report()` checks the configuration, key and preview without reading content. `createDiagnosticsHandler(factory)` serves the report from a route. See [Verify an integration](/guides/diagnostics/).
+
+## `ama.analytics`
+
+`trackEvent(name)` and `trackCustomEvent(name, data)` send events to AtMyApp's experimental content analytics. They resolve to `true` or `false` and never throw. This API may change.
+
+## Offline snapshots
+
+`clientMode: "with-fallback"` reads from a local snapshot when the API is slow or unreachable, and `"local"` reads only from the snapshot. Download one with [`atmyapp snapshot download`](/reference/cli/#atmyapp-snapshot); it's stored in `.ama/local` by default.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `localStorage.path` | `.ama/local` | Snapshot folder, relative to the working directory (Node only) |
+| `localStorage.timeoutMs` | `5000` | How long to wait for the API before falling back |
+| `localDataSource` | — | Your own reader (`readFile`, `readJson`, `listCollection`, optional `getStaticUrl`), for browsers or custom storage |
+
+Never use fallback to hide a failing preview: an editor would see stale content.
+
+## Schema exports
+
+Core re-exports everything from [`@atmyapp/structure`](/reference/structure/): `defineSchema`, `s`, validators, inference types and more.
+
+## Types
+
+| Type | Meaning |
+| --- | --- |
+| `AtMyAppClient<Schema>` | The client returned by `createAtMyAppClient` |
+| `AtMyAppClientOptions` | Its options |
+| `CollectionsListOptions`, `CollectionsFilterExpr` | Collection query options |
+| `SubmissionResult`, `SubmissionTypeStatus`, `SubmissionCaptcha` | Form results and settings |
+| `InferSubmission<"contact", typeof schema>` | The values a form accepts (from `@atmyapp/structure`) |

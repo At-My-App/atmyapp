@@ -1,2 +1,4 @@
+# From Settings → API keys in the AtMyApp dashboard.
+# On AtMyApp hosting these are set for you.
+ATMYAPP_API_URL=https://edge.atmyapp.com/v0/projects/<project-id>
 ATMYAPP_API_KEY=
-ATMYAPP_BASE_URL=https://api.atmyapp.com

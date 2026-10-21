@@ -21,7 +21,7 @@ const hasAtMyAppCredentials = Boolean(import.meta.env.ATMYAPP_API_KEY);
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     {
       hasAtMyAppCredentials ? (
-        <AtMyAppHead title={title} description={description} trackPageView />
+        <AtMyAppHead title={title} description={description} />
       ) : (
         <>
           <title>{title}</title>

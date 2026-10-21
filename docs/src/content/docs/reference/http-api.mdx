@@ -1,0 +1,169 @@
+---
+title: HTTP API
+description: Read content and send forms from any language. These are the endpoints the SDKs use.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The JavaScript SDKs are thin wrappers around a small HTTP API. Use it directly from PHP, Python, Go, a shell script, or anything else that speaks HTTP.
+
+## Base URL and authentication
+
+Every content request goes to your **Project API URL**, from **Settings → API keys**:
+
+```
+https://edge.atmyapp.com/v0/projects/<project-id>
+```
+
+Send the API key as a bearer token:
+
+```sh
+curl https://edge.atmyapp.com/v0/projects/<project-id>/storage/f/home.json \
+  -H "Authorization: Bearer <api-key>"
+```
+
+The API key is public: it can read published content and send forms, nothing else. Requests without it, or with a key from another project, get `401`.
+
+### Common query parameters
+
+| Parameter | Meaning |
+| --- | --- |
+| `amaPreviewKey` | Return drafts for this preview session. See [Drafts and previews](/guides/previews/). |
+| `locale` | Return a translation, for projects with [localization](/guides/structure/#translations). |
+
+### Caching
+
+Published reads are sent with `Cache-Control: private, max-age=60`. Preview responses and settings are `no-store`. Send `Cache-Control: no-cache` in the request to skip edge caches; this is what the SDK's `mode: "priority"` does, and it counts as heavier usage.
+
+## Documents and files
+
+### Read a document
+
+```http
+GET /storage/f/{path}
+```
+
+Returns the stored file as-is: JSON for documents, with the stored `Content-Type`. `path` is the document's path, such as `home.json`.
+
+```sh
+curl "$ATMYAPP_API_URL/storage/f/home.json" -H "Authorization: Bearer $ATMYAPP_API_KEY"
+```
+
+```json
+{ "headline": "Fresh pasta, every day", "intro": "…" }
+```
+
+A document that doesn't exist, or was never published, returns `404`.
+
+### Get a file's public URL
+
+```http
+GET /storage/static/{path}
+```
+
+```json
+{ "success": true, "data": { "staticUrl": "https://edge.atmyapp.com/static/…" } }
+```
+
+Static URLs need no key. Use them directly in `<img>` and `<a>`.
+
+## Collections
+
+### List entries
+
+```http
+GET /collections/{collection}/entries
+```
+
+| Parameter | Example | Meaning |
+| --- | --- | --- |
+| `limit` | `limit=12` | Entries per page. Maximum 50, which is also the default. |
+| `offset` | `offset=24` | Entries to skip. |
+| `range` | `range=0,11` | Alternative to `limit` and `offset`: first and last index, inclusive. |
+| `order` | `order=updated.desc` | `id`, `created` or `updated`, with `.asc` or `.desc`. Default `created.desc`. |
+| `{field}.{op}` | `category.eq=news` | Filter on a top-level field, or on `id`, `created` or `updated`. Operators: `eq`, `lt`, `lte`, `gt`, `gte`, `in`. All filters must match. |
+| `{field}.in` | `category.in=(news,guides)` | Match any of the values. |
+| `or` | `or=(category.eq.news,featured.eq.true)` | Match any condition in the group. Repeat `or` for several groups. |
+| `plugins` | `plugins=asset-object` | `asset-object` turns image and file fields into `{ "url": … }`. `with-id` and `with-created-at` copy the entry's ID and creation time into its data. |
+
+Values `true`, `false` and numbers are compared as booleans and numbers.
+
+```sh
+curl "$ATMYAPP_API_URL/collections/posts/entries?category.eq=guides&order=updated.desc&limit=10&plugins=asset-object" \
+  -H "Authorization: Bearer $ATMYAPP_API_KEY"
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "entries": [
+      {
+        "id": "8c1f…",
+        "data": { "title": "Choosing flour", "slug": "choosing-flour", "cover": { "url": "https://…" } },
+        "created": "2026-09-14T10:02:11.000Z",
+        "updated": "2026-10-02T08:40:00.000Z"
+      }
+    ],
+    "total": 7
+  }
+}
+```
+
+`total` counts every matching entry, not just this page. In previews, the response may include `"previewApproximate": true` when the draft view of a complex query isn't exact.
+
+### Get one entry
+
+```http
+GET /collections/{collection}/entries/{id}
+```
+
+Returns `{ "success": true, "data": { "id", "data", "created", "updated" } }`, or `404`.
+
+## Website settings
+
+```http
+GET /system-config/website.metadata
+```
+
+Returns the website name, default title and description, sharing image, icons and other settings from **Settings → Website settings**:
+
+```json
+{ "success": true, "data": { "systemKey": "website.metadata", "config": { "siteName": "Altana", "…": "…" } } }
+```
+
+## Forms
+
+Forms have two endpoints. Websites and scripts normally use the **public form address**, which needs no key:
+
+```http
+POST https://edge.atmyapp.com/forms/{project-id}/{form-id}
+```
+
+Copy it from **Submissions → your form → Integrate** in the dashboard. It accepts JSON, URL-encoded and multipart bodies, `Idempotency-Key` and `X-AMA-Test: 1`. See [Send from any HTTP client](/guides/forms/#send-from-any-http-client) and [error codes](/reference/submissions/#error-codes).
+
+To discover a form's public address and settings with the API key:
+
+```http
+GET /submissions/types
+```
+
+Each record includes the form's `type`, whether it accepts responses, its public captcha settings and its `formUrl`.
+
+## Errors
+
+JSON errors use one envelope:
+
+```json
+{ "success": false, "error": "Entry not found" }
+```
+
+| Status | Meaning |
+| --- | --- |
+| `401` | Missing or wrong API key, or an invalid preview key |
+| `404` | The document, entry or collection doesn't exist or isn't published |
+| `5xx` | A temporary problem. Retry with backoff. |
+
+<Aside>
+Listing form submissions isn't part of the public API: submissions contain personal data, so they're only available in the dashboard, the mobile app and the CLI.
+</Aside>

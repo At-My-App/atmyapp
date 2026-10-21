@@ -1,121 +1,390 @@
 ---
-title: AtMyApp with Astro
-description: Build a static website with managed content, metadata, forms, and live previews.
+title: "Tutorial: build an Astro website"
+description: From an empty folder to a deployed website your client can edit. You'll build a homepage, service pages, SEO tags and a contact form.
 ---
 
-AtMyApp renders your content and metadata into ordinary HTML during production builds. The same project runs dynamically for local development and AtMyApp previews. Contact forms submit directly to AtMyApp, so your published website does not need an application server.
+import { Aside, FileTree, Steps, Tabs, TabItem } from "@astrojs/starlight/components";
 
-## 1. Prepare the project
+In this tutorial you build a small business website with Astro and AtMyApp. By the end you will have:
 
-Create or select an AtMyApp project and copy its full project API URL and public website API key. If you are starting with empty content, complete [schema and content setup](/quick-start/#4-define-the-editable-content) first. The integration reads existing content; installing it does not create your homepage document.
+- a **homepage** whose headline, introduction and image your client edits,
+- a **services** list with one generated page per service,
+- **page titles, descriptions and social images** managed from the dashboard,
+- a **contact form** that needs no backend,
+- a **deployment** that rebuilds when your client publishes.
 
-## 2. Install and configure
+It takes about 30 minutes. You need **Node.js 22.14 or newer**, an AtMyApp account and, for the last part, a GitHub account.
 
-Use Node 22.14+ and Astro 5+. Install the package in your Astro project:
+<Aside type="tip" title="Want the finished starter instead?">
+`npm create atmyapp@latest` scaffolds an Astro + Tailwind site that is already wired to AtMyApp. This tutorial builds the same pieces one at a time, so you understand each of them.
+</Aside>
 
-```sh
-npm install @atmyapp/astro
-```
+## 1. Create a project and copy its keys
 
-Add the public website API key and **project API URL** from AtMyApp to `.env`:
+<Steps>
 
-```dotenv
-ATMYAPP_API_KEY=pk-ama-your-project-key
-ATMYAPP_API_URL=https://api.atmyapp.com/v0/projects/YOUR_PROJECT_ID
-```
+1. Sign in at [app.atmyapp.com](https://app.atmyapp.com) and create a project for this website.
 
-Use the actual URL provided for your environment. `ATMYAPP_BASE_URL` is also supported and takes precedence over `ATMYAPP_API_URL`. Do not use the API origin without the project path. The API key is public and is included in browser configuration by the head component.
+2. Open **Settings → API keys** and create a key. Copy two values:
+   - the **Project API URL**: `https://edge.atmyapp.com/v0/projects/<project-id>`
+   - the **API key**
 
-```js
-// astro.config.mjs
-import { defineConfig } from "astro/config";
-import atmyapp from "@atmyapp/astro";
+   Both are public. They let a website read published content and send forms.
 
-export default defineConfig({
-  site: "https://www.example.com",
-  integrations: [atmyapp({ diagnostics: true })],
+3. Open **Settings → CLI keys**, create a key, and copy the `atmyapp use …` command shown there. A CLI key can change your schema, so keep it private.
+
+</Steps>
+
+See [Keys and URLs](/concepts/how-it-works/#keys-and-urls) if you're unsure which value goes where.
+
+## 2. Create the Astro site
+
+<Steps>
+
+1. Create a minimal Astro project and install the AtMyApp packages:
+
+   <Tabs syncKey="pm">
+   <TabItem label="npm">
+   ```sh
+   npm create astro@latest my-site -- --template minimal --yes
+   cd my-site
+   npm install @atmyapp/astro @atmyapp/core @atmyapp/structure
+   npm install --save-dev @atmyapp/cli
+   ```
+   </TabItem>
+   <TabItem label="pnpm">
+   ```sh
+   pnpm create astro@latest my-site --template minimal --yes
+   cd my-site
+   pnpm add @atmyapp/astro @atmyapp/core @atmyapp/structure
+   pnpm add --save-dev @atmyapp/cli
+   ```
+   </TabItem>
+   <TabItem label="yarn">
+   ```sh
+   yarn create astro my-site --template minimal --yes
+   cd my-site
+   yarn add @atmyapp/astro @atmyapp/core @atmyapp/structure
+   yarn add --dev @atmyapp/cli
+   ```
+   </TabItem>
+   </Tabs>
+
+2. Add the website keys to a `.env` file in the project root:
+
+   ```dotenv title=".env"
+   ATMYAPP_API_URL=https://edge.atmyapp.com/v0/projects/<project-id>
+   ATMYAPP_API_KEY=<api-key>
+   ```
+
+3. Register the integration and set your production address in `astro.config.mjs`:
+
+   ```js title="astro.config.mjs" ins={2,5-6}
+   import { defineConfig } from "astro/config";
+   import atmyapp from "@atmyapp/astro";
+
+   export default defineConfig({
+     site: "https://www.example.com",
+     integrations: [atmyapp()],
+   });
+   ```
+
+   `site` is used for canonical links and form redirects. Use the real domain, even before it's live.
+
+4. Connect the CLI by pasting the command you copied from **Settings → CLI keys**:
+
+   ```sh
+   npx atmyapp use --url https://api.atmyapp.com/v0/projects/<project-id> --token <cli-key>
+   ```
+
+   The CLI checks the key, saves it to `.ama/session.json`, and adds that file to `.gitignore`.
+
+</Steps>
+
+## 3. Describe the editable content
+
+Create `atmyapp.schema.ts` in the project root. It lists everything your client can edit:
+
+```ts title="atmyapp.schema.ts"
+import {
+  defineCollection,
+  defineDocument,
+  defineSchema,
+  defineSubmission,
+  s,
+} from "@atmyapp/structure";
+
+export default defineSchema({
+  definitions: {
+    home: defineDocument({
+      description: "The homepage.",
+      fields: {
+        headline: s.string({
+          max: 80,
+          description: "Large heading at the top of the homepage.",
+        }),
+        intro: s.longText({ description: "One or two sentences under the headline." }),
+        hero: s.image({ optional: true, description: "Wide photo beside the headline." }),
+      },
+    }),
+    services: defineCollection({
+      description: "Services we offer. Each one gets its own page.",
+      fields: {
+        title: s.string({ max: 60 }),
+        slug: s.slug({ source: "title" }),
+        summary: s.string({ max: 160, description: "Shown on the homepage card." }),
+        details: s.longText({ description: "Shown on the service's own page." }),
+      },
+    }),
+  },
+  submissions: {
+    contact: defineSubmission({
+      description: "Contact form on /contact.",
+      fields: {
+        name: s.string({ max: 100 }),
+        email: s.email(),
+        message: s.longText({ min: 10, max: 5000 }),
+      },
+    }),
+  },
 });
 ```
 
-Set `site` to the production website URL, including any hosting base path where applicable. Canonical links and form return URLs use it, never the temporary preview host. Diagnostics are optional; omit `diagnostics: true` to leave the endpoint unmounted.
+A few things to notice:
 
-## 3. Add a base layout
+- `home` is a **document**: one set of fields. `services` is a **collection**: many entries with the same fields.
+- `description` text is shown to your client and to the AI assistant. Say where the text appears.
+- `max` lengths protect your layout. AtMyApp refuses content that breaks them.
+- `s.slug()` generates a URL-safe identifier from the title, and keeps it stable afterwards.
 
-Open **Settings → Website settings** in AtMyApp to configure website defaults. Astro Project Setup initializes the shared `website.metadata` configuration; existing projects can initialize it from Website settings.
+Now upload the schema:
 
-```astro
+```sh
+npx atmyapp migrate --dry-run   # compile and check it locally
+npx atmyapp migrate             # upload it to the project
+```
+
+`migrate` shows a plan of what changes in the project and asks before it touches existing content. Your project is empty, so it applies straight away. The `contact` form now exists too.
+
+## 4. Add the first content
+
+Your website reads **published** content, so publish something before you render it.
+
+<Steps>
+
+1. In the dashboard, open **Content → Home**. Fill in the headline and introduction, and optionally upload an image.
+
+2. Open **Content → Services** and add two or three entries.
+
+3. Open **Settings → Website settings**. Enter the website name and a default description. These feed the page titles and social tags in the next step.
+
+4. Click **Review & publish** and publish everything.
+
+</Steps>
+
+## 5. Add a layout with managed SEO tags
+
+Create a layout that every page uses. `AtMyAppHead` renders the title, description, canonical link, social tags and icons from **Website settings**, with per-page overrides.
+
+```astro title="src/layouts/BaseLayout.astro"
 ---
-// src/layouts/BaseLayout.astro
 import AtMyAppHead from "@atmyapp/astro/components";
-const { title, description } = Astro.props;
+
+interface Props {
+  title?: string;
+  description?: string;
+  image?: string;
+}
+const { title, description, image } = Astro.props;
 ---
 
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <AtMyAppHead title={title} description={description} />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <AtMyAppHead title={title} description={description} image={image} />
   </head>
-  <body><slot /></body>
+  <body>
+    <header><a href="/">Home</a> · <a href="/contact/">Contact</a></header>
+    <main><slot /></main>
+  </body>
 </html>
 ```
 
-Use one head component per page. It owns the title, description, canonical and social tags; remove duplicate copies from your layout. It does not generate viewport or charset tags.
+Leave `<title>` and description tags out of your layout: `AtMyAppHead` owns them. If the website name is "Altana", `title="Services"` renders `Services · Altana`. More in [Metadata and SEO](/guides/astro-metadata/).
 
-## 4. Read content
+## 6. Render the homepage
 
-```astro
+Replace `src/pages/index.astro`:
+
+```astro title="src/pages/index.astro"
 ---
 import { getAtMyApp } from "@atmyapp/astro/server";
+import schema from "../../atmyapp.schema";
 import BaseLayout from "../layouts/BaseLayout.astro";
-const ama = getAtMyApp(Astro);
-const content = await ama.storage.getFromPath("home.json");
+
+const ama = getAtMyApp(Astro, { schema });
+const home = await ama.storage.getValue("home");
+const services = await ama.collections.list("services");
 ---
 
-<BaseLayout title="Home">
-  <pre>{JSON.stringify(content, null, 2)}</pre>
+<BaseLayout>
+  <h1>{home.headline}</h1>
+  <p>{home.intro}</p>
+  {home.hero && <img src={home.hero.url} alt="" width="1200" />}
+
+  <h2>Services</h2>
+  <ul>
+    {
+      services.map((service) => (
+        <li>
+          <a href={`/services/${service.slug}/`}>{service.title}</a>
+          <p>{service.summary}</p>
+        </li>
+      ))
+    }
+  </ul>
 </BaseLayout>
 ```
 
-Replace `home.json` with a real configured document path and render its fields in your own markup. For typed storage and collection helpers, pass your existing AtMyApp schema:
+Start the dev server with `npm run dev` and open the page. You should see your published headline and services.
 
-```ts
+- `getAtMyApp(Astro, { schema })` returns a client configured from your `.env`. Passing the schema makes every read typed: try `home.` in your editor.
+- `getValue("home")` returns the document's fields. `collections.list("services")` returns an array of entries, newest first.
+- Image fields arrive as an object with a `url`.
+
+<Aside type="caution" title="Content not showing?">
+Check that you published it, and that `ATMYAPP_API_URL` is the **edge** URL with the `/v0/projects/<id>` path. Errors stop the page by default, so you see the reason instead of an empty page. See [Troubleshooting](/troubleshooting/).
+</Aside>
+
+## 7. Generate a page per service
+
+Create `src/pages/services/[slug].astro`:
+
+```astro title="src/pages/services/[slug].astro"
+---
+import { getAtMyApp } from "@atmyapp/astro/server";
+import { CollectionsFilter as F } from "@atmyapp/core";
+import schema from "../../../atmyapp.schema";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+// Runs during static builds: one page per published service.
+export async function getStaticPaths() {
+  const services = await getAtMyApp({ schema }).collections.list("services");
+  return services.map((service) => ({ params: { slug: service.slug } }));
+}
+
 const ama = getAtMyApp(Astro, { schema });
+const service = await ama.collections.first("services", {
+  filter: F.eq("slug", Astro.params.slug!),
+});
+if (!service) return new Response("Not found", { status: 404 });
+---
+
+<BaseLayout title={service.title} description={service.summary}>
+  <h1>{service.title}</h1>
+  <p>{service.details}</p>
+</BaseLayout>
 ```
 
-The schema retains the core SDK's inferred types. Keep a shared `clientOptions` object if you override the project, schema, locale or preview; pass it to the client, head and form components. Configuration overrides on one component do not mutate other clients.
+Why both parts? Production builds are **static**, so Astro needs `getStaticPaths()` to know which pages to generate. During development and in previews the site renders **per request**, so the page looks the service up by its slug. The same file works in both modes. [Modes and previews](/guides/astro-previews/) explains this in detail.
 
-## 5. Run locally and build
+<Aside>
+`getStaticPaths()` has no `Astro` object, so it calls `getAtMyApp({ schema })` without one. That form works only in static builds. In `astro dev` you'll see the warning `getStaticPaths() ignored in dynamic page`; that's expected.
+</Aside>
+
+## 8. Add the contact form
+
+Create `src/pages/contact.astro`:
+
+```astro title="src/pages/contact.astro"
+---
+import AtMyAppForm from "@atmyapp/astro/form";
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Contact">
+  <h1>Get in touch</h1>
+  <AtMyAppForm submission="contact" enhance>
+    <label>Name <input name="name" required /></label>
+    <small data-atmyapp-error="name"></small>
+
+    <label>Email <input name="email" type="email" required /></label>
+    <small data-atmyapp-error="email"></small>
+
+    <label>Message <textarea name="message" required minlength="10"></textarea></label>
+    <small data-atmyapp-error="message"></small>
+
+    <button type="submit">Send</button>
+  </AtMyAppForm>
+</BaseLayout>
+```
+
+The form posts straight to AtMyApp, so it works on a static site. The input `name`s match the fields in your schema. With `enhance`, the form sends without reloading, shows errors next to the fields, and shows a thank-you message. Without JavaScript it still works as a normal HTML form. A hidden spam trap is added for you.
+
+To send visitors to your own thank-you page instead, add `returnTo="/thank-you/"`. It resolves against `site`, so it points at your production domain.
+
+Send yourself a message. To watch it arrive, run this in a second terminal:
 
 ```sh
-npm run dev
+npx atmyapp submissions tail contact
+```
+
+Messages sent from `localhost` are stored as **local development**, so they never reach your client's inbox or notifications. More in [Astro forms](/guides/astro-forms/).
+
+## 9. Build it
+
+```sh
 npm run build
 ```
 
-Development defaults to dynamic; production builds default to static. `DEV_MODE=true` enables dynamic mode explicitly. `IS_DYNAMIC=1` remains an alias. A dynamic **production build** needs an Astro adapter; local development does not. See [modes and previews](/guides/astro-previews/) for precedence, isolation and deployment examples.
+The build fetches all content and writes plain HTML to `dist/`. A failed read fails the build, so a broken connection never ships an empty page. Your project now looks like this:
 
-## Add a static contact form
+<FileTree>
+- .ama/
+  - session.json (private, ignored by git)
+- src/
+  - layouts/
+    - BaseLayout.astro
+  - pages/
+    - index.astro
+    - contact.astro
+    - services/
+      - [slug].astro
+- .env
+- astro.config.mjs
+- atmyapp.schema.ts
+- package.json
+</FileTree>
 
-```astro
----
-import AtMyAppForm from "@atmyapp/astro/form";
----
+Commit everything except `.env` and `.ama/session.json`, and push it to a GitHub repository.
 
-<AtMyAppForm submission="contact" returnTo="/thank-you">
-  <label>Email <input name="email" type="email" required /></label>
-  <label>Message <textarea name="message" required></textarea></label>
-  <button type="submit">Send message</button>
-</AtMyAppForm>
-```
+## 10. Deploy with AtMyApp hosting
 
-Create the `contact` submission type in AtMyApp first, with matching field names. Create your `/thank-you` page too. No Astro endpoint, Actions, React or hydration is required. [Form guide](/guides/astro-forms/).
+<Steps>
 
-## Next steps
+1. In the dashboard, open **Settings → Hosting** and connect your GitHub repository.
 
-- [Modes, environment variables and previews](/guides/astro-previews/)
-- [Page metadata, favicons, sitemap and robots](/guides/astro-metadata/)
-- [Submissions, uploads and CAPTCHA](/guides/astro-forms/)
-- [Astro API reference](/reference/astro/)
-- [Diagnostics](/guides/diagnostics/)
+2. Use `npm run build` as the build command and `dist` as the output directory.
 
-The package's `test/fixtures/website` project exercises this layout, metadata and form flow in static, development and Node server modes. From the SDK workspace, run `pnpm --filter @atmyapp/astro test:website` after building the SDK packages.
+3. Start the first build. AtMyApp provides `ATMYAPP_API_URL` and `ATMYAPP_API_KEY` to the build, so you don't add them yourself.
+
+4. When the build is live, add your domain in the same place.
+
+</Steps>
+
+New websites rebuild automatically when your client publishes, so you're done. Prefer another host? See [Deploy](/deployment/#another-static-host).
+
+## 11. Try the client's side
+
+Edit the homepage headline in the dashboard, but don't publish yet. Click **Preview**: AtMyApp opens your site on a preview server with the draft applied. Publish, and a new build goes live a minute or two later.
+
+That loop (edit, preview, publish) is what your client will do every day. Before you hand the project over, read [Hand over to your client](/ai-assistant/).
+
+## Where to go next
+
+- [Design your schema](/guides/structure/): nested content, references between entries, ordering.
+- [Collections](/guides/collections/): filters, pagination and sorting.
+- [Drafts and previews](/guides/previews/): how previews reach your pages.
+- [Change a live schema](/guides/schema-changes/): rename fields without losing content.
+- [`@atmyapp/astro` reference](/reference/astro/): every component and option.

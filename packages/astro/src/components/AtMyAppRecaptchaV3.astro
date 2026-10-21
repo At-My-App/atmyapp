@@ -1,0 +1,38 @@
+---
+/**
+ * reCAPTCHA v3 for plain (non-enhanced) forms: fetches a token on submit,
+ * then sends the form. Enhanced forms get their token in the enhancement script.
+ */
+---
+
+<script>
+  type Grecaptcha = {
+    ready(callback: () => void): void;
+    execute(siteKey: string, options: { action: string }): Promise<string>;
+  };
+
+  document.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (
+      !(form instanceof HTMLFormElement) ||
+      form.hasAttribute("data-atmyapp-enhance")
+    )
+      return;
+    const input = form.querySelector<HTMLInputElement>(
+      "[data-atmyapp-recaptcha]",
+    );
+    const grecaptcha = (window as unknown as { grecaptcha?: Grecaptcha })
+      .grecaptcha;
+    if (!input || !grecaptcha) return;
+    event.preventDefault();
+    grecaptcha.ready(() => {
+      grecaptcha
+        .execute(input.dataset.atmyappRecaptcha ?? "", { action: "submit" })
+        .then((token) => {
+          input.value = token;
+          // form.submit() skips submit listeners, so this runs once.
+          form.submit();
+        });
+    });
+  });
+</script>

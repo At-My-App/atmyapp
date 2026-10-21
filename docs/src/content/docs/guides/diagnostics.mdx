@@ -1,5 +1,5 @@
 ---
-title: Integration diagnostics
+title: Verify an integration
 description: Optional, safe connection reports for static websites and live previews.
 ---
 
@@ -44,7 +44,7 @@ This mounts the route automatically. It follows `DEV_MODE` (or the `IS_DYNAMIC` 
 
 For an existing custom client factory, `createAstroDiagnosticsRoute(factory, options)` is available from `@atmyapp/astro/diagnostics`. Mount it in `src/pages/.well-known/atmyapp/diagnostics.json.ts`. Explicit `execution` overrides inference from the route's prerendered state. The optional standalone `atMyAppDiagnostics()` hook keeps that manual endpoint dynamic in development.
 
-AMA builds supply `ATMYAPP_CODE_COMMIT` and `ATMYAPP_BUILD_TIME`. External builds may supply those variables or the helper's `codeCommit` and `builtAt` options. SDK versions come from the installed packages. See the [complete Astro guide](/guides/astro/).
+AtMyApp hosting supplies `ATMYAPP_CODE_COMMIT` and `ATMYAPP_BUILD_TIME`. External builds may supply those variables or the helper's `codeCommit` and `builtAt` options. SDK versions come from the installed packages. See the [complete Astro guide](/guides/astro/).
 
 ## Reading a report
 
@@ -62,9 +62,8 @@ creates sample content, records analytics, or extends a preview session.
 
 Reports omit API keys, preview capabilities, content bodies, raw errors, and
 private infrastructure URLs. They are public when you mount the endpoint on an
-external host. On AMA hosting, the diagnostics endpoint is hidden by default;
-authorized checks access it internally. Operators may set
-`HOSTING_DIAGNOSTICS_PUBLIC=1` to expose the same report.
+external host. On AtMyApp hosting, the endpoint is hidden from the public, and
+AtMyApp reads it internally.
 
 The client probe has a five-second deadline, rejects redirects, and reads at most
 64 KiB. Older APIs without the diagnostics probe report verification unavailable.

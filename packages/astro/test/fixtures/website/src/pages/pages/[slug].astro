@@ -1,0 +1,21 @@
+---
+import { getAtMyApp } from "@atmyapp/astro/server";
+// Build-time code has no Astro context; dynamic mode never calls this.
+export async function getStaticPaths() {
+  const content = (await getAtMyApp().storage.getFromPath("home.json")) as {
+    text: string;
+  };
+  return [
+    {
+      params: {
+        slug: content.text === "Published content" ? "from-build" : "unexpected",
+      },
+    },
+  ];
+}
+const content = (await getAtMyApp(Astro).storage.getFromPath("home.json")) as {
+  text: string;
+};
+---
+
+<p>{Astro.params.slug}: {content.text}</p>

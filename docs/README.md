@@ -16,12 +16,18 @@ The build runs Astro checks, generates pages and the search index, then validate
 
 ## Content conventions
 
+- Write for a developer who is setting up a client's website for the first time. Short sentences, active voice, no hedging.
+- Every claim must match the SDK source and the platform backend. When they disagree, fix the code or flag it; don't document around it.
+- Use the dashboard's real labels in bold: **Settings → API keys**.
+- The content API host is `edge.atmyapp.com/v0/projects/<id>`; the CLI uses `api.atmyapp.com/v0/projects/<id>`. Never mix them.
+- Prefer Starlight components (`Steps`, `Tabs`, `Aside`, `LinkCard`) over long prose for procedures.
 - Lead with the developer task and show a complete setup before isolated API snippets.
 - Verify examples against the SDK source, including defaults and runtime validation restrictions.
 - Distinguish public website keys, CLI tokens, and per-request preview keys.
 - Explain build-time versus runtime reads and static-site publication delays.
 - Put each field option in the field reference; link from conceptual guides.
-- Keep existing routes when reorganizing navigation so bookmarks remain useful.
+- Keep existing routes when reorganizing navigation. Retired pages get an entry in `redirects` in `astro.config.mjs`.
+- `/changelog/` renders the packages' `CHANGELOG.md` files; don't hand-edit versions there.
 
 ## Deploy
 

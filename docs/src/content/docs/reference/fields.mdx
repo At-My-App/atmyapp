@@ -1,174 +1,198 @@
 ---
-title: Field types and options
-description: Every field builder, its options, defaults, and current validation limits.
+title: Field reference
+description: Every field builder, its options, the value your code receives, and the rules AtMyApp enforces.
 ---
 
-Import `s` from `@atmyapp/structure` (also re-exported by `@atmyapp/core`). Builders take an options object; nested builders take named `fields`, `items`, `values`, or `variants` properties.
+Import `s` from `@atmyapp/structure` (also re-exported by `@atmyapp/core`). Every builder takes an options object. For when to use which, read [Design your schema](/guides/structure/).
 
-This reference describes the SDK source in this repository. An option can describe editor or storage behavior without being enforced by the local content validator. Do not treat display hints as validation guarantees.
+Options are either **rules**, which AtMyApp enforces when content is saved, published or submitted through a form, or **hints**, which guide the editor and the AI assistant. The tables say which is which.
 
-## Common options
+## At a glance
 
-These options are available on every field. Use them only where their semantics apply.
+| Builder | Your code receives | Typical use |
+| --- | --- | --- |
+| `s.string()` | `string` | Headings, labels, short text |
+| `s.shortText()` / `s.longText()` | `string` | A line / a paragraph |
+| `s.markdown()` | `string` (Markdown) | Formatted body text |
+| `s.email()` / `s.url()` | `string` | Contact address, link |
+| `s.number()` / `s.integer()` | `number` | Prices, counts |
+| `s.boolean()` | `boolean` | On/off switches |
+| `s.date()` / `s.datetime()` / `s.timestamp()` | `string` | `"2026-10-21"`, `"2026-10-21T18:00:00+02:00"` |
+| `s.enum({ values })` | one of `values` | Fixed choices |
+| `s.union({ variants })` | any variant's value | Mixed values |
+| `s.object({ fields })` | object | A group of fields |
+| `s.array({ items })` | array | A short repeated list |
+| `s.image()` / `s.file()` | `{ url, … }` | One image or file |
+| `s.gallery()` | `{ url, … }[]` | Several images |
+| `s.reference(target)` | `string` (ID) or `string[]` | Link to a collection entry |
+| `s.slug({ source })` | `string` | URL identifier |
+| `s.order()` | `number` | Editor-controlled order |
+| `s.mdx({ config })` | `string` (MDX) | Rich content with your components |
 
-| Option        | Meaning and behavior                                                                                    |
-| ------------- | ------------------------------------------------------------------------------------------------------- |
-| `description` | Human-readable purpose, constraints, or writing guidance                                                |
-| `optional`    | `true` allows the field to be absent; default is required                                               |
-| `required`    | Alternative requiredness flag; `false` makes it optional. Prefer `optional` and avoid conflicting flags |
-| `default`     | Default/placeholder value of the expected shape; does not backfill all existing content                 |
-| `localize`    | Localize string or MDX leaves; invalid on other field kinds                                             |
-| `unique`      | Uniqueness declaration; cross-entry checks need platform context                                        |
-| `ui`          | Advanced editor metadata record; not a set of guaranteed portable controls                              |
-| `storage`     | Advanced storage metadata record                                                                        |
-| `legacy`      | Compatibility metadata for compilation; avoid in new schemas unless integrating legacy definitions      |
+## Options on every field
 
-Optional means missing, not automatically nullable. To accept explicit `null`, use a union with `s.enum({ values: [null] })`.
+| Option | Kind | Meaning |
+| --- | --- | --- |
+| `description` | hint | What the field is for and where it appears. Shown to editors and the AI assistant. |
+| `optional` | rule | `true` lets the field be missing. Fields are required by default. |
+| `nullable` | rule | `true` also accepts an explicit `null`, so editors can clear the value. |
+| `default` | hint | Pre-fills new content. It doesn't change content that already exists. |
+| `localize` | rule | Translate this field. Only string and MDX fields. See [Translations](/guides/structure/#translations). |
+| `unique` | rule | No two collection entries may share the value. Top-level, non-translated collection fields only. |
+| `ui`, `storage` | advanced | Editor and storage metadata. Most schemas don't need them. |
+
+Use `optional` rather than `required: false`; they mean the same thing.
+
+```ts
+subtitle: s.string({ optional: true }),               // may be missing
+logo: s.image({ optional: true, nullable: true }),    // may be missing or cleared
+```
 
 ## Text
 
 ```ts
-s.string({ min: 1, max: 100, placeholder: "A clear headline" });
-s.shortText({ description: "A one-line summary" });
+s.string({ min: 1, max: 80, placeholder: "A clear headline" });
+s.shortText({ description: "One line under the photo." });
 s.longText({ max: 600 });
-s.markdown({ localize: false });
-s.email({ optional: true });
-s.url();
+s.markdown();
+s.email();
+s.url({ optional: true });
+s.string({ pattern: "^[A-Z]{3}$", description: "Three-letter airport code" });
 ```
 
-| Builder     | Defaults added to `s.string()`                                  |
-| ----------- | --------------------------------------------------------------- |
-| `string`    | No format or length default                                     |
-| `shortText` | `format: 'short'`, `preferredLength: 80`, `localize: true`      |
-| `longText`  | `format: 'long'`, `preferredLength: 280`, `localize: true`      |
-| `markdown`  | `format: 'markdown'`, `preferredLength: 1200`, `localize: true` |
-| `email`     | `format: 'email'`                                               |
-| `url`       | `format: 'url'`                                                 |
+| Builder | Same as `s.string()` with |
+| --- | --- |
+| `shortText` | `format: "short"`, `preferredLength: 80`, `localize: true` |
+| `longText` | `format: "long"`, `preferredLength: 280`, `localize: true` |
+| `markdown` | `format: "markdown"`, `preferredLength: 1200`, `localize: true` |
+| `email` | `format: "email"` |
+| `url` | `format: "url"` |
 
-| Option                    | Meaning                                                                                                                                    |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `min`, `max`              | Aliases for minimum/maximum string length                                                                                                  |
-| `minLength`, `maxLength`  | Explicit lengths; take precedence over aliases                                                                                             |
-| `pattern`                 | Regular-expression source string, checked by local validation                                                                              |
-| `enumValues`              | Allowed scalar values; prefer `s.enum` for a dedicated choice field                                                                        |
-| `format`                  | `short`, `long`, `markdown`, `email`, `url`, `slug`, `code`, `textarea`, `date`, `datetime`, `timestamp`, or an integration-defined string |
-| `preferredLength`         | Writing/editor hint, not a hard limit                                                                                                      |
-| `placeholder`, `examples` | Input guidance; not stored default content                                                                                                 |
+| Option | Kind | Meaning |
+| --- | --- | --- |
+| `min`, `max` | rule | Minimum and maximum length in characters. (`minLength` / `maxLength` also work.) |
+| `pattern` | rule | A regular expression the whole value must match. |
+| `format: "email"` | rule | Must look like an email address. |
+| `format: "url"` | rule | Must be an absolute `http` or `https` URL. |
+| `enumValues` | rule | Allowed values. Prefer `s.enum()`. |
+| `format` (other values) | hint | `short`, `long`, `markdown`, `code`, `textarea`: picks the editor. |
+| `preferredLength` | hint | Ideal length for writing and AI suggestions. Not a limit. |
+| `placeholder`, `examples` | hint | Input guidance. Not stored. |
 
-The local scalar validator checks type, length, pattern, and `enumValues`. A format alone does not locally validate an email, URL, or Markdown document. Use `s.slug()` for managed URL identifiers rather than `format: 'slug'`. Render Markdown with your application's Markdown pipeline; plain strings are not trusted HTML.
+`localize: true` on the text presets is harmless in projects without translations. Markdown is stored as text: render it with your Markdown library. Plain strings are never HTML.
 
 ## Numbers
 
 ```ts
-s.number({ min: 0, max: 100, step: 0.5 });
+s.number({ min: 0, max: 100 });
 s.integer({ min: 1, default: 1 });
-s.number({ format: "currency", description: "Price in EUR" });
+s.number({ format: "currency", description: "Price in EUR, including VAT" });
 ```
 
-`min`/`max` map to `minimum`/`maximum`; explicit bounds win. `integer: true` adds an integer format and step 1 unless overridden. `s.integer()` defaults to `integer: true`, `format: 'integer'`, and `step: 1`. Formats include `integer`, `percent`, and `currency`; specify units in the description.
+| Option | Kind | Meaning |
+| --- | --- | --- |
+| `min`, `max` | rule | Inclusive bounds. (`minimum` / `maximum` also work.) |
+| `integer: true` | rule | Whole numbers only. `s.integer()` sets it for you. |
+| `format` | hint | `integer`, `percent` or `currency`. Put the unit in the description. |
+| `step` | hint | Increment for the editor's number input. |
 
-`step` and integer formatting are hints: the local numeric validator checks type and bounds, not divisibility or integrality. `enumValues` restricts allowed values. Scalar options such as `placeholder`, `examples`, and `preferredLength` exist in the shared type but do not add numeric validation.
-
-## Boolean and null
+## Booleans
 
 ```ts
 s.boolean({ default: false });
-s.enum({ values: [null] });
-s.union({ variants: [s.string(), s.enum({ values: [null] })] });
 ```
-
-Use booleans for a real on/off choice. There is no dedicated `s.null()` builder; a single-value null enum accepts only null. Both support common options; extra scalar hints on boolean do not change its value type.
 
 ## Dates and times
 
 ```ts
-s.date({ optional: true });
-s.datetime();
-s.timestamp();
+s.date();        // "2026-10-21"
+s.datetime();    // "2026-10-21T18:00:00+02:00"
+s.timestamp();   // "2026-10-21T16:00:00Z"
 ```
 
-Each builder produces its corresponding scalar and format. Values are strings in the canonical validator and inferred SDK types, not JavaScript `Date` objects. Choose a consistent representation in your content, such as `2026-09-14` for a date and an ISO timestamp with a timezone for an instant. The local validator checks string type, not calendar validity or timezone interpretation. Bounds and formatting metadata do not implement a date-range validator.
+Values are ISO strings, not `Date` objects. Dates must be real calendar dates (`YYYY-MM-DD`). Date-times and timestamps must include a time zone. Parse them in your code when you need to format them.
 
 ## Choices and unions
 
 ```ts
-s.enum({ values: ["draft", "published"], default: "draft" });
+s.enum({ values: ["lunch", "dinner"], default: "dinner" });
 s.union({ variants: [s.string(), s.number()] });
 ```
 
-`enum.values` accepts string, number, boolean, or null literals. `union.variants` is a list of field definitions; a value must match at least one variant. Keep choices understandable for editors. Both builders accept the common options.
+`enum.values` can contain strings, numbers, booleans and `null`. A union value must match at least one variant.
 
 ## Objects
 
 ```ts
 s.object({
-  additionalProperties: false,
   fields: { label: s.string(), href: s.url() },
+  additionalProperties: false,
 });
 ```
 
-`fields` defines child properties. `additionalProperties: false` rejects undeclared properties during local validation; leaving it unset does not reject them. Optional children use their own `optional` option. Localize leaves, not the object.
+| Option | Kind | Meaning |
+| --- | --- | --- |
+| `fields` | rule | The child fields. Each child has its own `optional`. |
+| `additionalProperties: false` | rule | Reject properties that aren't declared. |
+
+Translate the leaf fields, not the object.
 
 ## Arrays
 
 ```ts
 s.array({ items: s.string(), minItems: 1, maxItems: 5 });
+s.array({ items: s.object({ fields: { title: s.string(), text: s.string() } }) });
 ```
 
-| Option                 | Meaning                                                                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| `items`                | Required field definition for each value                                                             |
-| `minItems`, `maxItems` | Bounds checked by local validation                                                                   |
-| `identityField`        | Stable non-localized scalar key in object items; required when objects contain localized descendants |
-| `uniqueItems`          | Uniqueness metadata; the local validator does not enforce duplicate removal                          |
+| Option | Kind | Meaning |
+| --- | --- | --- |
+| `items` | rule | The field definition for every item. Required. |
+| `minItems`, `maxItems` | rule | How many items are allowed. |
+| `uniqueItems` | rule | No duplicate items. |
+| `identityField` | rule | Name of a stable, non-translated field that identifies each object item. Optional. |
 
-Use [localized array identities](/guides/structure/#localization) when applicable. Array order is its stored sequence; `s.order()` is for collection entries.
+Object items carry a stable `_key` that survives edits, reordering and translation. Use it as a render key. The array's order is the order editors set.
 
-## Images, files, and galleries
+## Images, files and galleries
 
 ```ts
-s.image({
-  config: { optimizeFormat: "webp", ratioHint: { x: 16, y: 9 } },
-});
-s.file({
-  accept: ["application/pdf"],
-  config: { contentType: "application/pdf" },
-});
+s.image({ config: { optimizeFormat: "webp", ratioHint: { x: 16, y: 9 } } });
+s.file({ accept: ["application/pdf"] });
 s.gallery({ optional: true });
 ```
 
-`image` and `file` are single assets. `gallery` is a multiple-image asset. Stored canonical values are asset-reference strings, or arrays of strings for galleries; they are not binary file contents. Render through your media/storage integration. Submission uploads have separate binary handling in the Core SDK.
+Your code receives each asset as an object with a `url` (images may also have `alt`). Galleries are a list of them:
 
-| Option                  | Meaning                                        |
-| ----------------------- | ---------------------------------------------- |
-| `accept`                | Accepted media-type hints                      |
-| `config.optimizeFormat` | Image output preference: `webp` or `none`      |
-| `config.optimizeLoad`   | Image load preference: `progressive` or `none` |
-| `config.ratioHint`      | Suggested `{ x, y }` aspect ratio              |
-| `config.maxSize`        | Suggested `{ width, height }` dimensions       |
-| `config.contentType`    | File content-type configuration                |
-| `imageOptions`          | Advanced image configuration record            |
-| `deletePolicy`          | `detach` or `delete` asset lifecycle metadata  |
-| `orphanPolicy`          | `allow` or `delete` orphan lifecycle metadata  |
+```astro
+<img src={post.cover.url} alt={post.cover.alt ?? ""} />
+{post.photos.map((photo) => <img src={photo.url} alt={photo.alt ?? ""} />)}
+```
 
-These settings describe asset handling; the local string-shape validator does not resize images, inspect MIME bytes, or delete files. Confirm backend support before relying on lifecycle metadata for cleanup.
+| Option | Kind | Meaning |
+| --- | --- | --- |
+| `accept` | hint | Media types the editor offers, such as `["application/pdf"]`. Form uploads have [their own type rules](/reference/submissions/#limits). |
+| `config.optimizeFormat` | hint | `webp` or `none`. |
+| `config.optimizeLoad` | hint | `progressive` or `none`. |
+| `config.ratioHint` | hint | Suggested aspect ratio, `{ x, y }`. |
+| `config.maxSize` | hint | Suggested maximum `{ width, height }`. |
+
+In [forms](/guides/forms/#define-the-form-in-your-schema), the same builders accept uploaded files instead.
 
 ## References
 
 ```ts
 s.reference("authors");
-s.reference({ target: "posts", by: "slug", multiple: true, optional: true });
+s.reference({ target: "posts", multiple: true, optional: true });
+s.reference({ target: "posts", by: "slug" });
 ```
 
-| Option        | Meaning                                                             |
-| ------------- | ------------------------------------------------------------------- |
-| `target`      | Required definition name in the same schema                         |
-| `multiple`    | Store multiple references instead of one                            |
-| `by`          | Defaults to `id`; collections support `id` or `slug`                |
-| `onDelete`    | Defaults to `restrict`; collections require `restrict`              |
-| `targetField` | Present in generic types, but unsupported for collection references |
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `target` | — | The collection to link to. Required. |
+| `multiple` | `false` | Store a list of references. |
+| `by` | `"id"` | Store the target's `id` or its `slug`. Slug references need an `s.slug()` field named `slug` on the target. |
 
-Slug references require the target to expose a field named `slug` built with `s.slug()`. Generic types also contain `by: 'path'` and deletion modes `nullify`/`cascade`; these are **not valid collection-reference configurations**. Local value validation checks strings; resolving targets and preventing broken links requires platform context. The SDK does not automatically expand references into related objects.
+Your code receives the ID (or slug) as a string, or a list of strings. Fetch the targets yourself: see [Resolve references](/guides/collections/#resolve-references). AtMyApp refuses to publish a reference to a missing entry, and blocks deleting an entry that is still referenced.
 
 ## Slugs
 
@@ -176,39 +200,35 @@ Slug references require the target to expose a field named `slug` built with `s.
 s.slug({ source: "title" });
 ```
 
-A slug is a stable URL identifier of at most 96 lowercase letters, numbers, and single hyphens. Defaults are `unique: true`, `generated: true`, `immutable: true`, and `updatePolicy: 'immutable'`.
+A stable URL identifier: up to 96 lowercase letters, numbers and single hyphens. It's generated from `source` when the entry is created, it's unique within the collection, and it never changes afterwards, so published links keep working. Slugs can't be made editable or non-unique.
 
-`source` identifies the source field used for generation. `generated` controls generation metadata. The generic types expose `immutable` and `updatePolicy`, but the schema validator rejects mutable slugs, `unique: false`, and `updatePolicy: 'on_change'`. Editing a title should not unexpectedly break an existing page URL.
-
-## Collection order
+## Order
 
 ```ts
 s.order();
 s.order({ groupBy: "category" });
 ```
 
-Order fields must be top-level collection fields. `groupBy`, when set, must name a single-value reference field in that collection. Values are safe integer ranks. Use the platform's ordering operations instead of inventing concurrent rank updates in a public website.
+Lets editors arrange collection entries. The value is an integer rank; sort by it in your code. It must be a top-level collection field. `groupBy` names a single-value reference field and keeps a separate order per referenced entry.
 
 ## MDX
 
 ```ts
-s.mdx({ config: "article" });
-```
-
-`config` names a required entry in the schema's `mdx` map:
-
-```ts
-const mdx = {
-  article: {
-    description: "Article content with approved callouts.",
-    components: {
-      Callout: {
-        description: "A highlighted note.",
-        props: { tone: "string" },
+export default defineSchema({
+  mdx: {
+    article: {
+      description: "Article body with approved callouts.",
+      components: {
+        Callout: { description: "A highlighted note.", props: { tone: "string" } },
       },
     },
   },
-};
+  definitions: {
+    posts: defineCollection({
+      fields: { body: s.mdx({ config: "article" }) },
+    }),
+  },
+});
 ```
 
-Pass that map as `mdx` to `defineSchema`. MDX values are strings. The configuration describes available components; your website must provide the renderer and implementations. Local validation checks the string and configuration reference, not arbitrary code safety. Only allow the components and execution behavior your application intends to support.
+`config` names an entry in the schema's `mdx` map. It tells editors and the AI assistant which components they may use. Your website renders the MDX and provides the components. Only enable what your renderer supports.
