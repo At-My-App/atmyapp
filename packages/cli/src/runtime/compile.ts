@@ -1,8 +1,12 @@
+import { maxStagedAssetBytes } from "./assetFiles";
+import { binaryUpload, materializeAssets } from "./assetDrafts";
 import {
   createItemKey,
   mergeVariantOverlay,
   normalizeContent,
   validate,
+
+
   type Definition,
   type Placement,
   type ValidationIssue,
@@ -29,6 +33,8 @@ export type ValueRef = {
   mimeType?: string;
   encoding?: "utf-8" | "base64";
 };
+export type UploadSource = { sha256: string; size: number; mimeType: string; content?: string };
+
 export type StagedOperation =
   | ({
       type: "upsertEntry";
@@ -36,16 +42,23 @@ export type StagedOperation =
       replaceData?: boolean;
       moveOnly?: boolean;
       placements?: Record<string, Placement>;
+
     } & Coordinates)
   | ({ type: "deleteEntry" } & Coordinates)
   | { type: "putDocument"; path: string; definitionName: string; content: unknown }
   | { type: "deleteDocument"; path: string }
   | { type: "writeFile"; path: string; locale?: string; value: ValueRef; metadata?: Record<string, unknown> }
-  | { type: "deleteFile"; path: string; locale?: string };
+  | { type: "deleteFile"; path: string; locale?: string }
+  | { type: "putPublicAsset"; path: string; value: ValueRef; metadata?: Record<string, unknown> }
+  | { type: "deletePublicAsset"; path: string }
+  | { type: "replaceDocumentAsset"; documentPath: string; assetPath: string; value: ValueRef; metadata?: Record<string, unknown> }
+  | ({ type: "addEntryBlob"; fieldName: string; value: ValueRef; metadata?: Record<string, unknown> } & Coordinates)
+  | ({ type: "replaceEntryBlob"; blobId: string; fieldName?: string; value: ValueRef; metadata?: Record<string, unknown> } & Coordinates);
 export interface CompiledOperation {
   operation: StagedOperation;
   expectedVersion?: number;
-  expectedBase?: { exists: false } | { exists: true; sha256: string };
+  expectedBase?: { exists: false } | { exists: true; sha256: string } | { exists: true; bytesSha256: string };
+  rebase?: true;
 }
 export interface DraftIssue {
   ref: string;
@@ -54,22 +67,20 @@ export interface DraftIssue {
   message: string;
   severity: "hard" | "overridable";
 }
-export interface CompiledItem {
+export interface CompiledAttachment {
+  itemKey: string;
+  operation: CompiledOperation;
+  upload?: UploadSource;
+}
+
+export interface CompiledItem extends CompiledAttachment {
   key: string;
   ref: SpaceRef;
-  itemKey: string;
   localSha: string;
-  operation: CompiledOperation;
-  upload?: { content: string; mimeType: string };
+  attachments?: CompiledAttachment[];
   normalized?: { value: unknown };
   newFile?: string;
   deleted: boolean;
-}
-
-function hasLocalFile(value: unknown): boolean {
-  if (!value || typeof value !== "object") return false;
-  if (record(value) && typeof value.$file === "string") return true;
-  return Object.values(value).some(hasLocalFile);
 }
 
 function forItem(ref: SpaceRef, issue: ValidationIssue): DraftIssue {
@@ -93,11 +104,12 @@ export function serverItemKey(ref: SpaceRef, type?: StagedOperation["type"]): st
   const part = (input?: string) => (input === undefined ? "-" : `${Buffer.byteLength(input, "utf8")}:${input}`);
   const document =
     (type === "putDocument" || type === "deleteDocument" || (type === undefined && ref.kind === "doc")) && !ref.locale;
+  if (ref.kind === "public") return ["publicAsset", part(ref.name), "-"].join("|");
   if (ref.kind === "entry") return ["entry", part(ref.name), part(ref.entryId), part(ref.locale)].join("|");
   return document ? ["document", part(ref.name)].join("|") : ["file", part(ref.name), part(ref.locale)].join("|");
 }
 
-function operationFor(item: WorkItem, definitionName: string | undefined, content: unknown, mimeType: string) {
+function operationFor(work: WorkingCopy, item: WorkItem, definitionName: string | undefined, content: unknown, mimeType: string, cache: boolean): { operation: StagedOperation; upload?: UploadSource } {
   const { ref } = item;
   if (ref.kind === "entry") {
     const coordinate = {
@@ -133,6 +145,7 @@ function operationFor(item: WorkItem, definitionName: string | undefined, conten
     };
   }
   const coordinates = { path: ref.name, ...(ref.locale ? { locale: ref.locale } : {}) };
+  if (ref.kind === "public" && item.deleted) return { operation: { type: "deletePublicAsset", path: ref.name } };
   if (item.deleted)
     return {
       operation: {
@@ -143,23 +156,29 @@ function operationFor(item: WorkItem, definitionName: string | undefined, conten
   if (ref.kind === "doc" && !ref.locale && definitionName)
     return { operation: { type: "putDocument" as const, path: ref.name, definitionName, content } };
   const text = typeof content === "string" ? content : JSON.stringify(content);
+  if (Buffer.isBuffer(content)) {
+    const upload = binaryUpload(work, content, mimeType, cache);
+    return { operation: {
+      type: ref.kind === "public" ? "putPublicAsset" : "writeFile",
+      ...coordinates,
+      value: { valueId: "v_" + upload.sha256, ...upload },
+    }, upload };
+  }
   const size = Buffer.byteLength(text, "utf8");
-  if (size > INLINE_LIMIT)
-    throw new CliError("not_supported_yet", `${formatRef(ref)} exceeds the 1 MB inline limit.`, {
-      exitCode: EXIT.validation,
-    });
-  const digest = sha256Hex(text);
+  if (size > maxStagedAssetBytes)
+    throw new CliError("value_too_large", "A staged file can be at most 50 MiB.", { exitCode: EXIT.validation });
+  const sha256 = sha256Hex(text);
   return {
     operation: {
-      type: "writeFile" as const,
+      type: ref.kind === "public" ? "putPublicAsset" : "writeFile",
       ...coordinates,
-      value: { valueId: "v_" + digest, sha256: digest, size, mimeType, encoding: "utf-8" as const },
+      value: { valueId: "v_" + sha256, sha256, size, mimeType, encoding: "utf-8" },
     },
-    upload: { content: text, mimeType },
+    upload: { content: text, mimeType, size, sha256 },
   };
 }
 
-export function compileDraft(work: WorkingCopy, items: WorkItem[]) {
+export function compileDraft(work: WorkingCopy, items: WorkItem[], cacheUploads = false) {
   const issues: DraftIssue[] = [];
   const compiled: CompiledItem[] = [];
   for (const item of items) {
@@ -170,19 +189,15 @@ export function compileDraft(work: WorkingCopy, items: WorkItem[]) {
         { exitCode: EXIT.validation },
       );
     const { ref } = item;
-    const fileDefinition = ref.kind === "entry" ? undefined : work.schema.definitionForPath(ref.name);
+    const fileDefinition = ref.kind === "entry" || ref.kind === "public" ? undefined : work.schema.definitionForPath(ref.name);
     const definition: Definition | undefined =
       ref.kind === "entry" ? work.schema.collection(ref.name) : fileDefinition?.definition;
     if (definition?.kind === "system_config")
       throw new CliError("not_supported_yet", "Edit website settings in the dashboard.", { exitCode: EXIT.validation });
     let value = item.deleted ? undefined : work.value(item);
-    if (hasLocalFile(value))
-      throw new CliError("not_supported_yet", "Local asset references cannot be pushed yet.", {
-        exitCode: EXIT.validation,
-        details: { ref: formatRef(ref) },
-      });
     let normalized: CompiledItem["normalized"];
-    if (definition && !item.deleted) {
+    let attachments: CompiledAttachment[] = [];
+    if (definition && !item.deleted && !Buffer.isBuffer(value)) {
       const source = ref.locale ? work.publishedValue({ ...ref, locale: undefined }) : undefined;
       const variant = ref.locale ? work.variant(ref) : undefined;
       const effective = ref.locale && variant?.mode !== "replace" ? mergeVariantOverlay(source, value) : value;
@@ -192,38 +207,38 @@ export function compileDraft(work: WorkingCopy, items: WorkItem[]) {
         createKey: createItemKey,
         configs: work.schema.compiled.configs,
       });
-      const validation = validate(result.value, definition, "draft", work.schema.compiled.configs);
-      for (const issue of [...result.issues, ...validation.issues]) {
-        const next = forItem(ref, issue);
-        if (
-          !issues.some((prior) => prior.ref === next.ref && prior.pointer === next.pointer && prior.code === next.code)
-        )
-          issues.push(next);
-      }
       if (!ref.locale && result.changed) {
         value = result.value;
         normalized = { value };
       }
+      const transformed = !ref.locale && "fields" in definition
+        ? materializeAssets(work, item, result.value, definition.fields, cacheUploads)
+        : { content: result.value, uploads: [] };
+      attachments = transformed.uploads;
+      if (!ref.locale && attachments.length) value = transformed.content;
+      const validation = validate(transformed.content, definition, "draft", work.schema.compiled.configs);
+      for (const issue of [...result.issues, ...validation.issues]) {
+        const next = forItem(ref, issue);
+        if (!issues.some((prior) => prior.ref === next.ref && prior.pointer === next.pointer && prior.code === next.code))
+          issues.push(next);
+      }
     }
-    const { operation, upload } = operationFor(item, fileDefinition?.name, value, work.mime(ref));
+    const { operation, upload } = operationFor(work, item, fileDefinition?.name, value, work.mime(ref), cacheUploads);
+    const base = item.base.fingerprint;
+    const binary = ref.kind === "public" || !ref.locale && ref.kind === "file" && item.base.sha256 === base;
+    const expectedBase: CompiledOperation["expectedBase"] = base
+      ? binary ? { exists: true, bytesSha256: base } : { exists: true, sha256: base }
+      : { exists: false };
     compiled.push({
-      key: item.key,
-      ref,
-      localSha: item.sha256,
-      newFile: item.newFile,
-      deleted: item.deleted,
+      key: item.key, ref, localSha: item.sha256, newFile: item.newFile, deleted: item.deleted,
       itemKey: serverItemKey(ref, operation.type),
       operation: {
         operation,
-        ...(item.staged
-          ? { expectedVersion: item.staged.itemRevision }
-          : {
-              expectedVersion: 0,
-              expectedBase: item.base.fingerprint ? { exists: true, sha256: item.base.fingerprint } : { exists: false },
-            }),
+        expectedVersion: item.staged?.itemRevision ?? 0,
+        ...(!item.staged || item.rebase ? { expectedBase } : {}),
+        ...(item.rebase && item.staged ? { rebase: true } : {}),
       },
-      upload,
-      normalized,
+      upload, normalized, ...(attachments.length ? { attachments } : {}),
     });
   }
   return { items: compiled, issues };
@@ -256,25 +271,29 @@ export function stageBatches(items: CompiledItem[]): CompiledItem[][] {
   const batches: CompiledItem[][] = [];
   let pending: CompiledItem[] = [];
   let inlineBytes = 0;
+  let operationCount = 0;
   let metadataBytes = 512;
   for (const item of items) {
-    const inline = Buffer.byteLength(item.upload?.content ?? "", "utf8");
-    const metadata = Buffer.byteLength(JSON.stringify(item.operation), "utf8") + 1;
-    if (metadata + 512 > METADATA_LIMIT)
+    const group = [...item.attachments ?? [], item];
+    const inline = group.reduce((total, entry) => total + (entry.upload && entry.upload.size <= INLINE_LIMIT ? entry.upload.size : 0), 0);
+    const metadata = group.reduce((total, entry) => total + Buffer.byteLength(JSON.stringify(entry.operation), "utf8") + 1, 0);
+    if (group.length > OPERATION_LIMIT || metadata + 512 > METADATA_LIMIT)
       throw new CliError("draft_item_too_large", `${formatRef(item.ref)} is too large to stage in one operation.`, {
         exitCode: EXIT.validation,
       });
     if (
-      pending.length >= OPERATION_LIMIT ||
-      inlineBytes + inline > INLINE_LIMIT ||
+      operationCount + group.length > OPERATION_LIMIT ||
+      (pending.length > 0 && inlineBytes + inline > INLINE_LIMIT) ||
       metadataBytes + metadata > METADATA_LIMIT
     ) {
       batches.push(pending);
       pending = [];
       inlineBytes = 0;
+      operationCount = 0;
       metadataBytes = 512;
     }
     pending.push(item);
+    operationCount += group.length;
     inlineBytes += inline;
     metadataBytes += metadata;
   }

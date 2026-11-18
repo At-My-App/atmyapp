@@ -1,3 +1,5 @@
+import { isTextual } from "./content";
+import { saveUpload, type UploadProgress } from "./uploads";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -11,14 +13,12 @@ import {
   type CompiledItem,
   type DraftIssue,
   type StagedOperation,
-  type ValueRef,
 } from "./compile";
 import { CliError, EXIT } from "./errors";
 import { formatRef } from "./refs";
 import { contentFingerprint, sha256Hex } from "./fingerprint";
 import { readSpace, spaceNames, withSpace, writeSpace, type SpaceFile, type SpaceRef } from "./spaces";
 import {
-  fileDigest,
   itemKey,
   recordWorkItem,
   reserveNewEntryId,
@@ -109,7 +109,7 @@ export function response<T>(schema: z.ZodType<T>, raw: unknown): T {
 }
 
 const route = (id?: string) => "staging/named" + (id ? "/" + encodeURIComponent(id) : "");
-const scope = (id: string) => ({ kind: "named", branch: "main", sessionId: id });
+const scope = (id: string) => ({ kind: "named" as const, branch: "main" as const, sessionId: id });
 
 export function assertProject(api: ApiClient, work: WorkingCopy) {
   if (api.session.projectId !== work.manifest.projectId ||
@@ -174,6 +174,7 @@ interface PushJournal {
   nextBatch: number;
   batches: CompiledItem[][];
   issues: DraftIssue[];
+  uploads?: Record<string, UploadProgress>;
 }
 
 function journalFile(work: WorkingCopy) {
@@ -209,7 +210,11 @@ function writeJournal(work: WorkingCopy, journal: PushJournal) {
 
 function resetLink(work: WorkingCopy, space: SpaceFile) {
   space.session = null;
-  for (const item of Object.values(space.items)) delete item.staged;
+  for (const item of Object.values(space.items)) {
+    delete item.staged;
+    delete item.attachments;
+    delete item.rebase;
+  }
   delete space.lastPushOperationId;
   writeSpace(work.store, space);
   work.store.remove(journalFile(work));
@@ -236,6 +241,7 @@ function statusFailure(status: OperationStatus, operationId: string): CliError {
 }
 
 async function submitBatch(
+  work: WorkingCopy,
   api: ApiClient,
   journal: PushJournal,
   batch: CompiledItem[],
@@ -256,19 +262,20 @@ async function submitBatch(
   }
   if (!status) {
     const operations = [];
-    for (const [position, item] of batch.entries()) {
+    const grouped = batch.flatMap((item) => [...item.attachments ?? [], item]);
+    for (const [position, item] of grouped.entries()) {
       const operation = item.operation.operation;
-      if (item.upload && operation.type === "writeFile") {
-        const value = await api.json<ValueRef>("POST", "staging/values/inline", {
-          body: {
-            scope: draftScope,
-            operationId: `${operationId}:value:${position + 1}`,
-            ...item.upload,
-            encoding: "utf-8",
+      if (item.upload && "value" in operation) {
+        const id = `${operationId}:value:${position + 1}`;
+        const upload = { ...operation.value, ...item.upload };
+        const value = await saveUpload({
+          api, store: work.store, scope: draftScope, operationId: id, source: upload,
+          progress: journal.uploads?.[id],
+          checkpoint: (progress) => {
+            (journal.uploads ??= {})[id] = progress;
+            writeJournal(work, journal);
           },
         });
-        if (!value || value.sha256 !== operation.value.sha256 || value.size !== operation.value.size)
-          throw new CliError("invalid_response", "The staged value did not match the local file.");
         operations.push({ ...item.operation, operation: { ...operation, value } });
       } else operations.push(item.operation);
     }
@@ -323,7 +330,16 @@ function applyReceipt(
       }
       delete space.items[item.key].newFile;
     }
-    space.items[item.key].staged = { itemRevision: revision, sha256, at: new Date().toISOString() };
+    const saved = space.items[item.key];
+    if (item.attachments?.length) {
+      for (const attachment of item.attachments) {
+        const revision = revisions.get(attachment.itemKey);
+        if (revision === undefined) throw new CliError("invalid_response", "An attachment revision is missing.");
+        (saved.attachments ??= {})[attachment.itemKey] = revision;
+      }
+    }
+    delete saved.rebase;
+    saved.staged = { itemRevision: revision, sha256, at: new Date().toISOString() };
   }
 }
 
@@ -407,7 +423,7 @@ export async function push(work: WorkingCopy, api: ApiClient | undefined, option
         };
       const changed = plan(space).map((item) => reserveNewEntryId(work, space, item));
       for (const item of changed) recordWorkItem(space, work, item.ref);
-      const compiled = compileDraft(work, changed);
+      const compiled = compileDraft(work, changed, true);
       assertDraftValid(compiled.issues);
       const batches = stageBatches(compiled.items);
       if (!batches.length) return { dryRun: false, session, items: [], staged: 0, batches: 0, issues: compiled.issues };
@@ -423,7 +439,7 @@ export async function push(work: WorkingCopy, api: ApiClient | undefined, option
         if (!item.normalized) continue;
         const source = changed[index];
         work.writeValue(item.ref, item.normalized.value, source.file, !!item.newFile);
-        item.localSha = fileDigest(fs.readFileSync(source.file), source.placement);
+        item.localSha = work.localDigest(source.file, fs.readFileSync(source.file), source.placement);
         delete item.normalized;
       }
       writeSpace(work.store, space);
@@ -452,7 +468,7 @@ export async function push(work: WorkingCopy, api: ApiClient | undefined, option
     try {
       for (let index = journal.nextBatch; index < journal.batches.length; index++) {
         const batch = journal.batches[index];
-        const receipt = await submitBatch(api, journal, batch, index, existingJournal, options.waitMs);
+        const receipt = await submitBatch(work, api, journal, batch, index, existingJournal, options.waitMs);
         applyReceipt(work, space, batch, receipt);
         writeSpace(work.store, space);
         journal.nextBatch = index + 1;
@@ -638,6 +654,7 @@ function editableRef(work: WorkingCopy, item: DraftItem): SpaceRef | undefined {
   const { identity } = item;
   if (identity.kind === "entry" && identity.entryId && identity.collectionName)
     return { kind: "entry", name: identity.collectionName, entryId: identity.entryId, locale: identity.locale };
+  if (identity.kind === "publicAsset" && identity.path) return { kind: "public", name: identity.path };
   if ((identity.kind === "document" || identity.kind === "file") && identity.path)
     return work.fileRef(identity.path, identity.locale);
 }
@@ -671,10 +688,6 @@ export async function pullSession(api: ApiClient, work: WorkingCopy, dryRun = fa
         });
       let value = item.desired.data;
       if (item.desired.type === "upsert" && item.desired.value) {
-        if (item.desired.value.encoding === "base64")
-          throw new CliError("not_supported_yet", `Binary draft value ${formatRef(ref)} cannot be pulled yet.`, {
-            exitCode: EXIT.validation,
-          });
         const bytes = await api.bytes("staging/read", {
           body: {
             scope: scope(draft.sessionId),
@@ -684,8 +697,13 @@ export async function pullSession(api: ApiClient, work: WorkingCopy, dryRun = fa
           },
         });
         if (!bytes) throw new CliError("invalid_response", `Missing draft value for ${formatRef(ref)}.`);
-        const text = Buffer.from(bytes.bytes).toString("utf8");
-        value = /json/i.test(work.mime(ref)) ? JSON.parse(text) : text;
+        const raw = Buffer.from(bytes.bytes);
+        const mime = item.desired.value.mimeType ?? work.mime(ref);
+        if (ref.kind === "public" || !ref.locale && item.desired.value.encoding !== "utf-8" && !isTextual(mime, ref.name)) value = raw;
+        else {
+          const text = raw.toString("utf8");
+          value = /json/i.test(mime) ? JSON.parse(text) : text;
+        }
       }
       results.push({ ref, item, value });
     }
@@ -769,4 +787,18 @@ export async function reconcilePublishedSpaces(api: ApiClient, store: ContentSto
       else if (changed) writeSpace(store, space);
     });
   }
+}
+
+export const stageConflictSchema = z.object({
+  problems: z.array(z.looseObject({ type: z.string(), kind: z.string().optional(), itemKey: z.string().optional() })),
+  headSha: z.string().nullable().optional(),
+  sessionRevision: z.int(),
+});
+
+export async function stageConflicts(api: ApiClient, work: WorkingCopy) {
+  assertProject(api, work);
+  const id = requireLink(readSpace(work.store, work.name));
+  return response(stageConflictSchema, await api.json("POST", "staging/conflicts", {
+    body: { scope: scope(id), operationId: "inspect-" + randomUUID(), message: "Inspect named draft conflicts" },
+  }));
 }

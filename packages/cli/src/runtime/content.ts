@@ -354,8 +354,18 @@ export async function readRef(
     case "entry":
       schema.collection(ref.name);
       return readEntry(api, ref.name, ref.entryId!, { ...options, ref: label });
-    case "public":
-      throw new CliError("not_supported_yet", "Public assets can't be read with the CLI yet.", { exitCode: EXIT.usage });
+    case "public": {
+      if (options.locale || options.view === "overlay" || options.view === "effective")
+        throw new CliError("not_translatable", "Public assets cannot be translated.", { exitCode: EXIT.usage });
+      const result = await api.bytes(`storage/public/${encodeStoragePath(ref.name)}`);
+      if (!result) throw new CliError("not_found", "The public asset is unavailable.");
+      return {
+        ref: label, kind: "file", path: ref.name, definition: null, locale: null, view: options.view,
+        mimeType: result.contentType, fingerprint: sha256Hex(result.bytes), commitSha: result.commitSha,
+        value: isTextual(result.contentType, ref.name) ? new TextDecoder().decode(result.bytes)
+          : { binary: true, size: result.bytes.length, mimeType: result.contentType },
+      };
+    }
     case "coll":
       throw new CliError("not_an_item", `${label} is a collection. Use 'atmyapp entries ls ${ref.name}'.`, { exitCode: EXIT.usage });
   }

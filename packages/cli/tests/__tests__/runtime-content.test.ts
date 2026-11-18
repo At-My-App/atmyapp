@@ -231,6 +231,8 @@ class FakeProject {
     if (route === "storage/structure") return json({ success: true, data: { found: true, structure: SCHEMA } });
     if (route === "localization") return json({ success: true, data: { defaultLocale: "en", supportedLocales: ["en", "de"] } });
     if (route === "content-placements") return json({ success: true, data: { usage: [{ definition: "home", summary: "Hero", pages: [{ route: "/" }] }] } });
+    if (route === "staging/named") return json({ data: [], success: true });
+    if (route === "storage/public") return json({ files: [] });
     if (route === "storage/f") {
       const manifestFiles: Record<string, unknown> = { ".structure.json": {}, "files/menu.pdf": { mimeType: "application/pdf" } };
       if (this.home) manifestFiles["home.json"] = { mimeType: "application/json" };

@@ -1,3 +1,4 @@
+import { entryAssetId, keyPart } from "../../src/runtime/assetDrafts";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -20,11 +21,12 @@ export function draftFixture(cwd: string) {
         localize: true,
         fields: {
           title: s.string({ localize: true }),
-          blocks: s.array({ items: s.object({ fields: { heading: s.string() } }) }),
+          hero: s.image({ optional: true }),
+          blocks: s.array({ items: s.object({ fields: { heading: s.string({ localize: true }) } }) }),
         },
       }),
       about: defineDocument({ fields: { title: s.string() } }),
-      posts: defineCollection({ fields: { title: s.string(), order: s.order() } }),
+      posts: defineCollection({ fields: { title: s.string(), order: s.order(), gallery: s.array({ optional: true, items: s.image() }) } }),
     },
   });
   const manifest = emptyManifest({ projectId: draftProject, branch: "main" });
@@ -85,7 +87,10 @@ export class FakeDraftApi {
   writes: Array<{ operations: CompiledOperation[]; operationId: string; stepId: string }> = [];
   items = new Map<string, FakeItem>();
   saves = new Map<string, FakeStatus>();
-  values = new Map<string, string>();
+  values = new Map<string, string | Buffer>();
+  uploads = new Map<string, { size: number; partSize: number; parts: Map<number, Buffer> }>();
+  uploadedParts: number[] = [];
+  interruptUploadAfter?: number;
   interrupt = false;
   nextRevision = 0;
 
@@ -113,7 +118,9 @@ export class FakeDraftApi {
 
   async request(url: string, init: RequestInit) {
     const route = new URL(url).pathname.split("/").slice(4).join("/");
-    const body = init.body ? JSON.parse(String(init.body)) : undefined;
+    const scope = new URL(url).searchParams;
+    const body = init.method === "PUT" ? { scope: { sessionId: scope.get("sessionId") } }
+      : init.body ? JSON.parse(String(init.body)) : undefined;
     const ok = (data: unknown) => Response.json({ success: true, data });
     const error = (status: number, code: string) => Response.json({ success: false, code, error: code }, { status });
     if (route === "members")
@@ -156,16 +163,47 @@ export class FakeDraftApi {
     if (route === "staging/read") {
       const item = this.items.get(body.itemKey);
       if (item?.itemRevision !== body.itemRevision) return error(409, "staged-version-conflict");
-      return new Response(this.values.get(item?.desired.value?.valueId ?? ""), {
+      const value = this.values.get(item?.desired.value?.valueId ?? "");
+      return new Response(Buffer.isBuffer(value) ? new Uint8Array(value).buffer : value, {
         headers: { "Content-Type": "application/octet-stream" },
       });
     }
     if (this.reviewState === "in_review") return error(409, "session_in_review");
-    if (route === "staging/values/inline") {
-      const sha256 = sha256Hex(body.content);
+    const saveValue = (bytes: Buffer | string, mimeType: string, encoding?: "base64" | "utf-8") => {
+      const sha256 = sha256Hex(bytes);
       const valueId = "v_" + sha256;
-      this.values.set(valueId, body.content);
-      return ok({ valueId, sha256, size: Buffer.byteLength(body.content), mimeType: body.mimeType, encoding: "utf-8" });
+      this.values.set(valueId, bytes);
+      return ok({ valueId, sha256, size: Buffer.byteLength(bytes), mimeType, encoding });
+    };
+    if (route === "staging/conflicts") return ok({ problems: [], sessionRevision: this.nextRevision, headSha: "git-2" });
+    if (route === "staging/values/inline") {
+      return saveValue(body.encoding === "base64" ? Buffer.from(body.content, "base64") : body.content, body.mimeType, body.encoding);
+    }
+    if (route === "staging/uploads") {
+      const intentId = randomUUID();
+      this.uploads.set(intentId, { size: body.expectedSize, partSize: body.partSize, parts: new Map() });
+      return ok({ intentId, multipart: true, expectedSize: body.expectedSize, partSize: body.partSize });
+    }
+    if (route.startsWith("staging/uploads/")) {
+      const [, , id, action, part] = route.split("/");
+      const upload = this.uploads.get(id);
+      if (!upload) return error(404, "upload-not-found");
+      if (action === "finalize") {
+        const bytes = Buffer.concat([...upload.parts].sort(([a], [b]) => a - b).map(([, bytes]) => bytes));
+        if (bytes.length !== upload.size) return error(409, "upload-incomplete");
+        return saveValue(bytes, "image/png");
+      }
+      if (init.method === "PUT") {
+        const index = Number(part);
+        const bytes = Buffer.from(init.body as ArrayBuffer);
+        upload.parts.set(index, bytes);
+        this.uploadedParts.push(bytes.length);
+        if (index === this.interruptUploadAfter) {
+          this.interruptUploadAfter = undefined;
+          throw new TypeError("Upload reply was lost");
+        }
+        return ok({});
+      }
     }
     if (route === "staging/v2/operation-status") return ok(this.saves.get(body.operationId) ?? null);
     if (route === "staging/v2/cancel-operation") {
@@ -179,25 +217,31 @@ export class FakeDraftApi {
       this.writes.push(body);
       const changed = operations.map(({ operation, expectedVersion }) => {
         const locale = "locale" in operation ? operation.locale : undefined;
-        const ref =
-          "collectionName" in operation
-            ? { kind: "entry" as const, name: operation.collectionName, entryId: operation.entryId, locale }
-            : { kind: "file" as const, name: operation.path, locale };
-        const itemKey = serverItemKey(ref, operation.type);
+        const ref = "collectionName" in operation
+          ? { kind: "entry" as const, name: operation.collectionName, entryId: operation.entryId, locale }
+          : { kind: operation.type === "putPublicAsset" || operation.type === "deletePublicAsset" ? "public" as const : "file" as const,
+              name: "documentPath" in operation ? operation.documentPath : operation.path, locale };
+        let itemKey = serverItemKey(ref, operation.type);
+        if (operation.type === "replaceDocumentAsset")
+          itemKey = ["documentAsset", keyPart(operation.documentPath), keyPart(operation.assetPath)].join("|");
+        if (operation.type === "addEntryBlob" || operation.type === "replaceEntryBlob") {
+          const id = operation.type === "replaceEntryBlob" ? operation.blobId :
+            entryAssetId(operation.collectionName, operation.entryId, operation.fieldName, operation.value.sha256, operation.value.mimeType ?? "");
+          itemKey = ["entryBlob", keyPart(operation.collectionName), keyPart(id)].join("|");
+        }
         const current = this.items.get(itemKey);
         if ((current?.itemRevision ?? 0) !== expectedVersion) return null;
-        const identity =
-          "collectionName" in operation
-            ? { kind: "entry", collectionName: operation.collectionName, entryId: operation.entryId, locale }
-            : { kind: operation.type.endsWith("Document") ? "document" : "file", path: operation.path, locale };
-        const desired: FakeItem["desired"] =
-          operation.type === "upsertEntry"
-            ? { type: "upsert", data: operation.data }
-            : operation.type === "putDocument"
-              ? { type: "upsert", data: operation.content }
-              : operation.type === "writeFile"
-                ? { type: "upsert", value: operation.value }
-                : { type: "delete" };
+        const kind = operation.type === "replaceDocumentAsset" ? "documentAsset"
+          : operation.type.endsWith("Document") ? "document"
+          : operation.type.endsWith("EntryBlob") ? "entryBlob"
+          : "collectionName" in operation ? "entry" : ref.kind === "public" ? "publicAsset" : "file";
+        const identity: FakeItem["identity"] = ref.kind === "entry"
+          ? { kind, collectionName: ref.name, entryId: ref.entryId, locale }
+          : { kind, path: ref.name, locale };
+        const desired: FakeItem["desired"] = operation.type === "upsertEntry"
+          ? { type: "upsert", data: operation.data }
+          : operation.type === "putDocument" ? { type: "upsert", data: operation.content }
+          : "value" in operation ? { type: "upsert", value: operation.value } : { type: "delete" };
         return { itemKey, identity, desired, itemRevision: ++this.nextRevision };
       });
       if (changed.some((item) => !item)) {

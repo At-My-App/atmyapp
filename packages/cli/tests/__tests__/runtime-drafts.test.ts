@@ -103,7 +103,7 @@ test("content operations compile with published baselines, normalized keys and b
   expect(stageBatches(Array(101).fill(text)).map((batch) => batch.length)).toEqual([100, 1]);
   expect(
     stageBatches(
-      Array(3).fill({ ...text, upload: { content: "x".repeat(INLINE_LIMIT / 2), mimeType: "text/plain" } }),
+      Array(3).fill({ ...text, upload: { content: "x".repeat(INLINE_LIMIT / 2), size: INLINE_LIMIT / 2, sha256: "fixture", mimeType: "text/plain" } }),
     ).map((batch) => batch.length),
   ).toEqual([2, 1]);
   expect(readSpace(store, "release").session).toBeNull();

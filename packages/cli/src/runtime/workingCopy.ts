@@ -1,3 +1,4 @@
+import { fileMime, linkedAssetHashes } from "./assetFiles";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -42,6 +43,8 @@ export interface WorkItem {
   newFile?: string;
   placement?: SpaceItem["placement"];
   replaceData?: boolean;
+  rebase?: boolean;
+  attachments?: SpaceItem["attachments"];
 }
 
 function invalidJson(file: string): never {
@@ -83,6 +86,7 @@ function refFromKey(key: string): SpaceRef | undefined {
     if (delimiter < 0) return;
     return { kind: "entry", name: rest.slice(0, delimiter), entryId: rest.slice(delimiter + 1), locale };
   }
+  if (kind === "public") return { kind: "public", name: rest };
   if (kind.startsWith("file")) return { kind: "file", name: rest, locale };
 }
 
@@ -148,6 +152,7 @@ export class WorkingCopy {
       return { kind: "doc", name: resolved.path, locale };
     }
     if (parsed.kind === "file") return this.fileRef(parsed.name, locale);
+    if (parsed.kind === "public" && !locale) return { kind: "public", name: parsed.name };
     throw new CliError("not_supported_yet", "Use a document, file or entry reference.", { exitCode: EXIT.usage });
   }
 
@@ -162,6 +167,7 @@ export class WorkingCopy {
         ? this.store.entryVariantPath(ref.name, ref.entryId!, ref.locale, space)
         : this.store.entryPath(ref.name, ref.entryId!, space);
     }
+    if (ref.kind === "public") return this.store.publicPath(ref.name, space);
     return ref.locale ? this.store.fileVariantPath(ref.name, ref.locale, space) : this.store.filePath(ref.name, space);
   }
 
@@ -173,7 +179,8 @@ export class WorkingCopy {
 
   mime(ref: SpaceRef): string {
     if (ref.kind === "entry" || ref.kind === "doc" || /\.jsonx?$/i.test(ref.name)) return "application/json";
-    return this.manifest.files[ref.name]?.mimeType ?? (/\.mdx?$/i.test(ref.name) ? "text/markdown" : "text/plain");
+    const filename = ref.kind === "public" ? this.manifest.publicFiles?.[ref.name] : this.manifest.files[ref.name];
+    return filename?.mimeType ?? fileMime(ref.name);
   }
 
   private readValue(ref: SpaceRef, file: string, raw: Buffer, newFile = false): unknown {
@@ -185,18 +192,31 @@ export class WorkingCopy {
       if (!record(value)) return invalidJson(file);
       return value;
     }
+    if (ref.kind === "public") return raw;
     if (ref.kind === "doc" || /json/i.test(this.mime(ref))) return parseJson(file, text);
-    if (!isTextual(this.mime(ref), ref.name) || raw.includes(0) || !Buffer.from(text, "utf8").equals(raw)) {
-      throw new CliError("not_supported_yet", `Binary file '${ref.name}' cannot be edited in a space yet.`, {
-        exitCode: EXIT.validation,
-      });
-    }
+    if (raw.includes(0) || !Buffer.from(text, "utf8").equals(raw) ||
+        (!isTextual(this.mime(ref), ref.name) && this.mime(ref) !== "application/octet-stream")) return raw;
     return text;
   }
 
   value(item: Pick<WorkItem, "ref" | "file" | "newFile">): unknown {
     const bytes = fs.readFileSync(item.file);
     return this.readValue(item.ref, item.file, bytes, !!item.newFile);
+  }
+
+  baseValue(item: WorkItem): unknown {
+    if (!item.base.fingerprint) return undefined;
+    const file = item.base.sha256 && this.store.objectPath(item.base.sha256);
+    const bytes = file ? readBytes(file) : null;
+    if (!bytes || !file) throw new CliError("base_unavailable", `The saved base for ${formatRef(item.ref)} is unavailable.`, {
+      exitCode: EXIT.conflict,
+      fix: "Use 'atmyapp content resolve' to choose a whole version.",
+    });
+    if (item.ref.locale) {
+      const previous = parseJson(file, bytes.toString("utf8"));
+      if (!record(previous) || !Object.prototype.hasOwnProperty.call(previous, "sourceHashes")) return undefined;
+    }
+    return this.readValue(item.ref, file, bytes);
   }
 
   variant(ref: SpaceRef, space = this.name): StoredVariant | undefined {
@@ -217,8 +237,8 @@ export class WorkingCopy {
   }
 
   published(ref: SpaceRef): SpaceBase {
-    const resource =
-      ref.kind === "entry" ? this.manifest.collections[ref.name]?.entries[ref.entryId!] : this.manifest.files[ref.name];
+    const resource = ref.kind === "entry" ? this.manifest.collections[ref.name]?.entries[ref.entryId!]
+      : ref.kind === "public" ? this.manifest.publicFiles?.[ref.name] : this.manifest.files[ref.name];
     if (!resource) return { sha256: null, fingerprint: null, commit: this.manifest.baseCommit };
     if (!ref.locale)
       return {
@@ -235,6 +255,10 @@ export class WorkingCopy {
   }
 
   writeValue(ref: SpaceRef, value: unknown, file = this.filename(ref), newFile = false): string {
+    if (Buffer.isBuffer(value)) {
+      this.store.writeBytes(file, value);
+      return sha256Hex(value);
+    }
     if (ref.locale) {
       const previous = this.variant(ref) ?? this.variant(ref, this.store.published);
       return this.store.writeJson(file, { ...(previous ?? storedVariant(value)), data: value }, false);
@@ -247,10 +271,17 @@ export class WorkingCopy {
     return this.store.writeJson(file, value, false);
   }
 
+  localDigest(file: string, bytes: Buffer, placement?: SpaceItem["placement"]) {
+    const digest = fileDigest(bytes, placement);
+    const assets = linkedAssetHashes(this.store.spaceDir(this.name), file, bytes);
+    return assets.length ? sha256Hex(JSON.stringify([digest, ...assets])) : digest;
+  }
+
   itemStates(space = readSpace(this.store, this.name), all = false): WorkItem[] {
     const known = new Map<string, { ref: SpaceRef; file?: string; newFile?: string }>();
     const add = (ref: SpaceRef, file?: string, newFile?: string) => known.set(itemKey(ref), { ref, file, newFile });
     const dir = this.store.spaceDir(this.name);
+    for (const parts of files(path.join(dir, "public"))) add({ kind: "public", name: parts.map(decodeSegment).join("/") });
     for (const parts of files(path.join(dir, "f"))) add(this.fileRef(parts.map(decodeSegment).join("/")));
     for (const parts of files(path.join(dir, "locales", "f"))) {
       const locale = parts.at(-1);
@@ -276,6 +307,10 @@ export class WorkingCopy {
       if (ref && !known.has(key)) add(ref);
     }
     if (all) {
+      for (const name of Object.keys(this.manifest.publicFiles ?? {})) {
+        const ref = { kind: "public", name } as const;
+        if (!known.has(itemKey(ref))) add(ref);
+      }
       for (const name of Object.keys(this.manifest.files)) {
         const ref = this.fileRef(name);
         if (!known.has(itemKey(ref))) add(ref);
@@ -296,13 +331,13 @@ export class WorkingCopy {
         const deleted = space.deletions.includes(key);
         const file = coordinates.file ?? this.filename(ref);
         const bytes = deleted ? null : readBytes(file);
-        const sha256 = deleted ? sha256Hex("deleted") : bytes ? fileDigest(bytes, saved?.placement) : null;
-        const state = workingState({
+        const sha256 = deleted ? sha256Hex("deleted") : bytes ? this.localDigest(file, bytes, saved?.placement) : null;
+        const state = saved?.rebase && base.fingerprint === published.fingerprint ? "modified" : workingState({
           sha256,
           base,
           published,
           deleted,
-          staged: saved?.staged,
+          staged: saved?.rebase ? undefined : saved?.staged,
           local: !!bytes,
           placement: !!saved?.placement,
         });
@@ -319,6 +354,8 @@ export class WorkingCopy {
           staged: saved?.staged,
           placement: saved?.placement,
           replaceData: saved?.replaceData,
+          rebase: saved?.rebase,
+          attachments: saved?.attachments,
         };
       })
       .sort((a, b) => a.key.localeCompare(b.key));
@@ -460,6 +497,7 @@ export function grepSpace(work: WorkingCopy, query: string, limit = 50) {
   const matches: Array<{ ref: string; pointer: string; text: string }> = [];
   function visit(value: unknown, ref: string, pointer: string) {
     if (matches.length >= limit) return;
+    if (Buffer.isBuffer(value)) return;
     if (value !== null && typeof value === "object") {
       for (const [key, child] of Object.entries(value)) visit(child, ref, pointer + "/" + escapePointerToken(key));
     } else if (typeof value === "string" && foldText(value).includes(needle)) {

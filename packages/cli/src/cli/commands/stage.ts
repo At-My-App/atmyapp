@@ -8,6 +8,7 @@ import {
   push,
   requestReview,
   stageDiff,
+  stageConflicts,
   stagePreview,
   stageStatus,
   undoStage,
@@ -19,6 +20,12 @@ import { confirm, draftOptions, maybeConnect, workFor, type DraftOptions } from 
 export function stageCommand() {
   return new Command("stage")
     .description("Stage local content and hand it to a reviewer")
+    .addCommand(draftOptions(new Command("conflicts"))
+      .description("Inspect conflicts between a named draft and current published content")
+      .addHelpText("after", "\nExample: atmyapp stage conflicts --json")
+      .action((options: DraftOptions) => runAction(options,
+        () => stageConflicts(connect(options).api, workFor(options)), printValue)))
+
     .addCommand(
       draftOptions(new Command("push"), { write: true })
         .description("Validate and push changes from the active space")

@@ -8,7 +8,7 @@ const slug = /^[a-z0-9-]{1,40}$/;
 const stamp = z.string();
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const coordinate = z.object({
-  kind: z.enum(["doc", "file", "entry"]),
+  kind: z.enum(["doc", "file", "entry", "public"]),
   name: z.string().min(1),
   entryId: z.string().min(1).optional(),
   locale: z.string().min(1).optional(),
@@ -21,6 +21,13 @@ const item = z.object({
   ref: coordinate.optional(),
   newFile: z.string().optional(),
   replaceData: z.boolean().optional(),
+  rebase: z.boolean().optional(),
+  attachments: z.record(z.string(), z.int()).optional(),
+  merge: z.object({
+    local: digest.nullable(),
+    head: digest.nullable(),
+    choices: z.array(z.tuple([z.string(), z.enum(["ours", "theirs"])])),
+  }).optional(),
   placement: z
     .object({
       field: z.string(),
@@ -132,7 +139,7 @@ export function createSpace(
   const release = store.lockSpace(name);
   try {
     if (options.from && options.from !== "published") {
-      for (const directory of ["f", "locales", "collections"]) {
+      for (const directory of ["f", "public", "locales", "collections", ".assets"]) {
         const source = path.join(store.spaceDir(options.from), directory);
         if (fs.existsSync(source)) {
           fs.cpSync(source, path.join(target, directory), {
@@ -190,12 +197,15 @@ export function collectUnusedObjects(store: ContentStore, dryRun = false) {
     const manifest = store.readManifest();
     for (const record of [
       ...Object.values(manifest?.files ?? {}),
+      ...Object.values(manifest?.publicFiles ?? {}),
       ...Object.values(manifest?.collections ?? {}).flatMap((collection) => Object.values(collection.entries)),
     ]) {
       keep.add(record.sha256);
       for (const variant of Object.values(record.locales ?? {})) keep.add(variant.sha256);
     }
     for (const name of spaceNames(store)) {
+      if (fs.existsSync(path.join(store.spaceDir(name), ".lock")) || fs.existsSync(path.join(store.spaceDir(name), ".push.json")))
+        throw new CliError("store_locked", "Finish editing or pushing the space before collecting unused objects.");
       for (const entry of Object.values(readSpace(store, name).items)) {
         if (entry.base.sha256) keep.add(entry.base.sha256);
       }

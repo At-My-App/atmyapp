@@ -1,10 +1,14 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
+import { mergeSpace } from "../../runtime/refresh";
+import { pullContent } from "../../runtime/pull";
+import { ContentStore } from "../../runtime/store";
+import type { MergeSide } from "../../runtime/merge";
 import { assertDraftValid, compileDraft, draftSchemaWarnings } from "../../runtime/compile";
 import { CliError, EXIT } from "../../runtime/errors";
 import { applyJsonPatch, setJsonValue } from "../../runtime/jsonPatch";
 import { parseRef } from "../../runtime/refs";
 import { editLocalContent, grepSpace, selectWorkItems, workSummary } from "../../runtime/workingCopy";
-import { printValue, runAction, table } from "../output";
+import { connect, printValue, runAction, table } from "../output";
 import { jsonInput } from "./entryDrafts";
 import { draftOptions, workFor, type DraftOptions } from "./draftOptions";
 
@@ -20,8 +24,39 @@ function changedItems(options: DraftOptions, refs: string[]) {
   return { work, items };
 }
 
+function mergeResult(result: Awaited<ReturnType<typeof mergeSpace>>) {
+  if (result.conflicts.length)
+    throw new CliError("conflict", `${result.conflicts.length} field conflict(s) require a choice.`, {
+      exitCode: EXIT.conflict, details: result, fix: "Use 'atmyapp content resolve' with the reported ref and pointer.",
+    });
+  return result;
+}
+
 export function addContentDraftCommands(command: Command) {
   return command
+    .addCommand(
+      draftOptions(new Command("refresh"), { write: true })
+        .description("Pull published content and merge changes into the active space")
+        .argument("[ref]")
+        .addHelpText("after", "\nExample: atmyapp content refresh doc:home\nDry-run compares with the last local pull.")
+        .action((ref: string | undefined, options: DraftOptions) => runAction(options, async () => {
+          const store = new ContentStore();
+          if (!options.dryRun) await pullContent(connect(options).api, { store });
+          return mergeResult(await mergeSpace(workFor(options, store), { refs: ref ? [ref] : [], dryRun: options.dryRun }));
+        }, printValue)),
+    )
+    .addCommand(
+      draftOptions(new Command("resolve"), { write: true })
+        .description("Resolve one or all field conflicts for an item")
+        .argument("<ref>")
+        .addOption(new Option("--take <side>").choices(["ours", "theirs"]).makeOptionMandatory())
+        .option("--pointer <json-pointer>", "Resolve only this conflict")
+        .addHelpText("after", "\nExample: atmyapp content resolve doc:home --take ours --pointer /title")
+        .action((ref: string, options: DraftOptions & { take: MergeSide; pointer?: string }) => runAction(options,
+          async () => mergeResult(await mergeSpace(workFor(options), { refs: [ref], dryRun: options.dryRun, resolve: options })),
+          printValue,
+        )),
+    )
     .addCommand(
       draftOptions(new Command("edit"), { write: true })
         .description("Copy published content into the active space for editing")

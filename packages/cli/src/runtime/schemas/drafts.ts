@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { draftDiffSchema, memberSchema, namedSessionSchema, previewSchema } from "../sessions";
+import { draftDiffSchema, memberSchema, namedSessionSchema, previewSchema, stageConflictSchema } from "../sessions";
 import { workStates } from "../workingCopy";
 import { pullSummarySchema } from "./content";
 
@@ -40,7 +40,16 @@ export const contentPullResultSchema = z.union([
   z.object({ mode: z.literal("dry-run"), projectId: z.string(), full: z.boolean(), media: z.boolean() }),
 ]);
 
+const merge = z.object({ dryRun, space: z.string(), updated: z.array(ref), conflicts: z.array(z.object({
+  ref, pointer: z.string(), base: z.unknown(), ours: z.unknown(), theirs: z.unknown(),
+})) });
+
 export const draftOutputSchemas = {
+  "content refresh": merge,
+  "content resolve": merge,
+  "assets put": edit,
+  "files put": edit,
+  "stage conflicts": stageConflictSchema,
   "space create": space,
   "space use": space,
   "space rm": space,

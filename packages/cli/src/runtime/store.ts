@@ -78,6 +78,7 @@ export interface StoreManifest {
   collections: Record<string, { entries: Record<string, EntryRecord> }>;
   /** Stored asset reference (`$asset:…`, `__blob:…`) → what websites receive. */
   assets: Record<string, DeliveredAsset>;
+  publicFiles?: Record<string, FileRecord>;
 }
 
 /** Encodes one path segment so any storage name is a safe file name everywhere. */
@@ -143,6 +144,10 @@ export class ContentStore {
 
   filePath(storagePath: string, space = this.published): string {
     return path.join(this.spaceDir(space), "f", ...encodePath(storagePath));
+  }
+
+  publicPath(storagePath: string, space = this.published): string {
+    return path.join(this.spaceDir(space), "public", ...encodePath(storagePath));
   }
 
   fileVariantPath(storagePath: string, locale: string, space = this.published): string {

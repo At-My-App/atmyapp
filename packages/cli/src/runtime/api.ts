@@ -196,12 +196,12 @@ export class ApiClient {
     };
   }
 
-  async send(method: string, url: string, body?: unknown): Promise<Response> {
+  async send(method: string, url: string, body?: unknown, raw = false): Promise<Response> {
     try {
       return await this.fetchImpl(url, {
         method,
-        headers: this.headers(body !== undefined),
-        body: body === undefined ? undefined : JSON.stringify(body),
+        headers: raw ? { ...this.headers(false), "Content-Type": "application/octet-stream" } : this.headers(body !== undefined),
+        body: raw ? body as ArrayBuffer : body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (error) {
       throw new CliError(
@@ -224,6 +224,14 @@ export class ApiClient {
       throw errorFromResponse(response.status, body as ErrorBody, subPath);
     }
     return unwrap(body) as T;
+  }
+
+  async upload(subPath: string, data: Uint8Array, query: Record<string, QueryValue>) {
+    const response = await this.send("PUT", this.url(subPath, query), new Uint8Array(data).buffer, true);
+    const body = await readJson(response);
+    if (!response.ok || (body as ErrorBody)?.success === false)
+      throw errorFromResponse(response.status, body as ErrorBody, subPath);
+    return unwrap(body);
   }
 
   /** Raw bytes, with the storage headers the server sets on reads. */

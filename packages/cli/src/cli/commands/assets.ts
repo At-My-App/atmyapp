@@ -1,3 +1,5 @@
+import { putDraftAsset, putDraftFile } from "../../runtime/assetDrafts";
+import { draftOptions, workFor, type DraftOptions } from "./draftOptions";
 import { Command } from "commander";
 import * as fs from "fs";
 import * as path from "path";
@@ -7,7 +9,7 @@ import { CliError, EXIT } from "../../runtime/errors";
 import { parseRef, resolvePointer } from "../../runtime/refs";
 import { fetchRemoteSchema } from "../../runtime/schema";
 import type { AssetDownload } from "../../runtime/schemas/commands";
-import { connect, runAction, withCommonOptions, type CommonOptions } from "../output";
+import { connect, printValue, runAction, withCommonOptions, type CommonOptions } from "../output";
 
 /**
  * `atmyapp assets get`: downloads one image or file.
@@ -34,8 +36,8 @@ export function assetsCommand(): Command {
           let bytes: Uint8Array;
           let mimeType: string;
           let source: string;
-          if (ref.kind === "file") {
-            const response = await api.bytes(`storage/f/${encodeStoragePath(ref.name)}`, { query: { branch: "main", skipTransformations: "true" } });
+          if (ref.kind === "file" || ref.kind === "public") {
+            const response = await api.bytes(`storage/${ref.kind === "public" ? "public" : "f"}/${encodeStoragePath(ref.name)}`, { query: { branch: "main", skipTransformations: "true" } });
             bytes = response!.bytes;
             mimeType = response!.contentType;
             source = ref.name;
@@ -86,5 +88,24 @@ export function assetsCommand(): Command {
         (result) => console.log(`Saved ${result.source} (${result.mimeType}, ${result.size} bytes) to ${result.output}`),
       ),
     );
-  return new Command("assets").description("Download images and files").addCommand(get);
+  return new Command("assets").description("Download images and files").addCommand(get)
+    .addCommand(
+      draftOptions(new Command("put"), { write: true })
+        .description("Attach a local file to a document or entry field in the active space")
+        .argument("<ref>").argument("<file>").option("--alt <text>", "Image alternative text")
+        .addHelpText("after", "\nExample: atmyapp assets put doc:home#/hero ./cover.jpg --alt \"Spring menu\"")
+        .action((ref: string, file: string, options: DraftOptions & { alt?: string }) => runAction(options,
+          () => putDraftAsset(workFor(options), ref, file, options), printValue)),
+    );
+}
+
+export function filesCommand() {
+  return new Command("files").description("Edit file content in the active space").addCommand(
+    draftOptions(new Command("put"), { write: true })
+      .description("Copy a file to a storage path or public asset path")
+      .argument("<path>").argument("<file>")
+      .addHelpText("after", "\nExample: atmyapp files put public:logo.svg ./logo.svg")
+      .action((path: string, file: string, options: DraftOptions) => runAction(options,
+        () => putDraftFile(workFor(options), path, file, options.dryRun), printValue)),
+  );
 }

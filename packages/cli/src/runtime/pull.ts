@@ -43,6 +43,7 @@ export interface PullOptions {
   /** Download images and files too (default: lazy, served from their URL). */
   media?: boolean;
   onProgress?: (message: string) => void;
+  store?: ContentStore;
 }
 
 interface PullContext {
@@ -121,7 +122,7 @@ async function pullFileVariants(ctx: PullContext, storagePath: string): Promise<
   return Object.keys(records).length ? records : undefined;
 }
 
-async function pullFile(ctx: PullContext, storagePath: string, listedMime?: string): Promise<void> {
+async function pullFile(ctx: PullContext, storagePath: string, listedMime?: string, listed?: { sha256?: string; size?: number }): Promise<void> {
   const owner = ctx.schema.definitionForPath(storagePath);
   const kind = (owner?.definition.kind ?? "other") as FileRecord["kind"];
   const structured = kind === "document" || kind === "system_config";
@@ -135,13 +136,16 @@ async function pullFile(ctx: PullContext, storagePath: string, listedMime?: stri
     const staticUrl = await ctx.api
       .json<{ staticUrl?: string }>("GET", `storage/static/${encodeStoragePath(storagePath)}`, { query: { branch: "main" }, allow: [400, 404] })
       .catch(() => null);
+    const meta = listed?.sha256 ? listed : await ctx.api.json<{ sha256?: string; size?: number }>(
+      "GET", `storage/metadata/${encodeStoragePath(storagePath)}`, { query: { branch: "main" }, allow: [400, 404] },
+    ).catch(() => null);
     ctx.manifest.files[storagePath] = {
       kind,
       definition: owner?.name ?? null,
       mimeType: guessedMime,
-      size: 0,
-      sha256: "",
-      fingerprint: "",
+      size: meta?.size ?? 0,
+      sha256: meta?.sha256 ?? "",
+      fingerprint: meta?.sha256 ?? "",
       downloaded: false,
       ...(staticUrl?.staticUrl ? { url: staticUrl.staticUrl } : {}),
     };
@@ -154,7 +158,7 @@ async function pullFile(ctx: PullContext, storagePath: string, listedMime?: stri
     removeFile(ctx, storagePath);
     return;
   }
-  const sha = ctx.store.writePublishedFile(storagePath, stored.bytes, textual);
+  const sha = ctx.store.writePublishedFile(storagePath, stored.bytes, true);
   let fingerprint = sha256Hex(stored.bytes);
   if (textual) {
     const text = new TextDecoder().decode(stored.bytes);
@@ -202,7 +206,7 @@ function removeFile(ctx: PullContext, storagePath: string) {
 }
 
 async function pullAllFiles(ctx: PullContext) {
-  const listing = await ctx.api.json<{ manifestFiles?: Record<string, { mimeType?: string; contentType?: string }> }>(
+  const listing = await ctx.api.json<{ manifestFiles?: Record<string, { mimeType?: string; contentType?: string; sha256?: string; size?: number }> }>(
     "GET",
     "storage/f",
     { query: { branch: "main", includeHomeData: "true" } },
@@ -212,8 +216,36 @@ async function pullAllFiles(ctx: PullContext) {
   ctx.progress(`Reading ${paths.length} files…`);
   await mapLimit(paths, CONCURRENCY, (path) => {
     const meta = listing!.manifestFiles![path] ?? {};
-    return pullFile(ctx, path, meta.mimeType || meta.contentType);
+    return pullFile(ctx, path, meta.mimeType || meta.contentType, meta);
   });
+}
+
+async function pullPublicFiles(ctx: PullContext) {
+  const listing = await ctx.api.json<{ files: Array<{ path: string; mimeType: string; size: number; sha256: string }> }>(
+    "GET", "storage/public", { allow: [404] },
+  );
+  const files: NonNullable<StoreManifest["publicFiles"]> = {};
+  await mapLimit(listing?.files ?? [], CONCURRENCY, async ({ path, mimeType, size, sha256 }) => {
+    if (hiddenPath(path)) return;
+    const previous = ctx.manifest.publicFiles?.[path];
+    const file = ctx.store.publicPath(path);
+    if (ctx.media && (!previous?.downloaded || previous.sha256 !== sha256)) {
+      const response = await ctx.api.bytes(`storage/public/${encodeStoragePath(path)}`);
+      if (!response || response.bytes.length !== size || sha256Hex(response.bytes) !== sha256)
+        throw new CliError("content_changed", `Public asset '${path}' changed during the pull. Run the pull again.`, { exitCode: EXIT.conflict });
+      ctx.store.putObject(response.bytes);
+      ctx.store.writeBytes(file, response.bytes);
+    }
+    files[path] = { kind: "file", definition: null, mimeType, size, sha256, fingerprint: sha256, downloaded: ctx.media };
+    if (previous?.sha256 !== sha256) ctx.counts.files++;
+  });
+  for (const name of Object.keys(ctx.manifest.publicFiles ?? {})) {
+    if (!Object.prototype.hasOwnProperty.call(files, name)) {
+      ctx.store.remove(ctx.store.publicPath(name));
+      ctx.counts.removed++;
+    }
+  }
+  ctx.manifest.publicFiles = files;
 }
 
 // --- Entries --------------------------------------------------------------------
@@ -341,6 +373,7 @@ const ENTRY_VARIANT_PATH = /^collections\/([^/]+)\/entries\/([^/]+)\/variants\//
 
 /** Applies one diff; returns false when only a full pull can apply it. */
 async function applyChanges(ctx: PullContext, changes: DiffChange[]): Promise<{ ok: boolean; reason?: string }> {
+  if (changes.some((change) => change.key.startsWith("public:"))) await pullPublicFiles(ctx);
   if (changes.some((change) => change.kind === "structure")) return { ok: false, reason: "The schema changed." };
   const collections = new Set<string>();
   const entries = new Map<string, { collection: string; id: string; deleted: boolean }>();
@@ -430,7 +463,7 @@ async function settle(ctx: PullContext, from: string | null, notes: string[]): P
 }
 
 export async function pullContent(api: ApiClient, options: PullOptions = {}, cwd: string = process.cwd()): Promise<PullSummary> {
-  const store = new ContentStore(cwd);
+  const store = options.store ?? new ContentStore(cwd);
   const progress = options.onProgress ?? (() => {});
   const release = store.lockPublished();
   try {
@@ -454,6 +487,7 @@ export async function pullContent(api: ApiClient, options: PullOptions = {}, cwd
       existing &&
       sameProject &&
       existing.baseCommit &&
+      existing.publicFiles !== undefined &&
       head &&
       (existing.media === "full") === media;
 
@@ -506,7 +540,7 @@ export async function pullContent(api: ApiClient, options: PullOptions = {}, cwd
     staging.clearPublished();
     staging.writeSchema(schema.raw);
     const ctx: PullContext = { api, store: staging, schema, localization, manifest, media, progress, counts };
-    await pullAllFiles(ctx);
+    await Promise.all([pullAllFiles(ctx), pullPublicFiles(ctx)]);
     for (const collection of schema.collections()) await pullCollection(ctx, collection);
     manifest.baseCommit = await settle(ctx, head, notes);
     manifest.pulledAt = new Date().toISOString();

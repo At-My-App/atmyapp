@@ -47,11 +47,11 @@ export class LocalContent {
       }
       return result;
     }
-    if (ref.kind !== "doc" && ref.kind !== "file") {
+    if (ref.kind !== "doc" && ref.kind !== "file" && ref.kind !== "public") {
       throw new CliError("not_supported_yet", `${label} can't be read from the local copy.`, { exitCode: EXIT.usage });
     }
     const storagePath = ref.kind === "doc" ? this.schema.resolveDocument(ref.name)?.path : ref.name;
-    const record = storagePath ? this.manifest.files[storagePath] : undefined;
+    const record = storagePath ? (ref.kind === "public" ? this.manifest.publicFiles?.[storagePath] : this.manifest.files[storagePath]) : undefined;
     if (!storagePath || !record) {
       throw new CliError("not_found", `${label} is not in the local copy.`, { fix: "Run 'atmyapp content pull'." });
     }
@@ -60,7 +60,7 @@ export class LocalContent {
         fix: "Run 'atmyapp content pull --media', or 'atmyapp assets get' for this file.",
       });
     }
-    const bytes = fs.readFileSync(this.store.filePath(storagePath));
+    const bytes = fs.readFileSync(ref.kind === "public" ? this.store.publicPath(storagePath) : this.store.filePath(storagePath));
     if (!isTextual(record.mimeType, storagePath)) {
       return {
         ref: label, kind: "file", path: storagePath, definition: record.definition,
