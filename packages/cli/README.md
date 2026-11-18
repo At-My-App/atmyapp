@@ -26,7 +26,7 @@ Copy the command from **Settings → CLI keys** in the dashboard:
 npx atmyapp use --url https://api.atmyapp.com/v0/projects/<project-id> --token <cli-key>
 ```
 
-The session is saved to `.ama/session.json`, which is added to `.gitignore`. A CLI key can change your schema: keep it out of your repository and out of browser code.
+The session is saved to `.ama/session.json`, which is added to `.gitignore`. Keep CLI keys out of your repository and out of browser code. **Stage content for review** grants access to named drafts through the staging API. Publishing a draft requires a signed-in project member with permission to publish.
 
 ## Upload your schema
 

@@ -103,9 +103,10 @@ When you create a key, you choose what it's for. A key only works for the comman
 | Read content | `content`, `entries`, `assets get`, `locales status`, the website check in `doctor` |
 | Upload the schema and files | `migrate`, `upload` (also reads the schema) |
 | Download content snapshots | `snapshot` (also reads content and the schema) |
+| Stage content for review | Named draft API |
 | Watch form messages | `submissions tail` |
 
-New keys read the schema and content, upload the schema and download snapshots by default. A key without the scope a command needs fails with exit code `3` and names the scope.
+New keys read the schema and content, stage content for review, upload the schema and download snapshots by default. A key without the scope a command needs fails with exit code `3` and names the scope.
 
 Give remote content commands both **Read content** and **Read the schema**. They use the published schema to resolve content and collection definitions. `assets get` needs only **Read content** when given an explicit file or entry asset reference. `--local` reads use the schema in the local copy and need no key.
 
