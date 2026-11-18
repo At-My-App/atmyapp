@@ -248,19 +248,41 @@ export class ContentStore {
    */
   lockPublished(): () => void {
     fs.mkdirSync(this.root, { recursive: true });
-    const lock = path.join(this.root, ".lock");
+    return this.lock(path.join(this.root, ".lock"), "Another 'atmyapp content pull' is updating the local copy.");
+  }
+
+  lockSpace(space: string): () => void {
+    const directory = this.spaceDir(space);
+    fs.mkdirSync(directory, { recursive: true });
+    return this.lock(path.join(directory, ".lock"), `Space '${space}' is being updated.`);
+  }
+
+  private lock(lock: string, message: string): () => void {
     const take = () => {
       const fd = fs.openSync(lock, "wx");
-      fs.writeSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }));
-      fs.closeSync(fd);
+      try {
+        fs.writeSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }));
+      } finally {
+        fs.closeSync(fd);
+      }
     };
     try {
       take();
     } catch (error: any) {
       if (error?.code !== "EEXIST") throw error;
       const age = Date.now() - fs.statSync(lock).mtimeMs;
-      if (age < 10 * 60_000) {
-        throw new CliError("store_locked", "Another 'atmyapp content pull' is updating the local copy.", {
+      let active = false;
+      try {
+        const { pid } = JSON.parse(fs.readFileSync(lock, "utf8"));
+        if (Number.isSafeInteger(pid) && pid > 0) {
+          process.kill(pid, 0);
+          active = true;
+        }
+      } catch (cause) {
+        active = (cause as NodeJS.ErrnoException).code === "EPERM";
+      }
+      if (active || age < 10 * 60_000) {
+        throw new CliError("store_locked", message, {
           fix: `Wait for it to finish. If none is running, delete ${lock}.`,
         });
       }

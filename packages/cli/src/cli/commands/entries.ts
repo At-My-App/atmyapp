@@ -10,6 +10,7 @@ import { viewValue } from "../../runtime/views";
 import { connect, printValue, runAction, table, withCommonOptions, type CommonOptions } from "../output";
 import { resolveView, VIEW_HELP, viewOption } from "./content";
 import * as fs from "fs";
+import { addEntryDraftCommands } from "./entryDrafts";
 
 interface ListOptions extends CommonOptions {
   limit?: string;
@@ -185,5 +186,5 @@ function getCommand(): Command {
 }
 
 export function entriesCommand(): Command {
-  return new Command("entries").description("Read collection entries").addCommand(lsCommand()).addCommand(getCommand());
+  return addEntryDraftCommands(new Command("entries").description("Read and edit collection entries").addCommand(lsCommand()).addCommand(getCommand()));
 }

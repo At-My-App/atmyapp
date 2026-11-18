@@ -8,6 +8,8 @@ import {
 } from "../utils/canonical-schema";
 import { resolveSession } from "../utils/http";
 import { ensureStoreIgnored } from "../../runtime/store";
+import { writeAgentsGuide } from "../../runtime/agentsGuide";
+import { runAction } from "../output";
 
 interface InitCommandOptions {
   path?: string;
@@ -17,6 +19,9 @@ interface InitCommandOptions {
   token?: string;
   url?: string;
   projectId?: string;
+  agents?: boolean;
+  json?: boolean;
+  dryRun?: boolean;
 }
 
 function supportsClientTemplate(template: CanonicalSchemaTemplateName): boolean {
@@ -94,7 +99,13 @@ export function initCommand(): Command {
     .option("-u, --url <url>", "Project URL override")
     .option("-p, --project-id <id>", "Project identifier override")
     .option("--verbose", "Enable verbose logging", false)
+    .option("--agents", "Write or update the AtMyApp section of AGENTS.md", false)
+    .option("--dry-run", "Show the planned AGENTS.md update", false)
+    .option("--json", "Output the AGENTS.md result as JSON", false)
     .action(async (options: InitCommandOptions) => {
+      if (options.agents) return runAction(options,
+        async () => writeAgentsGuide(process.cwd(), options.dryRun),
+        (result) => console.log(`${result.changed ? result.dryRun ? "Would update" : "Updated" : "Current"} ${result.file}`));
       const logger = new Logger(Boolean(options.verbose));
 
       try {

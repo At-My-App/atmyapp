@@ -11,9 +11,9 @@ import {
   contentMapSchema,
   entryListOutputSchema,
   localeStatusSchema,
-  pullSummarySchema,
   readOutputSchema,
 } from "./content";
+import { contentPullResultSchema, draftOutputSchemas } from "./drafts";
 
 const description = z.object({
   name: z.string(),
@@ -52,7 +52,7 @@ const outputs = new Map<string, z.ZodType>([
   ["schema show", outputEnvelope(schemaShowSchema)],
   ["content ls", outputEnvelope(contentMapSchema)],
   ["content get", outputEnvelope(readOutputSchema)],
-  ["content pull", outputEnvelope(pullSummarySchema)],
+  ["content pull", outputEnvelope(contentPullResultSchema)],
   ["entries ls", outputEnvelope(entryListOutputSchema)],
   ["entries get", outputEnvelope(readOutputSchema)],
   ["assets get", outputEnvelope(assetDownloadSchema)],
@@ -64,6 +64,7 @@ const outputs = new Map<string, z.ZodType>([
   ["migrate-status", z.looseObject({ status: z.string() })],
   ["submissions tail", z.looseObject({ type: z.string(), event: z.looseObject({ seq: z.number() }) })],
 ]);
+for (const [command, schema] of Object.entries(draftOutputSchemas)) outputs.set(command, outputEnvelope(schema));
 
 export function outputSchemaFor(command: string): z.ZodType | undefined {
   return outputs.get(command);

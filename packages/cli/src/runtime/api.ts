@@ -72,6 +72,9 @@ interface ErrorBody {
   scopes?: string[];
   capability?: string;
   minVersion?: string;
+  details?: Record<string, unknown>;
+  data?: unknown;
+  sessions?: unknown[];
 }
 
 function errorFromResponse(status: number, body: ErrorBody | null, path: string): CliError {
@@ -92,6 +95,22 @@ function errorFromResponse(status: number, body: ErrorBody | null, path: string)
   }
   if (status === 400 && code === "invalid_cursor") {
     return new CliError("invalid_cursor", message, { exitCode: EXIT.usage, status });
+  }
+  if (code === "named_session_not_found" || code === "named_session_gone") {
+    return new CliError("session_expired", "The named draft has ended.", {
+      status, exitCode: EXIT.session, fix: "Run 'atmyapp stage push' to start a new draft.",
+    });
+  }
+  if (code === "session_in_review" || code === "session_review_changed") {
+    return new CliError(code, message, { status, exitCode: EXIT.session, fix: "Check 'atmyapp stage status'." });
+  }
+  if (code === "staged-version-conflict" || code === "staged_version_conflict") {
+    return new CliError("staged_version_conflict", message, {
+      status, exitCode: EXIT.conflict, details: body?.details, fix: "Review 'atmyapp stage diff' and pull the draft changes.",
+    });
+  }
+  if (code === "named_session_limit") {
+    return new CliError(code, message, { status, exitCode: EXIT.session, details: { sessions: body?.sessions ?? [] } });
   }
   if (code === "project_key_scope") {
     return new CliError("missing_scope", message, {
@@ -204,7 +223,7 @@ export class ApiClient {
 
   /** Raw bytes, with the storage headers the server sets on reads. */
   async bytes(subPath: string, options: RequestOptions = {}): Promise<BytesResponse | null> {
-    const response = await this.send("GET", this.url(subPath, options.query));
+    const response = await this.send(options.body === undefined ? "GET" : "POST", this.url(subPath, options.query), options.body);
     if (!response.ok) {
       const body = await readJson(response);
       if (options.allow?.includes(response.status)) return null;

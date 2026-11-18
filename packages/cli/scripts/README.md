@@ -30,3 +30,14 @@ node packages/cli/scripts/live-smoke.mjs verify fixture.json /path/to/cli-smoke
 Run prepare first. Publish one edit to changedFile in the test project's dashboard, then run verify using the same scratch directory. The script checks the downloaded assets, the scope behavior, the full local copy, and the single-file incremental pull.
 
 For B4, include a filter object with a where array such as ["price>=20", "price<40"] and an expectedIds array containing the matching entry IDs in newest-first order. Seed at least two matches so the smoke can follow the filter across two pages.
+
+## Named draft smoke
+
+On a test project with a managed preview and an editable document, give the smoke key `schema.read`, `content.read`, and `content.stage`. Set the fixture's `document` and `pointer`, and add a `draftReview` object with `reviewer`, `value`, and `publishedValue`. The reviewer may be a user ID or email. Both values are JSON values for the selected pointer.
+
+```sh
+node packages/cli/scripts/live-smoke.mjs draft-prepare fixture.json /tmp/atmyapp-draft-smoke
+node packages/cli/scripts/live-smoke.mjs draft-verify fixture.json /tmp/atmyapp-draft-smoke
+```
+
+Between commands, open the named draft from the reviewer notification, change the field to `publishedValue`, and publish in the dashboard. The publication receipt is available for seven days.

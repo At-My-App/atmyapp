@@ -185,20 +185,67 @@ async function verify(cwd, fixture, manifestPath, checkpointPath) {
   console.log("Incremental pull and local content parity passed.");
 }
 
+async function prepareDraft(cwd, fixture, checkpoint) {
+  const { reviewer, value, publishedValue } = fixture.draftReview ?? {};
+  assert(reviewer && value !== undefined && publishedValue !== undefined,
+    "Set fixture.draftReview with reviewer, value and expected publishedValue.");
+  const identity = await run(cwd, ["whoami"]);
+  assert(identity.key.effectiveScopes.includes("content.stage"), "The draft smoke key needs content.stage.");
+  await run(cwd, ["content", "pull"]);
+  const space = "draft-smoke-" + Date.now();
+  await run(cwd, ["space", "create", space]);
+  try {
+    await run(cwd, ["content", "set", fixture.document + "#" + fixture.pointer, JSON.stringify(value), "--space", space]);
+    assert.equal((await run(cwd, ["stage", "push", "--space", space, "--dry-run"])).items.length, 1);
+    const push = await run(cwd, ["stage", "push", "--space", space]);
+    assert.equal(push.staged, 1);
+    assert.equal((await run(cwd, ["stage", "diff", "--space", space])).items.length, 1);
+    const preview = await run(cwd, ["stage", "preview", "--space", space, "--wait"]);
+    assert(new URL(preview.url).searchParams.has("amaPreviewKey"), "Expected a managed draft preview.");
+    await run(cwd, ["stage", "review", "--space", space, "--to", reviewer, "--message", "Review the CLI smoke draft"]);
+    await run(cwd, ["stage", "push", "--space", space], { error: "session_in_review", exit: 7 });
+    if (process.env.ATMYAPP_CLI_SMOKE_CONTENT_KEY) {
+      await run(cwd, ["stage", "ls"], { key: process.env.ATMYAPP_CLI_SMOKE_CONTENT_KEY, error: "missing_scope", exit: 3 });
+    }
+    await writeFile(checkpoint, JSON.stringify({ projectId: identity.projectId, space, session: push.session.sessionId }), { mode: 0o600 });
+    console.log("CLI draft is in review. Edit it to the expected publishedValue and publish in the test dashboard, then run draft-verify.");
+  } catch (error) {
+    console.error("Draft smoke stopped in local space " + space + ".");
+    throw error;
+  }
+}
+
+async function verifyDraft(cwd, fixture, checkpoint) {
+  const { projectId, space } = JSON.parse(await readFile(checkpoint, "utf8"));
+  assert.equal((await run(cwd, ["whoami"])).projectId, projectId, "Use the same test project for both phases.");
+  await run(cwd, ["content", "pull"]);
+  const result = await run(cwd, ["content", "get", fixture.document, "--pointer", fixture.pointer, "--local"]);
+  assert.deepEqual(result.value, fixture.draftReview.publishedValue);
+  const status = await run(cwd, ["space", "ls"]);
+  assert.equal(status.spaces.find(({ name }) => name === space)?.removable, true);
+  await run(cwd, ["space", "rm", space]);
+  console.log("Reviewer changes arrived in the published copy and the CLI space was cleared.");
+}
+
 async function main() {
   assert(
-    ["prepare", "verify"].includes(phase) && fixtureFile && workDir,
-    "Usage: node packages/cli/scripts/live-smoke.mjs <prepare|verify> <fixture.json> <scratch-dir>",
+    ["prepare", "verify", "draft-prepare", "draft-verify"].includes(phase) && fixtureFile && workDir,
+    "Usage: node packages/cli/scripts/live-smoke.mjs <prepare|verify|draft-prepare|draft-verify> <fixture.json> <scratch-dir>",
   );
   const fixture = JSON.parse(await readFile(fixtureFile, "utf8"));
+  const cwd = resolve(workDir);
+  await mkdir(cwd, { recursive: true, mode: 0o700 });
+  if (phase.startsWith("draft-")) {
+    assert(typeof fixture.document === "string" && typeof fixture.pointer === "string", "Set fixture.document and fixture.pointer.");
+    const checkpoint = resolve(cwd, "draft-smoke-checkpoint.json");
+    return (phase === "draft-prepare" ? prepareDraft : verifyDraft)(cwd, fixture, checkpoint);
+  }
   for (const name of ["document", "pointer", "largeDocument", "collection", "locale", "changedFile"]) {
     assert(typeof fixture[name] === "string" && fixture[name], "Set fixture." + name);
   }
   for (const kind of ["entry:", "doc:", "file:"]) {
     assert(fixture.assets?.some(({ ref, mimeType }) => ref.startsWith(kind) && mimeType), "Set fixture.assets for " + kind);
   }
-  const cwd = resolve(workDir);
-  await mkdir(cwd, { recursive: true, mode: 0o700 });
   const manifestPath = resolve(cwd, ".ama/content/published/manifest.json");
   const checkpointPath = resolve(cwd, "smoke-checkpoint.json");
   await (phase === "prepare" ? prepare : verify)(cwd, fixture, manifestPath, checkpointPath);

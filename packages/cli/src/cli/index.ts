@@ -16,6 +16,8 @@ import { schemaCommand } from "./commands/schema";
 import { assetsCommand } from "./commands/assets";
 import { localesCommand } from "./commands/locales";
 import { helpCommand } from "./commands/help";
+import { spaceCommand } from "./commands/space";
+import { membersCommand, stageCommand } from "./commands/stage";
 import { CLI_VERSION } from "./output";
 
 const program = new Command()
@@ -32,6 +34,9 @@ program.addCommand(doctorCommand());
 program.addCommand(schemaCommand());
 program.addCommand(contentCommand());
 program.addCommand(entriesCommand());
+program.addCommand(spaceCommand());
+program.addCommand(stageCommand());
+program.addCommand(membersCommand());
 program.addCommand(assetsCommand());
 program.addCommand(localesCommand());
 program.addCommand(migrateCommand());

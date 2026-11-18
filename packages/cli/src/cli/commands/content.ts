@@ -9,6 +9,10 @@ import { canonicalLocale, parseRef } from "../../runtime/refs";
 import { fetchRemoteSchema } from "../../runtime/schema";
 import { viewValue } from "../../runtime/views";
 import { connect, printValue, runAction, table, withCommonOptions, type CommonOptions } from "../output";
+import { addContentDraftCommands } from "./contentDrafts";
+import { draftOptions, workFor, type DraftOptions } from "./draftOptions";
+import { pullSession, reconcilePublishedSpaces } from "../../runtime/sessions";
+import { ContentStore } from "../../runtime/store";
 
 export const VIEW_HELP = [
   "stored    what is saved; the shape writes accept (assets as $asset/__blob references, list items with _key)",
@@ -125,22 +129,42 @@ function lsCommand(): Command {
 }
 
 function pullCommand(): Command {
-  return withCommonOptions(new Command("pull"))
+  return draftOptions(new Command("pull"), { write: true })
     .description("Copy the project's published content to .ama/content/published for offline use and local editing")
     .option("--full", "Read everything again instead of only what changed", false)
     .option("--media", "Download images and files too (default: websites get their published URLs)", false)
+    .option("--session", "Pull saved reviewer edits into the active space", false)
     .addHelpText(
       "after",
       "\nWebsites read the copy with ATMYAPP_CLIENT_MODE=local (drafts in spaces included) or clientMode: \"with-fallback\" (published content only).",
     )
-    .action((options: CommonOptions & { full?: boolean; media?: boolean }) =>
+    .action((options: DraftOptions & { full?: boolean; media?: boolean; session?: boolean }) =>
       runAction(
         options,
         async ({ logger }) => {
           const { api } = connect(options);
-          return pullContent(api, { full: options.full, media: options.media, onProgress: (message) => logger.verbose_log(message) });
+          if (options.session) {
+            if (options.full || options.media) throw new CliError("invalid_options", "Use --session on its own to pull draft edits.", { exitCode: EXIT.usage });
+            return { mode: "session" as const, ...await pullSession(api, workFor(options), options.dryRun) };
+          }
+          if (options.dryRun) return { mode: "dry-run" as const, projectId: api.session.projectId, full: !!options.full, media: !!options.media };
+          const summary = await pullContent(api, { full: options.full, media: options.media, onProgress: (message) => logger.verbose_log(message) });
+          try {
+            await reconcilePublishedSpaces(api, new ContentStore());
+          } catch (error) {
+            summary.notes.push(error instanceof Error ? error.message : "Could not check local spaces.");
+          }
+          return summary;
         },
         (summary) => {
+          if (summary.mode === "session") {
+            console.log(`${summary.dryRun ? "Would pull" : "Pulled"} ${summary.items.length} draft item(s) from ${summary.sessionId}.`);
+            return;
+          }
+          if (summary.mode === "dry-run") {
+            console.log(`Would refresh published content for ${summary.projectId}.`);
+            return;
+          }
           if (summary.mode === "up-to-date") console.log(`The local copy is already current (${summary.baseCommit?.slice(0, 8)}).`);
           else
             console.log(
@@ -155,9 +179,9 @@ function pullCommand(): Command {
 }
 
 export function contentCommand(): Command {
-  return new Command("content")
-    .description("Read the project's content and keep a local copy")
+  return addContentDraftCommands(new Command("content")
+    .description("Read and edit the project's content in a local copy")
     .addCommand(lsCommand())
     .addCommand(getCommand())
-    .addCommand(pullCommand());
+    .addCommand(pullCommand()));
 }
