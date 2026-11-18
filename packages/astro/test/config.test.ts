@@ -42,4 +42,13 @@ describe("Astro configuration", () => {
       "ATMYAPP_API_KEY",
     );
   });
+  it("switches to the local copy with ATMYAPP_CLIENT_MODE and needs no keys there", () => {
+    const local = resolveClientOptions({ ATMYAPP_CLIENT_MODE: "local", ATMYAPP_SPACE: "spring" }, undefined, true);
+    expect(local).toMatchObject({ clientMode: "local", localStorage: { space: "spring" }, apiKey: "local" });
+    expect(resolveClientOptions({ ...env, ATMYAPP_CLIENT_MODE: "with-fallback" }, undefined, false).clientMode).toBe("with-fallback");
+    expect(resolveClientOptions(env, undefined, false).clientMode).toBeUndefined();
+    expect(() => resolveClientOptions({ ...env, ATMYAPP_CLIENT_MODE: "offline" }, undefined, false)).toThrow(/ATMYAPP_CLIENT_MODE/);
+    // Online still requires the website's keys.
+    expect(() => resolveClientOptions({}, undefined, false)).toThrow(/ATMYAPP_API_KEY/);
+  });
 });

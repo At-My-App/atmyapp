@@ -1,8 +1,8 @@
 import type { AstroIntegration } from "astro";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseEnv } from "node:util";
-import { resolveDevMode, type Environment } from "./config.js";
+import { ENV_KEYS, resolveDevMode, type Environment } from "./config.js";
 export type AtMyAppIntegrationOptions = {
   apiKey?: string;
   baseUrl?: string;
@@ -12,6 +12,7 @@ export default function atmyapp(
   options: AtMyAppIntegrationOptions = {},
 ): AstroIntegration {
   let dynamic = false;
+  let projectRoot = pathToFileURL(`${process.cwd()}/`);
   return {
     name: "@atmyapp/astro",
     hooks: {
@@ -40,19 +41,11 @@ export default function atmyapp(
           }
         }
         Object.assign(env, process.env);
+        projectRoot = config.root;
         dynamic = resolveDevMode(env, command === "dev");
         const defaults = {
           dynamic,
-          env: Object.fromEntries(
-            [
-              "ATMYAPP_API_KEY",
-              "ATMYAPP_BASE_URL",
-              "ATMYAPP_API_URL",
-              "ATMYAPP_PREVIEW_KEY",
-              "ATMYAPP_CODE_COMMIT",
-              "ATMYAPP_BUILD_TIME",
-            ].map((key) => [key, env[key]]),
-          ),
+          env: Object.fromEntries(ENV_KEYS.map((key) => [key, env[key]])),
         };
         if (options.apiKey !== undefined)
           defaults.env.ATMYAPP_API_KEY = options.apiKey;
@@ -96,6 +89,21 @@ export default function atmyapp(
       },
       "astro:route:setup": ({ route }) => {
         if (dynamic) route.prerender = false;
+      },
+      // `atmyapp content pull` and agents editing a space write .ama/content;
+      // reload the page so local mode shows the change.
+      "astro:server:setup": ({ server }) => {
+        const root = fileURLToPath(new URL(".ama/content/", projectRoot));
+        server.watcher.add(root);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const reload = (file: string) => {
+          if (!file.startsWith(root) || file.endsWith(".tmp") || file.endsWith(".lock")) return;
+          clearTimeout(timer);
+          timer = setTimeout(() => server.ws.send({ type: "full-reload" }), 150);
+        };
+        server.watcher.on("add", reload);
+        server.watcher.on("change", reload);
+        server.watcher.on("unlink", reload);
       },
     },
   };

@@ -19,9 +19,12 @@ export function resolveClientOptions(
   options: AstroClientOptions = {},
 ): AtMyAppClientOptions {
   const source = { ...env, ...options.env };
-  const apiKey = options.apiKey ?? source.ATMYAPP_API_KEY;
+  const clientMode = options.clientMode ?? resolveClientModeEnv(source);
+  // Local mode renders the pulled copy (.ama/content) and needs no keys.
+  const local = clientMode === "local";
+  const apiKey = options.apiKey ?? source.ATMYAPP_API_KEY ?? (local ? "local" : undefined);
   const baseUrl =
-    options.baseUrl ?? source.ATMYAPP_BASE_URL ?? source.ATMYAPP_API_URL;
+    options.baseUrl ?? source.ATMYAPP_BASE_URL ?? source.ATMYAPP_API_URL ?? (local ? "http://localhost.invalid" : undefined);
   if (!apiKey?.trim()) throw new Error("AtMyApp: set ATMYAPP_API_KEY.");
   if (!baseUrl?.trim())
     throw new Error(
@@ -48,8 +51,11 @@ export function resolveClientOptions(
           ? requestUrl?.searchParams.get("amaPreviewKey")
           : undefined) ?? source.ATMYAPP_PREVIEW_KEY);
   const { env: _env, ...rest } = options;
+  const space = options.localStorage?.space ?? source.ATMYAPP_SPACE;
   return {
     ...rest,
+    ...(clientMode ? { clientMode } : {}),
+    ...(space ? { localStorage: { ...options.localStorage, space } } : {}),
     apiKey,
     baseUrl: parsed.toString().replace(/\/$/, ""),
     previewKey: previewKey || undefined,
@@ -58,7 +64,21 @@ export function resolveClientOptions(
   };
 }
 
+const CLIENT_MODES = ["online", "with-fallback", "local"] as const;
+
+/** ATMYAPP_CLIENT_MODE=local renders the local content copy (atmyapp content pull). */
+export function resolveClientModeEnv(env: Environment): AtMyAppClientOptions["clientMode"] {
+  const value = env.ATMYAPP_CLIENT_MODE?.trim();
+  if (!value) return undefined;
+  if (!(CLIENT_MODES as readonly string[]).includes(value)) {
+    throw new Error("AtMyApp: ATMYAPP_CLIENT_MODE must be online, with-fallback or local.");
+  }
+  return value as AtMyAppClientOptions["clientMode"];
+}
+
 export const ENV_KEYS = [
+  "ATMYAPP_CLIENT_MODE",
+  "ATMYAPP_SPACE",
   "ATMYAPP_API_KEY",
   "ATMYAPP_BASE_URL",
   "ATMYAPP_API_URL",
