@@ -28,3 +28,5 @@ node packages/cli/scripts/live-smoke.mjs verify fixture.json /path/to/cli-smoke
 ~~~
 
 Run prepare first. Publish one edit to changedFile in the test project's dashboard, then run verify using the same scratch directory. The script checks the downloaded assets, the scope behavior, the full local copy, and the single-file incremental pull.
+
+For B4, include a filter object with a where array such as ["price>=20", "price<40"] and an expectedIds array containing the matching entry IDs in newest-first order. Seed at least two matches so the smoke can follow the filter across two pages.

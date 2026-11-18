@@ -33,7 +33,9 @@ const SCHEMA = defineSchema({
         hero: s.object({ fields: { image: s.image({ optional: true }) } }),
       },
     }),
-    posts: defineCollection({ fields: { title: s.shortText(), cover: s.image({ optional: true }) } }),
+    posts: defineCollection({
+      fields: { title: s.shortText(), cover: s.image({ optional: true }), price: s.number(), active: s.boolean() },
+    }),
   },
 });
 
@@ -333,6 +335,19 @@ describe("documented JSON output", () => {
     expect(outputSchemaFor(name)!.parse(output)).toEqual(output);
     expect(process.exitCode).toBeUndefined();
   });
+
+  it("accepts repeated --where options and sends them to the project API", async () => {
+    const unfiltered = globalThis.fetch;
+    globalThis.fetch = jest.fn(async (input, init) => {
+      const url = new URL(String(input));
+      if (!url.pathname.endsWith("/collections/posts/entries")) return unfiltered(input, init);
+      expect(url.searchParams.get("price.gte")).toBe("20");
+      expect(url.searchParams.get("price.lt")).toBe("40");
+      return json({ entries: [{ id: "e1", data: { price: 25 } }], total: 1, nextAfter: null });
+    });
+    const output = await run(entriesCommand(), ["ls", "posts", "--where", "price>=20", "--where", "price<40", "--json"]);
+    expect(output).toMatchObject({ ok: true, data: { entries: [{ id: "e1" }], nextCursor: null } });
+  });
 });
 
 describe("remote reads", () => {
@@ -368,6 +383,54 @@ describe("remote reads", () => {
       exitCode: EXIT.auth,
       fix: expect.stringContaining("content.read"),
     });
+  });
+
+  it("forwards a keyset cursor with the same filters and stops at the null nextAfter marker", async () => {
+    const project = new FakeProject();
+    const after = Buffer.from(JSON.stringify({ c: "2026-01-01T00:00:00Z", i: "e1/b" })).toString("base64url");
+    const where = ["price>=2", "price>=3", "price<10", "price!=5", "title=001", "title~%_+", "active=true", "id>abc", "id<=zzz"];
+    project.extra.push((url) => {
+      if (!url.pathname.endsWith("/collections/posts/entries")) return undefined;
+      const params = url.searchParams;
+      expect(params.getAll("price.gte")).toEqual(["2", "3"]);
+      expect(params.get("price.lt")).toBe("10");
+      expect(params.get("price.neq")).toBe("5");
+      expect(params.get("title.eq")).toBe('"001"');
+      expect(params.get("title.contains")).toBe("%_+");
+      expect(params.get("active.eq")).toBe("true");
+      expect(params.get("id.gt")).toBe('"abc"');
+      expect(params.get("id.lte")).toBe('"zzz"');
+      if (params.has("after")) {
+        expect(params.get("after")).toBe(after);
+        expect(params.has("offset")).toBe(false);
+        return json({ entries: [{ id: "e2", data: {} }], total: 2, nextAfter: null });
+      }
+      expect(params.get("offset")).toBe("1");
+      return json({ entries: [{ id: "e1/b", data: {} }], total: 2, nextAfter: after });
+    });
+    const api = client(project);
+    const v1 = Buffer.from(JSON.stringify({ v: 1, o: 1, s: "created.desc" })).toString("base64url");
+    const first = await listEntries(api, "posts", { where, cursor: v1 });
+    expect(JSON.parse(Buffer.from(first.nextCursor!, "base64url").toString())).toEqual({ v: 2, k: after, s: "created.desc" });
+    const end = await listEntries(api, "posts", { where, cursor: first.nextCursor! });
+    expect(end).toEqual({ entries: [{ id: "e2", data: {} }], total: 2, nextCursor: null });
+    await expect(listEntries(api, "posts", { cursor: first.nextCursor!, order: "created.asc" })).rejects.toMatchObject({ code: "invalid_cursor" });
+  });
+
+  it("fails clearly if an older server ignores a requested filter", async () => {
+    await expect(listEntries(client(new FakeProject()), "posts", { where: ["price>=2"] }))
+      .rejects.toMatchObject({ code: "filters_unsupported" });
+  });
+
+  it.each([
+    ["typo=2", "unknown_filter_field"],
+    ["price>=invalid", "invalid_filter"],
+    ["cover~jpg", "invalid_filter"],
+    ["price", "invalid_filter"],
+  ])("rejects an invalid filter %s before listing entries", async (term, code) => {
+    const project = new FakeProject();
+    await expect(listEntries(client(project), "posts", { where: [term] })).rejects.toMatchObject({ code, exitCode: EXIT.usage });
+    expect(project.calls.some((call) => call.includes("collections/posts/entries"))).toBe(false);
   });
 });
 

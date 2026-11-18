@@ -129,6 +129,18 @@ async function prepare(cwd, fixture, manifestPath, checkpointPath) {
   assert.equal(new Set(ids).size, ids.length, "Entry pages overlap.");
   const entry = await run(cwd, ["entries", "get", fixture.collection, first.entries[0].id, "--view", "delivered"]);
   assert.equal(entry.kind, "entry");
+  if (fixture.filter) {
+    const { where, expectedIds } = fixture.filter;
+    assert(Array.isArray(where) && where.length > 0 && expectedIds.length >= 2, "Set fixture.filter with at least two matching entries.");
+    const args = ["entries", "ls", fixture.collection, "--limit", "1", ...where.flatMap((term) => ["--where", term])];
+    const filtered = await run(cwd, args);
+    assert.equal(filtered.total, expectedIds.length);
+    assert(filtered.nextCursor);
+    const cursor = JSON.parse(Buffer.from(filtered.nextCursor, "base64url").toString());
+    assert.equal(cursor.v, 2);
+    const continued = await run(cwd, [...args, "--cursor", filtered.nextCursor]);
+    assert.deepEqual([...filtered.entries, ...continued.entries].map(({ id }) => id), expectedIds.slice(0, 2));
+  }
 
   for (const [index, { ref, mimeType }] of fixture.assets.entries()) {
     const filename = "asset-" + index;

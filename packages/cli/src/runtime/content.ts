@@ -3,7 +3,8 @@ import { encodeStoragePath } from "./api";
 import { CliError, EXIT } from "./errors";
 import { contentFingerprint, sha256Hex } from "./fingerprint";
 import { formatRef, type ContentRef } from "./refs";
-import type { RemoteSchema } from "./schema";
+import { fetchRemoteSchema, type RemoteSchema } from "./schema";
+import { entryFilterQuery } from "./entryFilters";
 import type { ContentMap, ContentView, EntryPage, Localization, LocaleStatusRow, RawEntry, ReadResult } from "./schemas/content";
 import type { StoredVariant } from "./store";
 
@@ -235,20 +236,28 @@ export async function readEntry(
   };
 }
 
-/**
- * Cursors are opaque so they can move to keyset pagination later without a
- * CLI change (AgenticCliPlan.md B4); today they carry the offset.
- */
-function encodeCursor(offset: number, order: string): string {
-  return Buffer.from(JSON.stringify({ o: offset, s: order }), "utf8").toString("base64url");
+type EntryOrder = "created.asc" | "created.desc";
+type EntryPagePosition = { offset: number } | { after: string };
+
+function encodeCursor(payload: { o: number; s: EntryOrder } | { v: 2; k: string; s: EntryOrder }): string {
+  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
-function decodeCursor(cursor: string, order: string): number {
-  try {
-    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
-    if (typeof parsed?.o === "number" && parsed.o >= 0 && parsed.s === order) return parsed.o;
-  } catch {
-    // fall through
+function decodeCursor(cursor: string, order: EntryOrder): EntryPagePosition {
+  if (/^[A-Za-z0-9_-]{1,16384}$/.test(cursor)) {
+    try {
+      const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+      if (parsed?.s === order) {
+        if (parsed.v === 2 && typeof parsed.k === "string" && /^[A-Za-z0-9_-]{1,8192}$/.test(parsed.k)) {
+          return { after: parsed.k };
+        }
+        if ((parsed.v === undefined || parsed.v === 1) && Number.isSafeInteger(parsed.o) && parsed.o >= 0) {
+          return { offset: parsed.o };
+        }
+      }
+    } catch {
+      // The error below applies to malformed cursors and mismatched orders.
+    }
   }
   throw new CliError("invalid_cursor", "This cursor is not valid for this listing.", {
     exitCode: EXIT.usage,
@@ -256,30 +265,57 @@ function decodeCursor(cursor: string, order: string): number {
   });
 }
 
+export interface ListEntriesOptions {
+  limit?: number;
+  cursor?: string;
+  order?: EntryOrder;
+  view?: ContentView;
+  locale?: string | null;
+  where?: readonly string[];
+  schema?: RemoteSchema;
+}
+
 export async function listEntries(
   api: ApiClient,
   collection: string,
-  options: { limit?: number; cursor?: string; order?: "created.asc" | "created.desc"; view?: ContentView; locale?: string | null } = {},
+  options: ListEntriesOptions = {},
 ): Promise<EntryPage> {
   const order = options.order ?? "created.desc";
   const limit = Math.max(1, Math.min(options.limit ?? 20, 50));
-  const offset = options.cursor ? decodeCursor(options.cursor, order) : 0;
+  const position = options.cursor ? decodeCursor(options.cursor, order) : { offset: 0 };
   const view = options.view ?? "stored";
   if (view === "overlay") {
     throw new CliError("view_unsupported", "Lists support the stored, delivered and effective views.", { exitCode: EXIT.usage });
   }
-  const page = await api.json<{ entries?: RawEntry[]; total?: number }>(
+  const where = options.where?.length
+    ? entryFilterQuery(options.where, (options.schema ?? await fetchRemoteSchema(api)).collection(collection).fields)
+    : undefined;
+  const page = await api.json<{ entries?: RawEntry[]; total?: number; nextAfter?: string | null }>(
     "GET",
     `collections/${encodeURIComponent(collection)}/entries`,
-    { query: { ...entryQuery(view, options.locale ?? null), limit, offset, order } },
+    { query: { ...entryQuery(view, options.locale ?? null), ...where, ...position, limit, order } },
   );
   const entries = page?.entries ?? [];
   const total = page?.total ?? entries.length;
-  const nextOffset = offset + entries.length;
+  if (page?.nextAfter !== undefined) {
+    return {
+      entries,
+      total,
+      nextCursor: page.nextAfter ? encodeCursor({ v: 2, k: page.nextAfter, s: order }) : null,
+    };
+  }
+  if (where || "after" in position) {
+    throw new CliError(
+      where ? "filters_unsupported" : "cursor_unsupported",
+      where ? "This AtMyApp server does not support --where." : "This AtMyApp server no longer accepts this cursor.",
+      { fix: where ? "Use a server with collection filters enabled." : "Run the same listing again without --cursor." },
+    );
+  }
+  const nextOffset = position.offset + entries.length;
   return {
     entries,
     total,
-    nextCursor: entries.length > 0 && nextOffset < total ? encodeCursor(nextOffset, order) : null,
+    nextCursor: entries.length > 0 && nextOffset < total ? encodeCursor({ o: nextOffset, s: order }) : null,
   };
 }
 

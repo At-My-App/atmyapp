@@ -16,6 +16,7 @@ interface ListOptions extends CommonOptions {
   cursor?: string;
   order?: "created.asc" | "created.desc";
   fields?: string;
+  where?: string[];
   locale?: string;
   view?: string;
   local?: boolean;
@@ -40,10 +41,16 @@ function lsCommand(): Command {
     .option("--cursor <cursor>", "Continue from a previous page's nextCursor")
     .addOption(new Option("--order <order>", "Sort by creation time").choices(["created.asc", "created.desc"]).default("created.desc"))
     .option("--fields <names>", "Only these top-level fields, comma-separated")
+    .option(
+      "--where <expression>",
+      "Filter a top-level field (repeatable), e.g. 'price>=20'",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
     .option("--locale <locale>", "Translated values")
     .addOption(viewOption())
     .option("--local", "List from the local copy (.ama/content)", false)
-    .addHelpText("after", `\nViews:\n${VIEW_HELP}\n\nFilters (--where) are not available yet; page with --cursor.`)
+    .addHelpText("after", `\nViews:\n${VIEW_HELP}\n\natmyapp entries ls products --where 'price>=20' --where 'title~linen'`)
     .action((collection: string, options: ListOptions) =>
       runAction(
         options,
@@ -55,6 +62,9 @@ function lsCommand(): Command {
           const fields = parseFields(options.fields);
           const requestedLocale = options.locale ? canonicalLocale(options.locale) : undefined;
           if (options.local) {
+            if (options.where?.length) {
+              throw new CliError("invalid_filter", "--where requires a remote collection.", { exitCode: EXIT.usage });
+            }
             const local = new LocalContent();
             local.schema.collection(collection);
             const locale = checkLocale(requestedLocale, local.manifest.localization);
@@ -86,7 +96,9 @@ function lsCommand(): Command {
           schema.collection(collection);
           const locale = checkLocale(requestedLocale, localization);
           const view: ContentView = resolveView(options.view, locale);
-          const page = await listEntries(api, collection, { limit, cursor: options.cursor, order: options.order, view, locale });
+          const page = await listEntries(api, collection, {
+            limit, cursor: options.cursor, order: options.order, view, locale, where: options.where, schema,
+          });
           return {
             collection,
             view,

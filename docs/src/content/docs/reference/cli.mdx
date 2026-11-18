@@ -211,7 +211,17 @@ npx atmyapp entries ls posts --cursor <nextCursor>
 npx atmyapp entries get posts 8f2a --locale de
 ```
 
-`entries ls` returns up to 50 entries per page, newest first (`--order created.asc` for oldest first), with a `nextCursor` for the next page. `--fields` keeps only the named fields. Both commands take `--locale`, `--view` and `--local` like `content get`. Filtering by field values isn't available yet.
+`entries ls` returns up to 50 entries per page, newest first. Use `--order created.asc` for oldest first. If `nextCursor` is present, pass it as `--cursor` with the same collection, order and filters. Entries with the same creation time are ordered by ID. `--fields` keeps only the named fields. Both commands take `--locale`, `--view` and `--local` like `content get`.
+
+Use `--where` to filter a remote collection on its published source fields.
+
+```sh
+npx atmyapp entries ls products --where 'price>=20' --where 'price<100' --where 'title~linen' --json
+```
+
+All conditions must match. Quote each condition so the shell passes operators such as `>` unchanged. Use `=` and `!=` for equality, `<`, `<=`, `>` and `>=` for ranges, or `~` for case-sensitive text containment. Filters accept top-level scalar fields and the system columns `id`, `created` and `updated`. `--locale` controls the returned values after filtering. `--local` supports listing the offline copy without filters.
+
+Older servers use offset paging for unfiltered listings and return `filters_unsupported` when asked to filter.
 
 ## `atmyapp assets get`
 

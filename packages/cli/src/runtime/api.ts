@@ -2,7 +2,8 @@ import { buildCliAuthVerifyUrl } from "./auth";
 import { CliError, EXIT } from "./errors";
 import type { CliSession } from "./session";
 
-export type QueryValue = string | number | boolean | null | undefined;
+type QueryScalar = string | number | boolean;
+export type QueryValue = QueryScalar | readonly QueryScalar[] | null | undefined;
 
 export interface RequestOptions {
   query?: Record<string, QueryValue>;
@@ -48,7 +49,9 @@ export function projectApiUrl(
     .join("/")}`;
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value === undefined || value === null) continue;
-    parsed.searchParams.append(key, String(value));
+    for (const item of Array.isArray(value) ? value : [value]) {
+      parsed.searchParams.append(key, String(item));
+    }
   }
   return parsed.toString();
 }
@@ -86,6 +89,9 @@ function errorFromResponse(status: number, body: ErrorBody | null, path: string)
         fix: "npm install --save-dev @atmyapp/cli@latest",
       },
     );
+  }
+  if (status === 400 && code === "invalid_cursor") {
+    return new CliError("invalid_cursor", message, { exitCode: EXIT.usage, status });
   }
   if (code === "project_key_scope") {
     return new CliError("missing_scope", message, {
