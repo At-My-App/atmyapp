@@ -47,6 +47,7 @@ Run your website with `ATMYAPP_CLIENT_MODE=local` to see the active space. A rev
 | Command | Purpose |
 | --- | --- |
 | `space create/use/ls/rm/gc` | Manage local spaces and unused stored objects |
+| `content edit/rm/set/patch` | Edit a local document, file or entry |
 | `content status/diff/grep/validate` | Inspect and validate a space |
 | `entries create/update/delete/move` | Change collection entries in a space |
 | `stage push/status/ls/diff` | Upload changes and inspect named drafts |
@@ -132,5 +133,8 @@ Run `atmyapp content refresh doc:home` to pull and merge against your saved base
 | `files put media/menu.pdf menu.pdf` | Stage a regular storage file |
 | `files put public:logo.svg logo.svg` | Stage a project public asset |
 | `content rm public:logo.svg` | Stage removal of a project public asset |
+| `locales export --locale de --space --status outdated -o de.json` | Export segments from the space |
+| `locales import de.json` | Import translations that still match their sources |
+| `content edit doc:home --locale de` and `content save doc:home@de` | Edit and save the merged translation |
 
 `stage push` sends related content and attachments together, using 8 MiB parts for large named uploads. A pending push retains its operation ID and captured bytes. Rerun with `stage push --operation-id <id>` after an interruption. `content pull --media` also downloads public assets and gives the merge a local copy of remote binary edits.

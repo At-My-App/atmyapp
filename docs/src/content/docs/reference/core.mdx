@@ -191,3 +191,6 @@ Core re-exports everything from [`@atmyapp/structure`](/reference/structure/): `
 | `CollectionsListOptions`, `CollectionsFilterExpr` | Collection query options |
 | `SubmissionResult`, `SubmissionTypeStatus`, `SubmissionCaptcha` | Form results and settings |
 | `InferSubmission<"contact", typeof schema>` | The values a form accepts (from `@atmyapp/structure`) |
+
+
+Local mode applies the selected space's saved translations to the source using the schema's array identities. After editing a merged translation with the CLI, use `atmyapp content save` to make it visible in the local SDK.

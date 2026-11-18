@@ -407,8 +407,10 @@ Asks the project to generate placeholder content for a storage path, based on th
 `@atmyapp/cli` also exports `compileCanonicalSource`, `generateCanonicalOutput` and `runCanonicalMigrate` for build tools. Most projects only need the binary.
 
 
-## Merging and attachments
+## Merging, attachments, and translations
 
 Use `content refresh [ref]` to compare the space with the latest pull and merge independent changes. Object arrays use stable item identities. A conflict includes the base, space, and published values at its pointer. Use `content resolve <ref> --take ours|theirs [--pointer <pointer>]` to resolve it. A conflict returns exit 5. `content refresh --dry-run` compares against the last local pull without replacing the published snapshot.
 
 Use `assets put <ref#pointer> <file> [--alt <text>]` for a document or entry asset. Point at one gallery item, for example `entry:posts/article#/gallery/0`. Use `files put <path> <file>` for a stored file or `files put public:<path> <file>` for a public asset. Values up to 1 MiB are sent inline. Larger uploads use resumable intents, up to 50 MiB per file. Use `stage conflicts` to inspect the linked draft against the published head.
+
+Export language segments, import translations checked against their source, or use `content edit --locale` and `content save` to edit a merged view. See the [translation workflow](/guides/translations/).

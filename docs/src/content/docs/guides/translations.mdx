@@ -1,0 +1,40 @@
+---
+title: Translating website content
+description: Edit translations locally and send them for review.
+---
+
+Pull your project's content, then select a space for the translation.
+
+```sh
+atmyapp content pull
+atmyapp space create german-copy
+atmyapp space use german-copy
+atmyapp locales export doc:home --locale de --space --status missing,incomplete,outdated -o de.json
+```
+
+Add a `translation` value to each segment you want to update. Keep the segment's reference, pointer, and source hash. The pointer identifies an array item by its schema identity, so a reordered gallery or list still targets the right item. Import compares each source hash with the source in the selected space and reports stale segments. Export those segments again from the updated source before translating them.
+
+```sh
+atmyapp locales import de.json --dry-run
+atmyapp locales import de.json
+atmyapp stage status
+```
+
+To edit the whole translation, open the merged copy and save it after editing the returned JSON file.
+
+```sh
+atmyapp content edit doc:home --locale de
+atmyapp content save doc:home@de
+```
+
+Change only translatable fields. Keep array identities, source-only fields, and the source's item order. To remove a translated override, set the field to its current source value. The save checks that the source and saved translation still match the copy you opened.
+
+Run the website with `ATMYAPP_CLIENT_MODE=local` and the selected space to see the translation. Push the saved edits, open the named preview, and request review.
+
+```sh
+atmyapp stage push
+atmyapp stage preview --wait
+atmyapp stage review --to editor@example.com --message "Review German homepage copy"
+```
+
+Editing a source field can make an existing translation outdated. `stage status` and `stage push` list the affected languages. Run `locales export --locale de --space --status outdated` to find the affected segments in the space.
