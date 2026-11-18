@@ -44,7 +44,7 @@ function buildStore(root: string) {
   write(path.join(published, "locales", "f", "home.json", "de.json"), { mode: "overlay", status: "current", sourceHashes: {}, data: { title: "Hallo" } });
   write(path.join(published, "collections", "posts", "e1", "entry.json"), { id: "e1", data: { title: "First", cover: { __blob: "b1" } }, createdAt: "2026-01-01" });
   write(path.join(published, "collections", "posts", "e1", "locales", "de.json"), { mode: "overlay", status: "current", sourceHashes: {}, data: { title: "Erster" } });
-  write(path.join(published, "collections", "posts", "e2", "entry.json"), { id: "e2", data: { title: "Second" }, createdAt: "2026-01-02" });
+  write(path.join(published, "collections", "posts", "e2", "entry.json"), { id: "e2", data: { title: "Second", cover: "b1" }, createdAt: "2026-01-02" });
 
   const space = path.join(root, "spring");
   write(path.join(space, "space.json"), { version: 1, deletions: ["entry:posts:e2"] });
@@ -76,7 +76,7 @@ describe("local content store (format 2)", () => {
     expect(store.readJson("home.json", { locale: "de" })).toMatchObject({ title: "Hallo" });
     expect(store.listCollection("posts", { locale: "de" }).map((entry) => entry.data)).toEqual([
       { title: "Erster", cover: { url: "https://cdn/b1.png", blobId: "b1" } },
-      { title: "Second" },
+      { title: "Second", cover: { url: "https://cdn/b1.png", blobId: "b1" } },
     ]);
     expect(store.staticUrl("logo.png")).toBe("https://edge.test/static/p1/logo?hash=1");
   });

@@ -153,6 +153,7 @@ export class LocalStore {
 
   /** Stored asset references → what websites receive; `$file` → a local file URL. */
   private deliver(value: unknown, baseDir: string): unknown {
+    if (typeof value === "string") return this.manifest.assets[`__blob:${value}`] ?? value;
     if (Array.isArray(value)) return value.map((item) => this.deliver(item, baseDir));
     if (!value || typeof value !== "object") return value;
     const record = value as Record<string, unknown>;
