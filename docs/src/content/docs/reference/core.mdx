@@ -153,13 +153,26 @@ Each returns `{ defaultLocale, locales }`. A locale's status is `missing`, `inco
 
 ## Offline snapshots
 
-`clientMode: "with-fallback"` reads from a local snapshot when the API is slow or unreachable, and `"local"` reads only from the snapshot. Download one with [`atmyapp snapshot download`](/reference/cli/#atmyapp-snapshot); it's stored in `.ama/local` by default.
+The client can read a local copy of the project's content instead of the API:
+
+| `clientMode` | Reads |
+| --- | --- |
+| `"online"` (default) | The API |
+| `"with-fallback"` | The API, and the published local copy when the API is slow or unreachable |
+| `"local"` | Only the local copy, including the drafts in the active space |
+
+Make the copy with [`atmyapp content pull`](/reference/cli/#atmyapp-content-pull). It's stored in `.ama/content`, includes translations, and gives your code the same shapes as the API: images arrive as `{ url, alt }`, from their published URLs unless you pulled with `--media`.
+
+Set `ATMYAPP_CLIENT_MODE=local` to switch a dev server to the local copy without changing code; the variable overrides `clientMode`. With `@atmyapp/astro`, local mode needs no API key, and the dev server reloads when the copy changes.
+
+**Spaces.** Drafts live in a space, `.ama/content/<space>/`, which holds only the documents and entries it changes. Local mode shows the space named by `ATMYAPP_SPACE`, then `localStorage.space`, then `.ama/content/.current`, then `default`, over the published copy. `with-fallback` never shows drafts, so a live site can't serve unpublished content.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `localStorage.path` | `.ama/local` | Snapshot folder, relative to the working directory (Node only) |
+| `localStorage.path` | `.ama/content`, then `.ama/local` | Local content folder, relative to the working directory (Node only). `.ama/local` holds older snapshots from `atmyapp snapshot download`. |
+| `localStorage.space` | see above | Space whose drafts local mode shows |
 | `localStorage.timeoutMs` | `5000` | How long to wait for the API before falling back |
-| `localDataSource` | — | Your own reader (`readFile`, `readJson`, `listCollection`, optional `getStaticUrl`), for browsers or custom storage |
+| `localDataSource` | — | Your own reader (`readFile`, `readJson`, `listCollection`, optional `getStaticUrl`), for browsers or custom storage. Each method also receives `{ locale, publishedOnly }`. |
 
 Never use fallback to hide a failing preview: an editor would see stale content.
 
