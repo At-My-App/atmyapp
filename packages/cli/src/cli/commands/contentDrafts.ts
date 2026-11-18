@@ -1,4 +1,5 @@
 import { Command, Option } from "commander";
+import { editTranslation } from "../../runtime/locales";
 import { mergeSpace } from "../../runtime/refresh";
 import { pullContent } from "../../runtime/pull";
 import { ContentStore } from "../../runtime/store";
@@ -61,14 +62,25 @@ export function addContentDraftCommands(command: Command) {
       draftOptions(new Command("edit"), { write: true })
         .description("Copy published content into the active space for editing")
         .argument("<ref>")
-        .addHelpText("after", "\nExample: atmyapp content edit doc:home")
-        .action((ref: string, options: DraftOptions) =>
+        .option("--locale <locale>", "Open a merged translation for editing")
+        .addHelpText("after", "\nExamples:\n  atmyapp content edit doc:home\n  atmyapp content edit doc:home --locale de")
+        .action((ref: string, options: DraftOptions & { locale?: string }) =>
           runAction(
             options,
-            async () => editLocalContent({ work: workFor(options), ref, dryRun: options.dryRun }),
+            async () => options.locale || parseRef(ref).locale
+              ? editTranslation(workFor(options), ref, options)
+              : editLocalContent({ work: workFor(options), ref, dryRun: options.dryRun }),
             renderEdit,
           ),
         ),
+    )
+    .addCommand(
+      draftOptions(new Command("save"), { write: true })
+        .description("Save a merged translation to the active space")
+        .argument("<ref>").option("--locale <locale>", "Language of the saved edit")
+        .addHelpText("after", "\nExample: atmyapp content save doc:home@de")
+        .action((ref: string, options: DraftOptions & { locale?: string }) =>
+          runAction(options, () => editTranslation(workFor(options), ref, { ...options, save: true }), renderEdit)),
     )
     .addCommand(
       draftOptions(new Command("rm"), { write: true })
@@ -186,12 +198,10 @@ export function addContentDraftCommands(command: Command) {
               } catch {
                 value = raw;
               }
-              return editLocalContent({
-                work: workFor(options),
-                ref,
-                dryRun: options.dryRun,
-                edit: (previous) => setJsonValue(previous, pointer, value),
-              });
+              const work = workFor(options);
+              const edit = (previous: unknown) => setJsonValue(previous, pointer, value);
+              return parseRef(ref).locale ? editTranslation(work, ref, { ...options, apply: edit })
+                : editLocalContent({ work, ref, dryRun: options.dryRun, edit });
             },
             renderEdit,
           ),
@@ -208,12 +218,10 @@ export function addContentDraftCommands(command: Command) {
             options,
             async () => {
               const patch = jsonInput(options.jsonPatch.startsWith("@") ? options.jsonPatch : "@" + options.jsonPatch);
-              return editLocalContent({
-                work: workFor(options),
-                ref,
-                dryRun: options.dryRun,
-                edit: (previous) => applyJsonPatch(previous, patch),
-              });
+              const work = workFor(options);
+              const edit = (previous: unknown) => applyJsonPatch(previous, patch);
+              return parseRef(ref).locale ? editTranslation(work, ref, { ...options, apply: edit })
+                : editLocalContent({ work, ref, dryRun: options.dryRun, edit });
             },
             renderEdit,
           ),

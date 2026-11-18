@@ -1,4 +1,4 @@
-import { mergeVariantOverlay } from "@atmyapp/structure";
+import { mergeVariantOverlay, type FieldDefinition } from "@atmyapp/structure";
 import * as fs from "fs";
 import { isTextual, type ContentView, type ReadResult } from "./content";
 import { CliError, EXIT } from "./errors";
@@ -93,7 +93,9 @@ export class LocalContent {
     mimeType: string,
   ): ReadResult {
     if (locale && !variant && view === "overlay") throw new CliError("no_translation", `${ref} has no ${locale} translation in the local copy.`);
-    const effective = locale && variant ? applyVariant(stored, variant) : stored;
+    const schema = definition ? this.schema.definition(definition) : undefined;
+    const field: FieldDefinition | undefined = schema && "fields" in schema ? { kind: "object", fields: schema.fields } : undefined;
+    const effective = locale && variant ? applyVariant(stored, variant, field) : stored;
     const value =
       view === "overlay" ? variant!.data : view === "delivered" ? deliver(effective, this.manifest.assets) : effective;
     return {
@@ -119,8 +121,8 @@ export class LocalContent {
   }
 }
 
-export function applyVariant(source: unknown, variant: StoredVariant): unknown {
-  return variant.mode === "replace" ? variant.data : mergeVariantOverlay(source, variant.data);
+export function applyVariant(source: unknown, variant: StoredVariant, field?: FieldDefinition): unknown {
+  return variant.mode === "replace" ? variant.data : mergeVariantOverlay(source, variant.data, field);
 }
 
 /** Replaces stored asset references with what websites receive. */

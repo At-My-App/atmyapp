@@ -1,12 +1,13 @@
 import { maxStagedAssetBytes } from "./assetFiles";
+import { draftTranslationSource, translationSchema } from "./locales";
 import { binaryUpload, materializeAssets } from "./assetDrafts";
 import {
   createItemKey,
   mergeVariantOverlay,
   normalizeContent,
   validate,
-
-
+  validateLocalizedItemIdentities,
+  validateLocalizedOverlayFields,
   type Definition,
   type Placement,
   type ValidationIssue,
@@ -42,12 +43,12 @@ export type StagedOperation =
       replaceData?: boolean;
       moveOnly?: boolean;
       placements?: Record<string, Placement>;
-
+      translationSources?: Record<string, string>;
     } & Coordinates)
   | ({ type: "deleteEntry" } & Coordinates)
   | { type: "putDocument"; path: string; definitionName: string; content: unknown }
   | { type: "deleteDocument"; path: string }
-  | { type: "writeFile"; path: string; locale?: string; value: ValueRef; metadata?: Record<string, unknown> }
+  | { type: "writeFile"; path: string; locale?: string; value: ValueRef; metadata?: Record<string, unknown>; translationSources?: Record<string, string> }
   | { type: "deleteFile"; path: string; locale?: string }
   | { type: "putPublicAsset"; path: string; value: ValueRef; metadata?: Record<string, unknown> }
   | { type: "deletePublicAsset"; path: string }
@@ -198,9 +199,9 @@ export function compileDraft(work: WorkingCopy, items: WorkItem[], cacheUploads 
     let normalized: CompiledItem["normalized"];
     let attachments: CompiledAttachment[] = [];
     if (definition && !item.deleted && !Buffer.isBuffer(value)) {
-      const source = ref.locale ? work.publishedValue({ ...ref, locale: undefined }) : undefined;
+      const source = ref.locale ? draftTranslationSource(work, ref) : undefined;
       const variant = ref.locale ? work.variant(ref) : undefined;
-      const effective = ref.locale && variant?.mode !== "replace" ? mergeVariantOverlay(source, value) : value;
+      const effective = ref.locale && variant?.mode !== "replace" ? mergeVariantOverlay(source, value, translationSchema(definition)) : value;
       const result = normalizeContent(effective, definition, {
         base: item.base.fingerprint ? work.publishedValue(ref, true) : undefined,
         resourceIdentity: ref.kind === "entry" ? `entry:${ref.name}:${ref.entryId}` : `document:${ref.name}`,
@@ -217,13 +218,19 @@ export function compileDraft(work: WorkingCopy, items: WorkItem[], cacheUploads 
       attachments = transformed.uploads;
       if (!ref.locale && attachments.length) value = transformed.content;
       const validation = validate(transformed.content, definition, "draft", work.schema.compiled.configs);
-      for (const issue of [...result.issues, ...validation.issues]) {
+      for (const issue of [...result.issues, ...validation.issues, ...(ref.locale ? [
+        ...validateLocalizedItemIdentities(value, definition, source),
+        ...validateLocalizedOverlayFields(value, definition),
+      ] : [])]) {
         const next = forItem(ref, issue);
         if (!issues.some((prior) => prior.ref === next.ref && prior.pointer === next.pointer && prior.code === next.code))
           issues.push(next);
       }
     }
     const { operation, upload } = operationFor(work, item, fileDefinition?.name, value, work.mime(ref), cacheUploads);
+    if (ref.locale && (operation.type === "upsertEntry" || operation.type === "writeFile")) {
+      operation.translationSources = work.variant(ref)?.sourceHashes ?? {};
+    }
     const base = item.base.fingerprint;
     const binary = ref.kind === "public" || !ref.locale && ref.kind === "file" && item.base.sha256 === base;
     const expectedBase: CompiledOperation["expectedBase"] = base

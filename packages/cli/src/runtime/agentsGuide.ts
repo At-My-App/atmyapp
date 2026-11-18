@@ -14,7 +14,7 @@ const guide = `${start}
 5. Get a hosted link with \`atmyapp stage preview\`. Find a reviewer with \`atmyapp members ls --can content.edit\` and ask for review with \`atmyapp stage review --to <email-or-user-id> --message "Please review"\`. A project publisher publishes in the dashboard.
 6. Pull reviewer edits with \`atmyapp content pull --session\` while the draft is active. Use \`atmyapp content pull\` after publication.
 
-Use \`content refresh\` to merge published edits, then \`content resolve\` for any reported conflicts. Attach a local file with \`assets put doc:home#/hero cover.jpg\`.
+Use \`content refresh\` to merge published edits, then \`content resolve\` for any reported conflicts. Attach a local file with \`assets put doc:home#/hero cover.jpg\`. Use \`locales export\` and \`locales import\` to translate source-checked segments, or open a merged view with \`content edit --locale\` and save it with \`content save\`.
 
 Use the stored view for editing, the delivered view to inspect SDK payloads, and the overlay or effective view for translations. CLI commands support \`--json\`. Exit codes are 0 success, 1 error, 2 usage, 3 auth/scope, 4 validation, 5 conflict, 6 confirmation, and 7 draft state.
 

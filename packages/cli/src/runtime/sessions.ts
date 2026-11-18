@@ -40,6 +40,7 @@ const stageItemSchema = z.object({
     entryId: z.string().optional(),
     locale: z.string().optional(),
   }),
+  operation: z.object({ translationSources: z.record(z.string(), z.string()).optional() }).optional(),
   desired: z.object({
     type: z.enum(["upsert", "delete"]),
     data: z.unknown().optional(),
@@ -728,6 +729,10 @@ export async function pullSession(api: ApiClient, work: WorkingCopy, dryRun = fa
         } else {
           space.deletions = space.deletions.filter((deleted) => deleted !== key);
           sha256 = work.writeValue(ref, value);
+          if (ref.locale && item.operation?.translationSources) {
+            const variant = work.variant(ref)!;
+            sha256 = work.store.writeJson(work.filename(ref), { ...variant, sourceHashes: item.operation.translationSources }, false);
+          }
         }
         entry.staged = { itemRevision: item.itemRevision, sha256, at: new Date().toISOString() };
       }

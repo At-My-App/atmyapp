@@ -41,3 +41,8 @@ node packages/cli/scripts/live-smoke.mjs draft-verify fixture.json /tmp/atmyapp-
 ```
 
 Between commands, open the named draft from the reviewer notification, change the field to `publishedValue`, and publish in the dashboard. The publication receipt is available for seven days.
+
+
+## C3 and C4 authoring smoke
+
+After the backend and CLI are available on staging, run `node packages/cli/scripts/live-smoke.mjs authoring <fixture.json> <scratch-dir>` with the staging project key. Set `fixture.authoring` with `binary` (a 20 MiB image relative to the fixture), `documentAssetRef`, `galleryAssetRef`, `locale`, `translationRef`, `pointer`, and the intended `translation` text. The script stages the assets and translation in a named draft and checks that it has a managed preview. Use that space to inspect the gallery and translation on the staging website, then discard the draft.

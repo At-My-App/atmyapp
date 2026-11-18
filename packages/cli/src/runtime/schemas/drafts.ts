@@ -1,3 +1,4 @@
+import { segmentSchema } from "../locales";
 import { z } from "zod";
 import { draftDiffSchema, memberSchema, namedSessionSchema, previewSchema, stageConflictSchema } from "../sessions";
 import { workStates } from "../workingCopy";
@@ -31,6 +32,7 @@ export const pushResultSchema = z.object({
   batches: z.int(),
   issues: z.array(issue),
   warnings: z.array(warning),
+  outdatedTranslations: z.array(z.object({ ref, locales: z.array(z.string()) })).optional(),
 });
 export type PushResult = z.infer<typeof pushResultSchema>;
 
@@ -40,11 +42,15 @@ export const contentPullResultSchema = z.union([
   z.object({ mode: z.literal("dry-run"), projectId: z.string(), full: z.boolean(), media: z.boolean() }),
 ]);
 
+const outdated = z.array(z.object({ ref, locales: z.array(z.string()) }));
 const merge = z.object({ dryRun, space: z.string(), updated: z.array(ref), conflicts: z.array(z.object({
   ref, pointer: z.string(), base: z.unknown(), ours: z.unknown(), theirs: z.unknown(),
 })) });
 
 export const draftOutputSchemas = {
+  "content save": edit,
+  "locales export": z.object({ locale: z.string(), segments: z.array(segmentSchema), output: z.string().optional(), dryRun }),
+  "locales import": z.object({ locale: z.string(), count: z.int(), outdated: z.array(z.object({ ref, pointer: z.string() })), dryRun }),
   "content refresh": merge,
   "content resolve": merge,
   "assets put": edit,
@@ -90,6 +96,7 @@ export const draftOutputSchemas = {
     link: link.nullable(),
     operationId: z.string().optional(),
     items: z.array(item),
+    outdatedTranslations: outdated,
   }),
   "stage ls": z.object({ sessions: z.array(namedSessionSchema) }),
   "stage diff": draftDiffSchema,

@@ -1,3 +1,4 @@
+import { outdatedTranslations } from "../../runtime/locales";
 import { Command, Option } from "commander";
 import {
   discardStage,
@@ -16,6 +17,11 @@ import {
 import { draftSchemaWarnings } from "../../runtime/compile";
 import { connect, printValue, runAction, table } from "../output";
 import { confirm, draftOptions, maybeConnect, workFor, type DraftOptions } from "./draftOptions";
+
+function printOutdated(items: Array<{ ref: string; locales: string[] }>) {
+  for (const item of items)
+    console.error(`${item.ref} outdates ${item.locales.join(", ")}. Run 'atmyapp locales export --space --status outdated' with --locale.`);
+}
 
 export function stageCommand() {
   return new Command("stage")
@@ -39,6 +45,7 @@ export function stageCommand() {
             async () => {
               const work = workFor(options);
               const warnings = draftSchemaWarnings(work, process.cwd());
+              const outdated = outdatedTranslations(work);
               const result = await push(work, options.dryRun ? undefined : connect(options).api, {
                 refs,
                 dryRun: options.dryRun,
@@ -46,7 +53,7 @@ export function stageCommand() {
                 ttlSeconds: options.ttl === undefined ? undefined : parseTtl(options.ttl),
                 onOperation: (id) => console.error(`Operation ${id}`),
               });
-              return { ...result, warnings };
+              return { ...result, warnings, outdatedTranslations: outdated };
             },
             (result) => {
               console.log(
@@ -54,6 +61,7 @@ export function stageCommand() {
               );
               if ("session" in result && result.session) console.log(`Draft ${result.session.sessionId}`);
               for (const warning of result.warnings) console.error(warning.message);
+              printOutdated(result.outdatedTranslations);
               for (const issue of result.issues) console.log(`${issue.ref}${issue.pointer}: ${issue.message}`);
             },
           ),
@@ -66,7 +74,10 @@ export function stageCommand() {
         .action((options: DraftOptions) =>
           runAction(
             options,
-            async () => stageStatus(workFor(options), maybeConnect(options)),
+            async () => {
+              const work = workFor(options);
+              return { ...await stageStatus(work, maybeConnect(options)), outdatedTranslations: outdatedTranslations(work) };
+            },
             (result) => {
               console.log(
                 result.session
@@ -76,6 +87,7 @@ export function stageCommand() {
                     : "No named draft is linked.",
               );
               console.log(table(result.items, ["ref", "state"]));
+              printOutdated(result.outdatedTranslations);
             },
           ),
         ),

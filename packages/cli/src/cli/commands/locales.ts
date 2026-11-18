@@ -1,3 +1,9 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { exportSegments, importSegments, parseStatuses } from "../../runtime/locales";
+import { listNamedSessions } from "../../runtime/sessions";
+import { draftOptions, workFor, type DraftOptions } from "./draftOptions";
+import { jsonInput } from "./entryDrafts";
 import chalk from "chalk";
 import type { LocaleStatus } from "../../runtime/schemas/content";
 import { Command } from "commander";
@@ -52,15 +58,25 @@ export function localesCommand(): Command {
         options,
         async (): Promise<LocaleStatus> => {
           const { api } = connect(options);
-          const [schema, localization] = await Promise.all([fetchRemoteSchema(api), readLocalization(api)]);
+          const [schema, localization, drafts] = await Promise.all([
+            fetchRemoteSchema(api), readLocalization(api),
+            listNamedSessions(api).catch((error: unknown) => {
+              if (error instanceof CliError && [403, 404].includes(error.status ?? 0)) return [];
+              throw error;
+            }),
+          ]);
+          const blocking = drafts.filter((draft) => draft.status === "active");
+          const notes = blocking.length ? [
+            "Finish these named drafts before enabling more languages: " + blocking.map((draft) => draft.name).join(", "),
+          ] : [];
           if (!localization || !schema.localizationEnabled) {
             throw new CliError("no_localization", "This project has no languages set up.", {
               exitCode: EXIT.usage,
+              details: notes.length ? { notes } : undefined,
               fix: "Enable localization in the schema, then add languages in Settings → Localization.",
             });
           }
           const locale = checkLocale(options.locale ? canonicalLocale(options.locale) : undefined, localization);
-          const notes: string[] = [];
           let rows: LocaleStatusRow[];
           if (!input) rows = await allRows(api, schema, locale, notes);
           else {
@@ -89,5 +105,36 @@ export function localesCommand(): Command {
         },
       ),
     );
-  return new Command("locales").description("Translations").addCommand(status);
+  return new Command("locales").description("Translations").addCommand(status)
+    .addCommand(draftOptions(new Command("export"), { write: true, space: false })
+      .description("Export source text, current translations and source hashes")
+      .argument("[refs...]").requiredOption("--locale <locale>", "Language to translate")
+      .option("--space [name]", "Read source edits and translations from the selected space")
+      .option("--status <statuses>", "Only these segment statuses, comma separated")
+      .option("-o, --output <file>", "Write a segment file")
+      .addHelpText("after", "\nExample: atmyapp locales export doc:home --locale de --space --status outdated -o de.json")
+      .action((refs: string[], options: Omit<DraftOptions, "space"> & { locale: string; space?: string | true; status?: string; output?: string }) =>
+        runAction(options, async () => {
+          const work = workFor({ ...options, space: typeof options.space === "string" ? options.space : undefined });
+          const result = exportSegments(work, { ...options, refs, statuses: parseStatuses(options.status), space: !!options.space });
+          const output = options.output && resolve(options.output);
+          if (output && existsSync(output))
+            throw new CliError("output_exists", "Use a different output filename.", { exitCode: EXIT.usage });
+          if (output && !options.dryRun) work.store.writeJson(output, result, false);
+          return { ...result, output, dryRun: !!options.dryRun };
+        }, (result) => {
+          if (result.output) console.log(`${result.dryRun ? "Would export" : "Exported"} ${result.segments.length} segments to ${result.output}.`);
+          else console.log(JSON.stringify({ locale: result.locale, segments: result.segments }, null, 2));
+        })))
+    .addCommand(draftOptions(new Command("import"), { write: true })
+      .description("Apply translated segments that still match their source text")
+      .argument("<file>").option("--locale <locale>", "Language of an input file without locale metadata")
+      .addHelpText("after", "\nExample: atmyapp locales import de.json --dry-run")
+      .action((filename: string, options: DraftOptions & { locale?: string }) =>
+        runAction(options, () => importSegments(workFor(options), jsonInput(filename.startsWith("@") ? filename : "@" + filename), options),
+          (result) => {
+            console.log(`${result.dryRun ? "Would save" : "Saved"} ${result.count} translation(s).`);
+            for (const outdated of result.outdated) console.log(`Outdated ${outdated.ref}#${outdated.pointer}`);
+          })));
+
 }

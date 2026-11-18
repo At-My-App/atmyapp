@@ -227,14 +227,45 @@ async function verifyDraft(cwd, fixture, checkpoint) {
   console.log("Reviewer changes arrived in the published copy and the CLI space was cleared.");
 }
 
+async function checkAuthoring(cwd, fixture, fixturePath) {
+  const spec = fixture.authoring;
+  assert(spec && spec.documentAssetRef && spec.galleryAssetRef && spec.binary && spec.locale && spec.translationRef && spec.pointer,
+    "Set fixture.authoring with the binary, asset references, locale and translation field.");
+  const binary = resolve(fixturePath, "..", spec.binary);
+  assert.equal((await stat(binary)).size, 20 * 1024 * 1024, "Use a 20 MiB image for the multipart smoke.");
+  assert.equal(typeof spec.translation, "string", "Set fixture.authoring.translation.");
+  await run(cwd, ["content", "pull", "--media"]);
+  const space = "authoring-" + Date.now();
+  await run(cwd, ["space", "create", space]);
+  await run(cwd, ["assets", "put", spec.documentAssetRef, binary, "--space", space]);
+  await run(cwd, ["assets", "put", spec.galleryAssetRef, binary, "--space", space]);
+  const exported = await run(cwd, ["locales", "export", spec.translationRef, "--locale", spec.locale, "--space", space]);
+  const segment = exported.segments.find((item) => item.pointer === spec.pointer);
+  assert(segment, "The translation fixture did not export the requested segment.");
+  const translations = resolve(cwd, space + "-translations.json");
+  await writeFile(translations, JSON.stringify({ locale: spec.locale, segments: [{ ...segment, translation: spec.translation }] }), { mode: 0o600 });
+  const imported = await run(cwd, ["locales", "import", translations, "--space", space]);
+  assert.equal(imported.count, 1);
+  assert.equal(imported.outdated.length, 0);
+  const plan = await run(cwd, ["stage", "push", "--dry-run", "--space", space]);
+  assert(plan.items.length >= 3, "Expected both asset items and a translation.");
+  const result = await run(cwd, ["stage", "push", "--space", space]);
+  assert(result.operationId && result.session.sessionId, "The staged changes need a named session.");
+  assert.equal((await run(cwd, ["stage", "conflicts", "--space", space])).problems.length, 0);
+  const preview = await run(cwd, ["stage", "preview", "--wait", "--space", space]);
+  assert(new URL(preview.url).searchParams.has("amaPreviewKey"));
+  console.log("Preview is ready in local space " + space + ". Check the gallery and translation, then discard the test draft.");
+}
+
 async function main() {
   assert(
-    ["prepare", "verify", "draft-prepare", "draft-verify"].includes(phase) && fixtureFile && workDir,
-    "Usage: node packages/cli/scripts/live-smoke.mjs <prepare|verify|draft-prepare|draft-verify> <fixture.json> <scratch-dir>",
+    ["prepare", "verify", "draft-prepare", "draft-verify", "authoring"].includes(phase) && fixtureFile && workDir,
+    "Usage: node packages/cli/scripts/live-smoke.mjs <prepare|verify|draft-prepare|draft-verify|authoring> <fixture.json> <scratch-dir>",
   );
   const fixture = JSON.parse(await readFile(fixtureFile, "utf8"));
   const cwd = resolve(workDir);
   await mkdir(cwd, { recursive: true, mode: 0o700 });
+  if (phase === "authoring") return checkAuthoring(cwd, fixture, resolve(fixtureFile));
   if (phase.startsWith("draft-")) {
     assert(typeof fixture.document === "string" && typeof fixture.pointer === "string", "Set fixture.document and fixture.pointer.");
     const checkpoint = resolve(cwd, "draft-smoke-checkpoint.json");
