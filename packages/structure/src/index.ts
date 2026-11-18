@@ -21,3 +21,5 @@ export * from "./valueValidation";
 export * from "./normalization";
 export * from "./localizedIdentities";
 export * from "./variantMerge";
+export * from "./localizedOverlay";
+export * from "./variantSourceHashes";

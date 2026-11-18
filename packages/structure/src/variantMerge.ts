@@ -3,8 +3,6 @@
  * Array items are matched by identity (`_key`, a declared identityField, or a
  * unique key the source also has), never by position.
  *
- * Copied unchanged from ama-shared `domain/variantMerge.ts`, which the server
- * uses; AgenticCliPlan.md C4 makes this the single copy.
  */
 import type { FieldDefinition } from "./types";
 function isPlainObject(value: unknown): value is Record<string, any> {
