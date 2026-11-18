@@ -86,6 +86,8 @@ npx atmyapp content get doc:home --json
 
 With `--json`, a command prints one `{ "ok": true, "data": … }` or `{ "ok": false, "error": { "code", "message", "fix" } }` document on stdout and logs on stderr. Exit codes say what went wrong (`3` auth or scope, `4` validation, `5` conflict, `6` needs confirmation); `atmyapp help --json` describes every command. Without a terminal, commands never wait for input; plans that change stored content need `--yes`. Review them first.
 
+Use `atmyapp help content get --json` to get the output JSON Schema for a command.
+
 ## License
 
 ISC

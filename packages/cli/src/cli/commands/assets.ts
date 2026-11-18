@@ -6,6 +6,7 @@ import { readEntry, readEntryBlob } from "../../runtime/content";
 import { CliError, EXIT } from "../../runtime/errors";
 import { parseRef, resolvePointer } from "../../runtime/refs";
 import { fetchRemoteSchema } from "../../runtime/schema";
+import type { AssetDownload } from "../../runtime/schemas/commands";
 import { connect, runAction, withCommonOptions, type CommonOptions } from "../output";
 
 /**
@@ -23,7 +24,7 @@ export function assetsCommand(): Command {
     .action((input: string, options: CommonOptions & { output: string; force?: boolean }) =>
       runAction(
         options,
-        async () => {
+        async (): Promise<AssetDownload> => {
           const ref = parseRef(input);
           const output = path.resolve(options.output);
           if (fs.existsSync(output) && !options.force) {
@@ -54,7 +55,9 @@ export function assetsCommand(): Command {
             }
             const found = resolvePointer(stored, ref.pointer);
             const value = found.value as Record<string, unknown> | string | undefined;
-            const blobId = typeof value === "string" ? value : typeof value?.__blob === "string" ? value.__blob : null;
+            const blobId = ref.kind === "entry"
+              ? (typeof value === "string" ? value : typeof value?.__blob === "string" ? value.__blob : null)
+              : null;
             const assetPath = value && typeof value === "object" && typeof value.$asset === "string" ? value.$asset : null;
             if (!found.found || (!blobId && !assetPath)) {
               throw new CliError("not_an_asset", `${ref.pointer} in ${input} is not an image or file. Point at a single asset (for a gallery, add the index: /photos/0).`, {
@@ -62,7 +65,7 @@ export function assetsCommand(): Command {
                 pointer: ref.pointer,
               });
             }
-            if (ref.kind === "entry" && blobId) {
+            if (blobId) {
               const blob = await readEntryBlob(api, ref.name, ref.entryId!, blobId);
               bytes = blob!.bytes;
               mimeType = blob!.contentType;

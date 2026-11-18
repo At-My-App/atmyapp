@@ -9,28 +9,9 @@ import type { ApiClient } from "./api";
 import { CliError, EXIT } from "./errors";
 import { sha256Hex } from "./fingerprint";
 import { escapePointerToken } from "./refs";
+import type { DefinitionSummary, FieldRow } from "./schemas/commands";
 
-/** Content kinds the CLI reads, by definition kind. */
-export type DefinitionSummary = {
-  name: string;
-  kind: Definition["kind"];
-  /** Storage path for documents, files and system configs. */
-  path: string | null;
-  description: string | null;
-  /** Fields marked `localize: true` (JSON pointers). */
-  localizedFields: string[];
-};
-
-export interface FieldRow {
-  pointer: string;
-  kind: string;
-  type: string;
-  required: boolean;
-  nullable: boolean;
-  localize: boolean;
-  description: string | null;
-  limits: Record<string, unknown>;
-}
+export type { DefinitionSummary, FieldRow } from "./schemas/commands";
 
 interface StructureResponse {
   found: boolean;

@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import type { LocaleStatus } from "../../runtime/schemas/content";
 import { Command } from "commander";
 import {
   checkLocale,
@@ -49,7 +50,7 @@ export function localesCommand(): Command {
     .action((input: string | undefined, options: CommonOptions & { locale?: string; only?: string }) =>
       runAction(
         options,
-        async () => {
+        async (): Promise<LocaleStatus> => {
           const { api } = connect(options);
           const [schema, localization] = await Promise.all([fetchRemoteSchema(api), readLocalization(api)]);
           if (!localization || !schema.localizationEnabled) {

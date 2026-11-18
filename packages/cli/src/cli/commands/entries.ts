@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import type { EntryListOutput, ReadOutput } from "../../runtime/schemas/content";
 import { Command, Option } from "commander";
 import { checkLocale, listEntries, readEntry, readLocalization, type ContentView } from "../../runtime/content";
 import { CliError, EXIT } from "../../runtime/errors";
@@ -46,7 +47,7 @@ function lsCommand(): Command {
     .action((collection: string, options: ListOptions) =>
       runAction(
         options,
-        async () => {
+        async (): Promise<EntryListOutput> => {
           const limit = Number(options.limit ?? 20);
           if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
             throw new CliError("invalid_limit", "--limit must be a whole number from 1 to 50.", { exitCode: EXIT.usage });
@@ -136,7 +137,7 @@ function getCommand(): Command {
     .action((collection: string, id: string, options: GetOptions) =>
       runAction(
         options,
-        async () => {
+        async (): Promise<ReadOutput> => {
           const requestedLocale = options.locale ? canonicalLocale(options.locale) : undefined;
           const ref = { kind: "entry" as const, name: collection, entryId: id };
           let result;

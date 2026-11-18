@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { Command } from "commander";
+import type { WhoamiResult } from "../../runtime/schemas/commands";
 import { connect, runAction, withCommonOptions, type CommonOptions } from "../output";
 
 interface VerifyResponse {
@@ -15,21 +16,7 @@ interface VerifyResponse {
   stoppedReason?: string | null;
 }
 
-export interface WhoamiResult {
-  projectId: string;
-  url: string;
-  key: {
-    name: string;
-    hint: string | null;
-    id: string | null;
-    createdAt: string | null;
-    scopes: string[];
-    effectiveScopes: string[];
-    stoppedReason: string | null;
-  };
-  /** Where each credential came from: flag, env or session-file. */
-  sources: Record<string, string>;
-}
+export type { WhoamiResult } from "../../runtime/schemas/commands";
 
 export function whoamiCommand(): Command {
   return withCommonOptions(new Command("whoami"))

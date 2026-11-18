@@ -1,8 +1,8 @@
 import { mergeVariantOverlay } from "@atmyapp/structure";
 import * as fs from "fs";
-import type { ContentView, ReadResult } from "./content";
+import { isTextual, type ContentView, type ReadResult } from "./content";
 import { CliError, EXIT } from "./errors";
-import { contentFingerprint } from "./fingerprint";
+import { contentFingerprint, sha256Hex } from "./fingerprint";
 import { formatRef, type ContentRef } from "./refs";
 import { RemoteSchema } from "./schema";
 import { ContentStore, type StoreManifest, type StoredVariant } from "./store";
@@ -37,10 +37,15 @@ export class LocalContent {
     }
     if (ref.kind === "entry") {
       const record = this.manifest.collections[ref.name]?.entries[ref.entryId!];
-      const wrapper = record ? this.readJson<{ data: Record<string, unknown> }>(this.store.entryPath(ref.name, ref.entryId!)) : null;
+      const wrapper = record ? this.readJson<{ data: Record<string, unknown>; createdAt?: string }>(this.store.entryPath(ref.name, ref.entryId!)) : null;
       if (!wrapper) throw new CliError("not_found", `${label} is not in the local copy.`, { fix: "Run 'atmyapp content pull'." });
       const variant = locale ? this.readJson<StoredVariant>(this.store.entryVariantPath(ref.name, ref.entryId!, locale)) : null;
-      return this.result(label, "entry", undefined, ref.name, locale, view, wrapper.data, variant, "application/json");
+      const result = this.result(label, "entry", undefined, ref.name, locale, view, wrapper.data, variant, "application/json");
+      if (view === "delivered" && wrapper.createdAt) {
+        // The public collection response's with-created-at plugin adds this field.
+        result.value = { ...(result.value as Record<string, unknown>), created_at: wrapper.createdAt };
+      }
+      return result;
     }
     if (ref.kind !== "doc" && ref.kind !== "file") {
       throw new CliError("not_supported_yet", `${label} can't be read from the local copy.`, { exitCode: EXIT.usage });
@@ -56,6 +61,14 @@ export class LocalContent {
       });
     }
     const bytes = fs.readFileSync(this.store.filePath(storagePath));
+    if (!isTextual(record.mimeType, storagePath)) {
+      return {
+        ref: label, kind: "file", path: storagePath, definition: record.definition,
+        locale, view, mimeType: record.mimeType, fingerprint: sha256Hex(bytes),
+        commitSha: this.manifest.baseCommit,
+        value: { binary: true, size: bytes.length, mimeType: record.mimeType },
+      };
+    }
     let value: unknown = bytes.toString("utf8");
     if (/json/i.test(record.mimeType) || /\.jsonx?$/i.test(storagePath)) {
       try {
@@ -112,6 +125,7 @@ export function applyVariant(source: unknown, variant: StoredVariant): unknown {
 
 /** Replaces stored asset references with what websites receive. */
 export function deliver(value: unknown, assets: Record<string, DeliveredAsset>): unknown {
+  if (typeof value === "string") return assets[`__blob:${value}`] ?? value;
   const ref = storedAssetRef(value);
   if (ref) return assets[ref] ?? value;
   if (Array.isArray(value)) return value.map((item) => deliver(item, assets));

@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import type { ReadOutput } from "../../runtime/schemas/content";
 import { Command, Option } from "commander";
 import { checkLocale, contentMap, readLocalization, readRef, type ContentView, type ReadResult } from "../../runtime/content";
 import { CliError, EXIT } from "../../runtime/errors";
@@ -51,7 +52,7 @@ function getCommand(): Command {
     .action((input: string, options: GetOptions) =>
       runAction(
         options,
-        async () => {
+        async (): Promise<ReadOutput> => {
           const ref = parseRef(input);
           const requestedLocale = options.locale ? canonicalLocale(options.locale) : ref.locale;
           const pointer = options.pointer ?? ref.pointer;

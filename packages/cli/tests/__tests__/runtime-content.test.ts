@@ -1,6 +1,13 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { assetsCommand } from "../../src/cli/commands/assets";
+import { contentCommand } from "../../src/cli/commands/content";
+import { doctorCommand } from "../../src/cli/commands/doctor";
+import { entriesCommand } from "../../src/cli/commands/entries";
+import { localesCommand } from "../../src/cli/commands/locales";
+import { schemaCommand } from "../../src/cli/commands/schema";
+import { useCommand } from "../../src/cli/commands/use";
 import { defineCollection, defineDocument, defineSchema, s } from "@atmyapp/structure";
 import { ApiClient, projectApiUrl } from "../../src/runtime/api";
 import { listEntries, readRef } from "../../src/runtime/content";
@@ -13,6 +20,8 @@ import { RemoteSchema } from "../../src/runtime/schema";
 import { resolveCredentials } from "../../src/runtime/session";
 import { ContentStore, encodeSegment } from "../../src/runtime/store";
 import { collectAssetMap, outlineOf, viewValue } from "../../src/runtime/views";
+import { outputSchemaFor } from "../../src/runtime/schemas/help";
+import { run } from "../helpers/run-command";
 
 const SCHEMA = defineSchema({
   localization: { enabled: true },
@@ -268,6 +277,64 @@ function client(project: FakeProject) {
   return new ApiClient({ token: "ama_pk_test", url: "https://api.test/v0/projects/p1", projectId: "p1" }, { fetch: project.fetch as typeof fetch });
 }
 
+describe("documented JSON output", () => {
+  const env = { ...process.env };
+  const fetch = globalThis.fetch;
+  const originalCwd = process.cwd();
+  let cwd: string;
+
+  beforeEach(() => {
+    cwd = fs.mkdtempSync(path.join(os.tmpdir(), "ama-json-"));
+    process.chdir(cwd);
+    process.env.ATMYAPP_CLI_URL = "https://api.test/v0/projects/p1";
+    process.env.ATMYAPP_CLI_KEY = "ama_pk_x";
+    process.env.ATMYAPP_PROJECT_ID = "p1";
+    const project = new FakeProject();
+    project.extra.push((url) => {
+      if (url.pathname.endsWith("/auth/verify")) {
+        return json({ success: true, data: { valid: true, keyName: "CI", scopes: ["snapshot"], projectId: "p1" } });
+      }
+      if (url.pathname.endsWith("/integration-check")) return json({ status: "passed", code: "verified" });
+      if (url.pathname.endsWith("/files/menu.pdf")) return bytes("pdf", "application/pdf");
+      if (url.pathname.includes("/storage/locales/") || url.pathname.endsWith("/e1/locales")) {
+        return json({ defaultLocale: "en", locales: [{ locale: "de", status: "current" }] });
+      }
+      return undefined;
+    });
+    globalThis.fetch = project.fetch;
+  });
+  afterEach(() => {
+    process.chdir(originalCwd);
+    fs.rmSync(cwd, { recursive: true, force: true });
+    process.env = { ...env };
+    globalThis.fetch = fetch;
+    process.exitCode = undefined;
+  });
+
+  it.each([
+    ["use", useCommand, []],
+    ["doctor", doctorCommand, []],
+    ["schema show", schemaCommand, ["show"]],
+    ["schema show", schemaCommand, ["show", "--raw"]],
+    ["schema show", schemaCommand, ["show", "coll:posts"]],
+    ["schema show", schemaCommand, ["show", "doc:home", "--for-editing"]],
+    ["content ls", contentCommand, ["ls"]],
+    ["content get", contentCommand, ["get", "doc:home"]],
+    ["content get", contentCommand, ["get", "doc:home#/title"]],
+    ["content get", contentCommand, ["get", "doc:home@de", "--view", "overlay"]],
+    ["content pull", contentCommand, ["pull"]],
+    ["entries ls", entriesCommand, ["ls", "posts"]],
+    ["entries get", entriesCommand, ["get", "posts", "e1"]],
+    ["assets get", assetsCommand, ["get", "file:files/menu.pdf", "-o", "asset.pdf"]],
+    ["locales status", localesCommand, ["status"]],
+  ] as const)("validates %s with the help schema", async (name, command, args) => {
+    const output = await run(command(), [...args, "--json"]);
+    expect(output?.ok).toBe(true);
+    expect(outputSchemaFor(name)!.parse(output)).toEqual(output);
+    expect(process.exitCode).toBeUndefined();
+  });
+});
+
 describe("remote reads", () => {
   it("reads documents in every view and lists entries with opaque cursors", async () => {
     const project = new FakeProject();
@@ -367,6 +434,32 @@ describe("content pull and the local copy", () => {
     const result = await pullContent(api, {}, cwd);
     expect(result.mode).toBe("full");
     expect(result.notes.join(" ")).toMatch(/schema changed/i);
+  });
+
+  it("pulls bare blob IDs from projected entries and reads downloaded binary files", async () => {
+    const project = new FakeProject();
+    project.extra.push((url) => {
+      if (url.pathname.endsWith("/storage/f/files/menu.pdf")) return bytes("pdf", "application/pdf");
+      if (url.pathname.endsWith("/collections/posts/entries")) {
+        const stored = url.searchParams.get("expandBlobs") === "none";
+        return json({ entries: [{
+          id: "e1", created: "2026-01-01T00:00:00Z",
+          data: stored ? { cover: "b-e1" } : { cover: { blobId: "b-e1", url: "https://cdn/e1.png" } },
+        }], total: 1 });
+      }
+      if (url.pathname.endsWith("/blobs/b-e1")) return bytes("image", "image/png");
+      return undefined;
+    });
+    await pullContent(client(project), { media: true }, cwd);
+    const local = new LocalContent(new ContentStore(cwd));
+    expect(local.manifest.collections.posts.entries.e1.blobs).toEqual(["b-e1"]);
+    expect(local.read(parseRef("entry:posts/e1"), "delivered", null).value).toEqual({
+      cover: { blobId: "b-e1", url: "https://cdn/e1.png" },
+      created_at: "2026-01-01T00:00:00Z",
+    });
+    expect(local.read(parseRef("file:files/menu.pdf"), "stored", null).value).toEqual({
+      binary: true, size: 3, mimeType: "application/pdf",
+    });
   });
 
   it("refuses to run while another pull holds the lock", async () => {

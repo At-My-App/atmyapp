@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { CliError, EXIT } from "../../runtime/errors";
 import { parseRef } from "../../runtime/refs";
 import { fetchRemoteSchema, type RemoteSchema } from "../../runtime/schema";
+import type { SchemaShowResult } from "../../runtime/schemas/commands";
 import { connect, printValue, runAction, table, withCommonOptions, type CommonOptions } from "../output";
 
 function definitionName(schema: RemoteSchema, input: string): string {
@@ -32,7 +33,7 @@ export function schemaCommand(): Command {
     .action((input: string | undefined, options: CommonOptions & { forEditing?: boolean; raw?: boolean }) =>
       runAction(
         options,
-        async () => {
+        async (): Promise<SchemaShowResult> => {
           const { api } = connect(options);
           const schema = await fetchRemoteSchema(api);
           if (!input) {
@@ -51,19 +52,19 @@ export function schemaCommand(): Command {
             ...(options.forEditing ? { fields: schema.fieldRows(name) } : { definition }),
           };
         },
-        (result: any) => {
-          if (result.definitions) {
+        (result) => {
+          if ("definitions" in result) {
             console.log(table(result.definitions, ["name", "kind", "path", "description"]));
             if (result.localization) console.log(chalk.gray("\nLocalization is enabled; fields marked localize can be translated."));
             return;
           }
-          if (result.schema) return printValue(result.schema);
+          if ("schema" in result) return printValue(result.schema);
           console.log(`${chalk.bold(result.name)} (${result.kind})${result.path ? `  ${result.path}` : ""}`);
           if (result.description) console.log(chalk.gray(result.description));
-          if (result.fields) {
+          if ("fields" in result) {
             console.log(
               table(
-                result.fields.map((row: any) => ({
+                result.fields.map((row) => ({
                   ...row,
                   required: row.required ? "yes" : "",
                   localize: row.localize ? "yes" : "",

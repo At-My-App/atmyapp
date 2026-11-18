@@ -1,4 +1,7 @@
 import { escapePointerToken, resolvePointer } from "./refs";
+import type { Outline, OutlineRow, ValueView } from "./schemas/content";
+
+export type { Outline, OutlineRow, ValueView } from "./schemas/content";
 
 /**
  * Large-value views (AgenticCliPlan.md §6.1). Values over `FULL_LIMIT`
@@ -9,19 +12,6 @@ import { escapePointerToken, resolvePointer } from "./refs";
 export const FULL_LIMIT = 20_000;
 const OUTLINE_ROWS = 400;
 const LABEL_KEYS = ["name", "title", "label", "heading", "question", "slug", "id", "_key"];
-
-export interface OutlineRow {
-  pointer: string;
-  /** "list of 12", "5 fields", "text, 340 characters", "number", … */
-  summary: string;
-  /** A readable name for list items, from name/title/label/…. */
-  label?: string;
-}
-
-export interface Outline {
-  rows: OutlineRow[];
-  truncated: boolean;
-}
 
 function labelOf(value: unknown): string | undefined {
   if (typeof value === "string") return value.replace(/\s+/g, " ").slice(0, 60) || undefined;
@@ -75,11 +65,6 @@ export function outlineOf(root: unknown, base = ""): Outline {
   visit(root, base, 0);
   return { rows, truncated };
 }
-
-export type ValueView =
-  | { view: "full"; value: unknown }
-  | { view: "part"; pointer: string; value: unknown }
-  | { view: "outline"; pointer: string; size: number; outline: Outline; note: string };
 
 /**
  * The whole value when it is small or `full` is set; otherwise its outline.

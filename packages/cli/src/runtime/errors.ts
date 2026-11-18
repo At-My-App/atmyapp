@@ -1,3 +1,5 @@
+import type { CliErrorDetails } from "./schemas/commands";
+
 /**
  * Exit codes every command uses (AgenticCliPlan.md §3). Agents branch on
  * these, so they never change meaning.
@@ -54,7 +56,7 @@ export class CliError extends Error {
     this.details = options.details;
   }
 
-  toJSON(): Record<string, unknown> {
+  toJSON(): CliErrorDetails {
     return {
       code: this.code,
       message: this.message,

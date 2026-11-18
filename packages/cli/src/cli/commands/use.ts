@@ -1,12 +1,14 @@
 import { Command } from "commander";
 import * as fs from "fs";
 import * as path from "path";
+import { ApiClient } from "../../runtime/api";
+import type { VerifiedCliAuth } from "../../runtime/auth";
 import { CliError, EXIT } from "../../runtime/errors";
 import { CLI_ENV, detectProjectIdFromUrl } from "../../runtime/session";
+import type { UseResult } from "../../runtime/schemas/commands";
 import { ensureStoreIgnored } from "../../runtime/store";
-import { requireTerminal, runAction } from "../output";
+import { CLI_VERSION, requireTerminal, runAction } from "../output";
 import { setConfig } from "../utils/config";
-import { verifyCliAuthentication } from "../utils/http";
 
 interface UseCommandOptions {
   token?: string;
@@ -55,17 +57,20 @@ export function useCommand(): Command {
     .action((options: UseCommandOptions) =>
       runAction(
         options,
-        async ({ logger }) => {
+        async ({ logger }): Promise<UseResult> => {
           const projectUrl = await value(options.url, CLI_ENV.url, "Enter the project URL: ", "--url", "project URL");
           const authToken = await value(options.token, CLI_ENV.token, "Enter the CLI key: ", "--token", "CLI key");
           if (!projectUrl) throw new CliError("missing_url", "Project URL is required.", { exitCode: EXIT.usage });
           if (!authToken) throw new CliError("missing_token", "CLI key is required.", { exitCode: EXIT.usage });
 
           logger.info("Verifying CLI authentication...");
-          let verified: Awaited<ReturnType<typeof verifyCliAuthentication>>;
+          let verified: VerifiedCliAuth & { valid: boolean };
           try {
-            verified = await verifyCliAuthentication({ url: projectUrl, token: authToken });
+            const api = new ApiClient({ url: projectUrl, token: authToken, projectId: "" }, { cliVersion: CLI_VERSION });
+            verified = await api.verifyKey<VerifiedCliAuth & { valid: boolean }>();
+            if (!verified?.valid) throw new Error("CLI authentication failed.");
           } catch (error) {
+            if (error instanceof CliError && error.code === "upgrade_required") throw error;
             throw new CliError("unauthenticated", error instanceof Error ? error.message : String(error), {
               exitCode: EXIT.auth,
               fix: "Copy a current key from Settings → CLI keys.",

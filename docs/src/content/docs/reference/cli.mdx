@@ -42,7 +42,7 @@ With `--json`, a command prints exactly one JSON document on stdout and its logs
 { "ok": false, "error": { "code": "missing_scope", "message": "…", "fix": "Create a CLI key with content.read …" } }
 ```
 
-`atmyapp help --json` describes every command, argument and option. Commands never wait for input without a terminal: they stop and name the option to pass instead. Exit codes:
+`atmyapp help --json` describes every command, argument and option. Each command that writes JSON includes an `outputSchema`. For example, `atmyapp help content get --json` describes the success and error envelopes for content reads. Commands never wait for input without a terminal. Exit codes:
 
 | Code | Meaning |
 | --- | --- |
@@ -100,12 +100,16 @@ When you create a key, you choose what it's for. A key only works for the comman
 | Choice in the dashboard | Commands |
 | --- | --- |
 | Read the schema | `schema show` |
-| Read content | `content`, `entries`, `assets get`, `locales status`, `doctor` |
+| Read content | `content`, `entries`, `assets get`, `locales status`, the website check in `doctor` |
 | Upload the schema and files | `migrate`, `upload` (also reads the schema) |
 | Download content snapshots | `snapshot` (also reads content and the schema) |
 | Watch form messages | `submissions tail` |
 
 New keys read the schema and content, upload the schema and download snapshots by default. A key without the scope a command needs fails with exit code `3` and names the scope.
+
+Give remote content commands both **Read content** and **Read the schema**. They use the published schema to resolve content and collection definitions. `assets get` needs only **Read content** when given an explicit file or entry asset reference. `--local` reads use the schema in the local copy and need no key.
+
+If the server requires a newer CLI, JSON output contains `upgrade_required`, the command exits with `1`, and the error includes the minimum version. Upgrade with `npm install --save-dev @atmyapp/cli@latest`.
 
 The dashboard shows a key once, when you create it. Afterwards only its last characters are listed (`ama_pk_…k3f9`). If you lose a key, create a new one and revoke the old one.
 

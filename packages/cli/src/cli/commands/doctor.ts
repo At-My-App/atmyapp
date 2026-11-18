@@ -4,19 +4,12 @@ import { headCommit } from "../../runtime/pull";
 import { fetchRemoteSchema } from "../../runtime/schema";
 import { ContentStore } from "../../runtime/store";
 import { EXIT, toCliError } from "../../runtime/errors";
+import type { CheckStatus, DoctorCheck, DoctorResult } from "../../runtime/schemas/commands";
 import { Logger } from "../logger";
 import { connect, runAction, withCommonOptions, type CommonOptions } from "../output";
 import { findCanonicalSchemaFile, loadCanonicalSchemaFile } from "../utils/canonical-schema";
 
-export type CheckStatus = "ok" | "warn" | "fail" | "skipped";
-
-export interface DoctorCheck {
-  name: string;
-  status: CheckStatus;
-  message: string;
-  fix?: string;
-  details?: Record<string, unknown>;
-}
+export type { CheckStatus, DoctorCheck, DoctorResult } from "../../runtime/schemas/commands";
 
 interface IntegrationVerification {
   status: "passed" | "failed" | "pending" | "unknown" | "unsupported";
@@ -47,7 +40,7 @@ export function doctorCommand(): Command {
     .action((options: CommonOptions & { website?: boolean }) =>
       runAction(
         options,
-        async () => {
+        async (): Promise<DoctorResult> => {
           const checks: DoctorCheck[] = [];
           const add = (check: DoctorCheck) => checks.push(check);
           let connection: ReturnType<typeof connect>;
@@ -64,6 +57,7 @@ export function doctorCommand(): Command {
             });
           } catch (raw) {
             const error = toCliError(raw);
+            if (error.code === "upgrade_required") throw error;
             add({ name: "connection", status: "fail", message: error.message, fix: error.fix });
             process.exitCode = error.exitCode;
             return { healthy: false, checks };
@@ -77,6 +71,7 @@ export function doctorCommand(): Command {
             add({ name: "remote-schema", status: "ok", message: `The project has a schema with ${remoteNames.length} definitions.` });
           } catch (raw) {
             const error = toCliError(raw);
+            if (error.code === "upgrade_required") throw error;
             add({ name: "remote-schema", status: "fail", message: error.message, fix: error.fix });
           }
 
@@ -121,6 +116,7 @@ export function doctorCommand(): Command {
               });
             } catch (raw) {
               const error = toCliError(raw);
+              if (error.code === "upgrade_required") throw error;
               add({ name: "website", status: "warn", message: `The website check did not run: ${error.message}`, fix: error.fix });
             }
           }

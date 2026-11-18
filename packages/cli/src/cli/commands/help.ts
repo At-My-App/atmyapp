@@ -1,18 +1,15 @@
 import { Command } from "commander";
-import { EXIT } from "../../runtime/errors";
+import { z } from "zod";
+import { CliError, EXIT } from "../../runtime/errors";
+import { outputSchemaFor, type CommandDescription, type HelpResult } from "../../runtime/schemas/help";
 import { printJson } from "../output";
 
-export interface CommandDescription {
-  name: string;
-  path: string;
-  description: string;
-  arguments: Array<{ name: string; required: boolean; variadic: boolean; description: string }>;
-  options: Array<{ flags: string; description: string; default?: unknown; choices?: string[]; required: boolean }>;
-  commands: CommandDescription[];
-}
+export type { CommandDescription } from "../../runtime/schemas/help";
 
-export function describeCommand(command: Command, parents: string[] = []): CommandDescription {
-  const path = [...parents, command.name()];
+export function describeCommand(command: Command): CommandDescription {
+  const path = [command.name()];
+  for (let parent = command.parent; parent; parent = parent.parent) path.unshift(parent.name());
+  const schema = outputSchemaFor(path.slice(1).join(" "));
   return {
     name: command.name(),
     path: path.join(" "),
@@ -32,7 +29,8 @@ export function describeCommand(command: Command, parents: string[] = []): Comma
         ...(option.defaultValue !== undefined ? { default: option.defaultValue } : {}),
         ...(option.argChoices ? { choices: option.argChoices } : {}),
       })),
-    commands: command.commands.filter((child) => child.name() !== "help").map((child) => describeCommand(child, path)),
+    ...(schema ? { outputSchema: z.toJSONSchema(schema) } : {}),
+    commands: command.commands.map(describeCommand),
   };
 }
 
@@ -47,21 +45,21 @@ export function helpCommand(program: Command): Command {
       for (const name of names) {
         const next = target.commands.find((child) => child.name() === name || child.aliases().includes(name));
         if (!next) {
-          console.error(`Unknown command: ${names.join(" ")}`);
-          process.exitCode = EXIT.usage;
+          const error = new CliError("unknown_command", `Unknown command: ${names.join(" ")}`, { exitCode: EXIT.usage });
+          if (options.json) printJson({ ok: false, error: error.toJSON() });
+          else console.error(error.message);
+          process.exitCode = error.exitCode;
           return;
         }
         target = next;
       }
       if (options.json) {
-        printJson({
-          ok: true,
-          data: {
-            ...describeCommand(target, names.length ? [program.name(), ...names.slice(0, -1)] : []),
-            exitCodes: EXIT,
-            output: "With --json, commands print { ok: true, data } or { ok: false, error: { code, message, fix? } } on stdout.",
-          },
-        });
+        const data: HelpResult = {
+          ...describeCommand(target),
+          exitCodes: EXIT,
+          output: "Each outputSchema describes the JSON that command writes, including errors or one record per line for submissions tail.",
+        };
+        printJson({ ok: true, data });
       } else target.outputHelp();
     });
 }

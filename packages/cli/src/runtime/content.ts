@@ -4,6 +4,7 @@ import { CliError, EXIT } from "./errors";
 import { contentFingerprint, sha256Hex } from "./fingerprint";
 import { formatRef, type ContentRef } from "./refs";
 import type { RemoteSchema } from "./schema";
+import type { ContentMap, ContentView, EntryPage, Localization, LocaleStatusRow, RawEntry, ReadResult } from "./schemas/content";
 import type { StoredVariant } from "./store";
 
 /**
@@ -13,43 +14,7 @@ import type { StoredVariant } from "./store";
  *   overlay    a translation's own fields only (locale required)
  *   effective  source with the translation applied (locale required; the default with a locale)
  */
-export type ContentView = "stored" | "delivered" | "overlay" | "effective";
-
-export interface Localization {
-  defaultLocale: string;
-  supportedLocales: string[];
-}
-
-export interface ReadResult {
-  ref: string;
-  kind: "document" | "file" | "entry";
-  /** Storage path for documents and files. */
-  path?: string;
-  definition: string | null;
-  locale: string | null;
-  view: ContentView;
-  mimeType: string;
-  /** Server-compatible fingerprint of the stored (or effective) value. */
-  fingerprint: string;
-  /** Git commit the read model reflected, when the server says. */
-  commitSha: string | null;
-  value: unknown;
-  /** Translation state, for overlay reads. */
-  variant?: { mode: string; status: string; sourceHashes: Record<string, string> };
-}
-
-export interface RawEntry {
-  id: string;
-  data: Record<string, unknown>;
-  created?: string;
-  updated?: string;
-}
-
-export interface EntryPage {
-  entries: RawEntry[];
-  total: number;
-  nextCursor: string | null;
-}
+export type { ContentMap, ContentMapItem, ContentView, EntryPage, Localization, LocaleStatusRow, RawEntry, ReadResult } from "./schemas/content";
 
 const JSON_TYPES = /json|text|markdown|mdx|yaml|xml|javascript/i;
 
@@ -361,28 +326,6 @@ export async function readRef(
 
 // --- Content map (`atmyapp content ls`) ---------------------------------------
 
-export interface ContentMapItem {
-  ref: string;
-  name: string;
-  kind: string;
-  path: string | null;
-  description: string | null;
-  /** Collections only. */
-  entries?: number;
-  localizedFields: string[];
-  /** Website routes where the content appears, from the code analysis. */
-  pages: string[];
-  /** What the code analysis says the content is for. */
-  summary: string | null;
-}
-
-export interface ContentMap {
-  items: ContentMapItem[];
-  localization: Localization | null;
-  /** False when the website code was never analysed, so pages are unknown. */
-  pagesKnown: boolean;
-}
-
 interface PlacementsOverview {
   usage?: Array<{ definition: string; summary?: string | null; pages?: Array<{ route: string }> }>;
 }
@@ -422,14 +365,6 @@ export async function contentMap(api: ApiClient, schema: RemoteSchema): Promise<
 }
 
 // --- Locale status (`atmyapp locales status`) ----------------------------------
-
-export interface LocaleStatusRow {
-  ref: string;
-  locale: string;
-  status: string;
-  missingPathCount?: number;
-  outdatedPathCount?: number;
-}
 
 interface LocaleDiscovery {
   defaultLocale: string | null;

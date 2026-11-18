@@ -26,7 +26,10 @@ import {
   type StoredVariant,
   type VariantRecord,
 } from "./store";
-import { collectAssetMap } from "./views";
+import { collectAssetMap, type DeliveredAsset } from "./views";
+import type { PullSummary } from "./schemas/content";
+
+export type { PullSummary } from "./schemas/content";
 
 /**
  * `atmyapp content pull` (AgenticCliPlan.md §5.4): refreshes the read-only
@@ -39,19 +42,6 @@ export interface PullOptions {
   /** Download images and files too (default: lazy, served from their URL). */
   media?: boolean;
   onProgress?: (message: string) => void;
-}
-
-export interface PullSummary {
-  mode: "full" | "incremental" | "up-to-date";
-  baseCommit: string | null;
-  previousCommit: string | null;
-  files: number;
-  entries: number;
-  translations: number;
-  removed: number;
-  /** Why a full pull was needed, or other things worth knowing. */
-  notes: string[];
-  dir: string;
 }
 
 interface PullContext {
@@ -227,12 +217,13 @@ async function pullAllFiles(ctx: PullContext) {
 
 // --- Entries --------------------------------------------------------------------
 
-function blobIds(value: unknown, into: Set<string> = new Set()): Set<string> {
-  if (Array.isArray(value)) value.forEach((item) => blobIds(item, into));
+function blobIds(value: unknown, assets: Record<string, DeliveredAsset>, into: Set<string> = new Set()): Set<string> {
+  if (typeof value === "string" && Object.prototype.hasOwnProperty.call(assets, `__blob:${value}`)) into.add(value);
+  else if (Array.isArray(value)) value.forEach((item) => blobIds(item, assets, into));
   else if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
     if (typeof record.__blob === "string") into.add(record.__blob);
-    else Object.values(record).forEach((item) => blobIds(item, into));
+    else Object.values(record).forEach((item) => blobIds(item, assets, into));
   }
   return into;
 }
@@ -245,7 +236,8 @@ function collectionTranslatable(ctx: PullContext, collection: string): boolean {
 async function writeEntry(ctx: PullContext, collection: string, stored: RawEntry, delivered: RawEntry | undefined) {
   const wrapper = { id: stored.id, data: stored.data, createdAt: stored.created, updatedAt: stored.updated };
   const sha = ctx.store.writeJson(ctx.store.entryPath(collection, stored.id), wrapper);
-  if (delivered) collectAssetMap(stored.data, delivered.data, ctx.manifest.assets);
+  const assets = delivered ? collectAssetMap(stored.data, delivered.data) : {};
+  Object.assign(ctx.manifest.assets, assets);
   const record: EntryRecord = {
     sha256: sha,
     fingerprint: contentFingerprint("entry", stored.data),
@@ -254,7 +246,7 @@ async function writeEntry(ctx: PullContext, collection: string, stored: RawEntry
   };
   if (ctx.media) {
     const downloaded: string[] = [];
-    for (const blobId of blobIds(stored.data)) {
+    for (const blobId of blobIds(stored.data, assets)) {
       const blob = await readEntryBlob(ctx.api, collection, stored.id, blobId).catch(() => null);
       if (!blob) continue;
       ctx.store.writeBytes(path.join(ctx.store.entryDir(collection, stored.id), `blob_${encodeSegment(blobId)}.${extensionFor(blob.contentType)}`), blob.bytes);

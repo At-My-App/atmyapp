@@ -7,24 +7,9 @@ import { helpCommand } from "../../src/cli/commands/help";
 import { useCommand } from "../../src/cli/commands/use";
 import { whoamiCommand } from "../../src/cli/commands/whoami";
 import { EXIT } from "../../src/runtime/errors";
-
-/** Runs one command and returns its single JSON document from stdout. */
-async function run(command: Command, args: string[]): Promise<any> {
-  let out = "";
-  const write = jest.spyOn(process.stdout, "write").mockImplementation((chunk: any) => {
-    out += String(chunk);
-    return true;
-  });
-  const error = jest.spyOn(console, "error").mockImplementation(() => {});
-  try {
-    command.exitOverride();
-    await command.parseAsync(["node", command.name(), ...args]);
-  } finally {
-    write.mockRestore();
-    error.mockRestore();
-  }
-  return out ? JSON.parse(out) : null;
-}
+import { CLI_VERSION } from "../../src/cli/output";
+import { outputSchemaFor } from "../../src/runtime/schemas/help";
+import { run } from "../helpers/run-command";
 
 describe("--json output and exit codes", () => {
   const env = { ...process.env };
@@ -69,11 +54,29 @@ describe("--json output and exit codes", () => {
       }),
     });
     expect(process.exitCode).toBeUndefined();
+    expect(outputSchemaFor("whoami")!.parse(output)).toEqual(output);
+  });
+
+  it.each(["whoami", "use"])("%s reports the server's minimum CLI version", async (name) => {
+    process.env.ATMYAPP_CLI_URL = "https://api.test/v0/projects/p1";
+    process.env.ATMYAPP_CLI_KEY = "ama_pk_x";
+    globalThis.fetch = jest.fn(async (_input, init) => {
+      expect(new Headers(init?.headers).get("X-AtMyApp-CLI-Version")).toBe(CLI_VERSION);
+      return Response.json({ success: false, code: "cli_upgrade_required", minVersion: "1.2.3" }, { status: 426 });
+    });
+    const output = await run(name === "whoami" ? whoamiCommand() : useCommand(), ["--json"]);
+    expect(outputSchemaFor(name)!.parse(output)).toEqual(output);
+    expect(output).toMatchObject({
+      ok: false,
+      error: { code: "upgrade_required", fix: "npm install --save-dev @atmyapp/cli@latest", status: 426, details: { minVersion: "1.2.3" } },
+    });
+    expect(process.exitCode).toBe(EXIT.error);
   });
 
   it("prints { ok: false, error } with the error's exit code", async () => {
     const output = await run(contentCommand(), ["get", "not-a-ref", "--json"]);
     expect(output).toEqual({ ok: false, error: expect.objectContaining({ code: "invalid_ref", fix: expect.any(String) }) });
+    expect(outputSchemaFor("content get")!.parse(output)).toEqual(output);
     expect(process.exitCode).toBe(EXIT.usage);
   });
 
@@ -110,5 +113,7 @@ describe("--json output and exit codes", () => {
       expect.arrayContaining(["--locale <locale>", "--view <view>", "--pointer <pointer>", "--json", "--local"]),
     );
     expect(output.data.options.find((option: any) => option.flags === "--view <view>").choices).toEqual(["stored", "delivered", "overlay", "effective"]);
+    expect(outputSchemaFor("help")!.parse(output)).toEqual(output);
+    expect(output.data.outputSchema).toMatchObject({ oneOf: expect.any(Array) });
   });
 });

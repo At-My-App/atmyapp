@@ -68,11 +68,25 @@ interface ErrorBody {
   code?: string;
   scopes?: string[];
   capability?: string;
+  minVersion?: string;
 }
 
 function errorFromResponse(status: number, body: ErrorBody | null, path: string): CliError {
   const message = body?.error || `Request failed with status ${status}.`;
   const code = body?.code;
+  if (status === 426 && code === "cli_upgrade_required") {
+    const minVersion = body?.minVersion;
+    return new CliError(
+      "upgrade_required",
+      minVersion ? `This server requires AtMyApp CLI ${minVersion} or newer.` : "This server requires a newer AtMyApp CLI.",
+      {
+        exitCode: EXIT.error,
+        status,
+        details: { minVersion },
+        fix: "npm install --save-dev @atmyapp/cli@latest",
+      },
+    );
+  }
   if (code === "project_key_scope") {
     return new CliError("missing_scope", message, {
       exitCode: EXIT.auth,
