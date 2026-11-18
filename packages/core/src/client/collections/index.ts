@@ -108,7 +108,11 @@ export const createCollectionsClient = <TSchema = unknown>(
     collection: string,
     options?: CollectionsListOptions
   ): Promise<CollectionsResponseRaw<Row>> => {
-    const entries = await listLocalEntriesFromAnySource(collection, clientOptions);
+    const entries = await listLocalEntriesFromAnySource(collection, clientOptions, {
+      locale: options?.locale || clientOptions.locale,
+      // Only local mode shows a space's drafts; with-fallback serves published content.
+      publishedOnly: clientMode !== "local",
+    });
 
     // Apply filter
     let filtered = applyFilter(entries, options?.filter);

@@ -31,6 +31,7 @@ export type {
   SubmissionCaptcha,
   SubmissionCaptchaWidget,
   LocalDataSource,
+  LocalDataSourceContext,
   LocalDataSourceEntry,
   LocalStorageOptions,
   LocaleStatus,

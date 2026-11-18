@@ -270,12 +270,12 @@ export const createStorageClient = (
   const getRaw = async (path: string, options?: StorageGetOptions) => {
     // In local mode, only read from local storage
     if (clientMode === "local") {
-      const localData = await readLocalJsonValue(path, clientOptions);
+      const localData = await readLocalJsonValue(path, clientOptions, { locale: options?.locale || clientOptions.locale });
       if (localData !== null) {
         return { data: localData, error: undefined };
       }
       // Try reading as raw file
-      const rawData = await readLocalFileValue(path, clientOptions);
+      const rawData = await readLocalFileValue(path, clientOptions, { locale: options?.locale || clientOptions.locale });
       if (rawData !== null) {
         return { data: rawData, error: undefined };
       }
@@ -312,11 +312,11 @@ export const createStorageClient = (
 
     // Fallback to local storage
     if (await isAnyLocalDataAvailable(clientOptions)) {
-      const localData = await readLocalJsonValue(path, clientOptions);
+      const localData = await readLocalJsonValue(path, clientOptions, { locale, publishedOnly: true });
       if (localData !== null) {
         return { data: localData, error: undefined };
       }
-      const rawData = await readLocalFileValue(path, clientOptions);
+      const rawData = await readLocalFileValue(path, clientOptions, { locale, publishedOnly: true });
       if (rawData !== null) {
         return { data: rawData, error: undefined };
       }
@@ -636,7 +636,7 @@ export const createStorageClient = (
     // Fallback to local file:// URL
     if (await isAnyLocalDataAvailable(clientOptions)) {
       try {
-        return await getLocalStaticUrl(path, clientOptions);
+        return await getLocalStaticUrl(path, clientOptions, { publishedOnly: true });
       } catch (localError) {
         if (shouldThrowErrors) {
           throw localError;

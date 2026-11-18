@@ -4,6 +4,10 @@ import {
   CollectionsRawEntry,
   LocalDataSourceEntry,
 } from "./clientTypes";
+import { LocalStore, type LocalReadContext } from "./localStore";
+import { loadNodeBuiltin } from "./nodeBuiltins";
+
+export type { LocalReadContext } from "./localStore";
 
 type NodeFs = typeof import("fs");
 type NodePath = typeof import("path");
@@ -71,19 +75,9 @@ function getNodeModules(): { fs: NodeFs; path: NodePath } | null {
     return null;
   }
 
-  try {
-    const nodeRequireFactory = Function("return require") as () => (
-      id: string,
-    ) => unknown;
-    const nodeRequire = nodeRequireFactory();
-    nodeFs = nodeRequire("fs") as NodeFs;
-    nodePath = nodeRequire("path") as NodePath;
-    return { fs: nodeFs, path: nodePath };
-  } catch {
-    nodeFs = null;
-    nodePath = null;
-    return null;
-  }
+  nodeFs = loadNodeBuiltin<NodeFs>("fs");
+  nodePath = loadNodeBuiltin<NodePath>("path");
+  return nodeFs && nodePath ? { fs: nodeFs, path: nodePath } : null;
 }
 
 function getResolvedLocalStoragePath(
@@ -582,6 +576,52 @@ export function toRawEntries(entries: SnapshotEntry[]): CollectionsRawEntry[] {
   }));
 }
 
+// --- The local content store (`atmyapp content pull`, format 2) ---------------
+
+const V2_ROOT = ".ama/content";
+const storeCache = new Map<string, { stamp: string; store: LocalStore | null }>();
+
+/** The v2 store root for these options, when one exists there. */
+function v2Root(options: AtMyAppClientOptions): string | null {
+  const modules = getNodeModules();
+  if (!modules) return null;
+  const candidates = options.localStorage?.path ? [options.localStorage.path] : [V2_ROOT];
+  for (const candidate of candidates) {
+    const root = modules.path.resolve(process.cwd(), candidate);
+    if (modules.fs.existsSync(modules.path.join(root, "published", "manifest.json"))) return root;
+  }
+  return null;
+}
+
+/**
+ * The v2 store, reopened when the manifest or the space changes so a running
+ * dev server sees a new pull. Null when the project uses an older snapshot.
+ */
+export function openLocalStore(options: AtMyAppClientOptions, context: LocalReadContext = {}): LocalStore | null {
+  const root = v2Root(options);
+  if (!root) return null;
+  const modules = getNodeModules()!;
+  const space = context.publishedOnly ? null : options.localStorage?.space ?? null;
+  const stat = (file: string) => {
+    try {
+      return String(modules.fs.statSync(file).mtimeMs);
+    } catch {
+      return "-";
+    }
+  };
+  const key = `${root}\u0000${space ?? ""}\u0000${context.publishedOnly ? 1 : 0}\u0000${process.env.ATMYAPP_SPACE ?? ""}`;
+  const stamp = [
+    stat(modules.path.join(root, "published", "manifest.json")),
+    stat(modules.path.join(root, ".current")),
+    stat(modules.path.join(root, space ?? process.env.ATMYAPP_SPACE ?? "default", "space.json")),
+  ].join("|");
+  const cached = storeCache.get(key);
+  if (cached && cached.stamp === stamp) return cached.store;
+  const store = LocalStore.open({ root, space, publishedOnly: context.publishedOnly });
+  storeCache.set(key, { stamp, store });
+  return store;
+}
+
 export async function isAnyLocalDataAvailable(
   options: AtMyAppClientOptions,
 ): Promise<boolean> {
@@ -589,51 +629,65 @@ export async function isAnyLocalDataAvailable(
     return true;
   }
 
-  return isLocalStorageAvailable(options);
+  return Boolean(v2Root(options)) || isLocalStorageAvailable(options);
 }
 
 export async function readLocalJsonValue(
   filePath: string,
   options: AtMyAppClientOptions,
+  context: LocalReadContext = {},
 ): Promise<unknown | null> {
   if (options.localDataSource) {
-    return options.localDataSource.readJson(filePath);
+    return options.localDataSource.readJson(filePath, context);
   }
 
+  const store = openLocalStore(options, context);
+  if (store) return store.readJson(filePath, context);
   return readLocalFileJson(filePath, options);
 }
 
 export async function readLocalFileValue(
   filePath: string,
   options: AtMyAppClientOptions,
+  context: LocalReadContext = {},
 ): Promise<string | ArrayBuffer | Record<string, unknown> | Buffer | null> {
   if (options.localDataSource) {
-    return options.localDataSource.readFile(filePath);
+    return options.localDataSource.readFile(filePath, context);
   }
 
+  const store = openLocalStore(options, context);
+  if (store) return store.readFile(filePath, context);
   return readLocalFile(filePath, options);
 }
 
 export async function getLocalStaticUrl(
   filePath: string,
   options: AtMyAppClientOptions,
+  context: LocalReadContext = {},
 ): Promise<string> {
   if (options.localDataSource?.getStaticUrl) {
-    const value = await options.localDataSource.getStaticUrl(filePath);
+    const value = await options.localDataSource.getStaticUrl(filePath, context);
     if (value) {
       return value;
     }
   }
 
+  const store = openLocalStore(options, context);
+  if (store) {
+    const url = store.staticUrl(filePath);
+    if (url) return url;
+    throw new Error(`"${filePath}" is not in the local content copy. Run 'atmyapp content pull'.`);
+  }
   return getLocalFileUrl(filePath, options);
 }
 
 export async function listLocalEntriesFromAnySource(
   collectionName: string,
   options: AtMyAppClientOptions,
+  context: LocalReadContext = {},
 ): Promise<SnapshotEntry[]> {
   if (options.localDataSource) {
-    const entries = await options.localDataSource.listCollection(collectionName);
+    const entries = await options.localDataSource.listCollection(collectionName, context);
     return entries.map((entry: LocalDataSourceEntry) => ({
       id: entry.id,
       data: entry.data,
@@ -642,5 +696,7 @@ export async function listLocalEntriesFromAnySource(
     }));
   }
 
+  const store = openLocalStore(options, context);
+  if (store) return store.listCollection(collectionName, context);
   return listLocalEntries(collectionName, options);
 }

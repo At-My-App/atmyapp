@@ -437,8 +437,11 @@ export type ClientErrorPolicy = "quiet-empty" | "throw";
 /**
  * Client mode determines how the client fetches data:
  * - 'online': Always fetch from the API (default)
- * - 'with-fallback': Try API first, fall back to local storage on failure
- * - 'local': Only read from local storage (offline mode)
+ * - 'with-fallback': Try API first, fall back to the published local copy on failure
+ * - 'local': Only read the local copy, including a space's drafts (offline mode)
+ *
+ * The ATMYAPP_CLIENT_MODE environment variable overrides the option, so a dev
+ * server can switch to local content without a code change.
  */
 export type ClientMode = "online" | "with-fallback" | "local";
 
@@ -447,10 +450,17 @@ export type ClientMode = "online" | "with-fallback" | "local";
  */
 export type LocalStorageOptions = {
   /**
-   * Path to the extracted snapshot directory, relative to process.cwd()
-   * @default '.ama/local'
+   * Local content directory, relative to process.cwd(). `atmyapp content pull`
+   * writes `.ama/content`, which is used when present; older snapshots from
+   * `atmyapp snapshot download` live in `.ama/local`.
+   * @default '.ama/content', then '.ama/local'
    */
   path?: string;
+  /**
+   * Space whose drafts local mode shows over the published copy.
+   * @default ATMYAPP_SPACE, then .ama/content/.current, then "default"
+   */
+  space?: string;
   /**
    * Timeout in milliseconds before falling back to local storage (only used in 'with-fallback' mode)
    * @default 5000
@@ -465,13 +475,21 @@ export type LocalDataSourceEntry = {
   updatedAt?: string;
 };
 
+/** What a local read is for: a translation, and whether drafts may be shown. */
+export type LocalDataSourceContext = {
+  locale?: string;
+  /** True in with-fallback mode: return published content only. */
+  publishedOnly?: boolean;
+};
+
 export type LocalDataSource = {
   readFile: (
     path: string,
+    context?: LocalDataSourceContext,
   ) => Promise<string | ArrayBuffer | Record<string, unknown> | null>;
-  readJson: (path: string) => Promise<unknown | null>;
-  listCollection: (name: string) => Promise<LocalDataSourceEntry[]>;
-  getStaticUrl?: (path: string) => Promise<string | null>;
+  readJson: (path: string, context?: LocalDataSourceContext) => Promise<unknown | null>;
+  listCollection: (name: string, context?: LocalDataSourceContext) => Promise<LocalDataSourceEntry[]>;
+  getStaticUrl?: (path: string, context?: LocalDataSourceContext) => Promise<string | null>;
 };
 
 export type AtMyAppClientOptions = {
