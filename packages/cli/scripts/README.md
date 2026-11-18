@@ -46,3 +46,13 @@ Between commands, open the named draft from the reviewer notification, change th
 ## C3 and C4 authoring smoke
 
 After the backend and CLI are available on staging, run `node packages/cli/scripts/live-smoke.mjs authoring <fixture.json> <scratch-dir>` with the staging project key. Set `fixture.authoring` with `binary` (a 20 MiB image relative to the fixture), `documentAssetRef`, `galleryAssetRef`, `locale`, `translationRef`, `pointer`, and the intended `translation` text. The script stages the assets and translation in a named draft and checks that it has a managed preview. Use that space to inspect the gallery and translation on the staging website, then discard the draft.
+
+## C5 publishing, hosting, and browser login smoke
+
+Once rollout resumes, set `ATMYAPP_CLI_SMOKE_HOSTING_KEY` to a staging key with `hosting.read` and run `node packages/cli/scripts/live-smoke.mjs c5 <fixture.json> <scratch-dir>`. The test project needs a deployment. Set `fixture.c5.deploymentId` to target a specific deployment.
+
+Set `fixture.c5.publishSpace` to a scratch space with a prepared named draft. Use a staging key without `content.publish` as `ATMYAPP_CLI_KEY` and set `ATMYAPP_CLI_SMOKE_PUBLISH_KEY` to an explicit publish key. The script checks refusal and runs publication inspection. Set `fixture.c5.publish` to `true` only when the test draft is ready to publish.
+
+Set `fixture.c5.browserLogin` to `true` after authorizing a staging browser login with `keys.manage,content.read`. This checks login identity, key listing and a key creation preview. Confirm real key creation and revocation with a temporary env file. Revoke the browser login from project settings and check that `whoami` refuses the revoked session.
+
+On the dedicated staging deployment, manually run `hosting deploy --deployment <id> --wait` with a `hosting.deploy` credential, follow the release with `hosting logs <releaseId> --follow --json`, and promote the ready test release. Keep the test login and keys in the staging environment.

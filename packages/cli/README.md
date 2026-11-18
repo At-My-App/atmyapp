@@ -26,7 +26,7 @@ Copy the command from **Settings → CLI keys** in the dashboard:
 npx atmyapp use --url https://api.atmyapp.com/v0/projects/<project-id> --token <cli-key>
 ```
 
-The session is saved to `.ama/session.json`, which is added to `.gitignore`. Keep CLI keys out of your repository and out of browser code. **Stage content for review** grants access to the `stage` and `members` commands. Publishing a draft requires a signed-in project member with permission to publish.
+The connection is saved to `.ama/session.json`, which is added to `.gitignore`. Keep CLI keys out of your repository and out of browser code. **Stage content for review** grants access to named drafts and `members`. Publishing from the CLI requires an explicit `content.publish` scope. Use `atmyapp login` to connect with a browser login.
 
 ## Edit and review content
 
@@ -52,11 +52,32 @@ Run your website with `ATMYAPP_CLIENT_MODE=local` to see the active space. A rev
 | `entries create/update/delete/move` | Change collection entries in a space |
 | `stage push/status/ls/diff` | Upload changes and inspect named drafts |
 | `stage preview/review/extend/undo/discard` | Preview and manage a draft |
+| `stage commit -m <message>` | Publish the named draft with `content.publish` |
 | `members ls --can content.edit` | Find people who can review |
 | `content pull --session` | Import saved reviewer edits into the space |
 | `init --agents` | Add the workflow to `AGENTS.md` |
 
 Use `stage push --operation-id <id>` to resume an interrupted push. Exit code `7` indicates a draft state such as review or expiry. After publication, run `content pull` to refresh the published copy and clear staged changes that the pull confirms were published.
+
+## Browser login, hosting and keys
+
+| Command | Purpose |
+| --- | --- |
+| `login [--project <id>] [--scopes <list>]` | Approve a scoped project session in your browser |
+| `logout` | Revoke the login saved on this computer |
+| `hosting status`, `hosting releases ls` | Inspect website deployments, live releases, domains and publication |
+| `hosting deploy [--deployment <id>] [--wait] [--timeout 15m]` | Start a build with the deployment's configured preset |
+| `hosting logs <releaseId> [--follow]` | Read or follow build logs. `--json` emits NDJSON |
+| `hosting promote <releaseId>` | Make a ready release live |
+| `keys ls`, `keys create --name <name> --scopes <list>`, `keys revoke <id>` | Manage project keys with a login granted `keys.manage` |
+
+Login defaults to `schema.read,content.read` and expires after 30 days. The CLI uses your OS keychain when available. The fallback is an owner-only credentials file. Command options override environment variables, then the browser login, then `.ama/session.json`.
+
+Publishing requires an explicit `content.publish` scope. Run `stage commit -m "Update website copy" --dry-run` to inspect the draft. If publication returns warnings, exit `6` asks for a person to review them. With `--accept-warnings` in an interactive terminal, the CLI shows the warnings and asks for confirmation. A successful commit prints its SHA and projection status.
+
+Hosting reads use `hosting.read`. Build logs also require current developer access. Deploying and promoting use `hosting.deploy`, which includes hosting reads. With `--wait`, `build_failed` and `deploy_timeout` both exit `1`. Build failures include the last accessible log lines.
+
+`keys create` saves `ATMYAPP_CLI_KEY` to `.env.local` by default. Use `--env-file` to choose the destination. The command returns the key's hint and file path. `keys ls` displays project key hints and the existing content API key values.
 
 ## Upload your schema
 
@@ -114,7 +135,7 @@ npx atmyapp migrate --yes --json
 npx atmyapp content get doc:home --json
 ```
 
-With `--json`, a command prints one `{ "ok": true, "data": … }` or `{ "ok": false, "error": { "code", "message", "fix" } }` document on stdout and logs on stderr. Exit codes say what went wrong (`3` auth or scope, `4` validation, `5` conflict, `6` needs confirmation); `atmyapp help --json` describes every command. Without a terminal, commands never wait for input; plans that change stored content need `--yes`. Review them first.
+With `--json`, commands print one `{ "ok": true, "data": … }` or `{ "ok": false, "error": { "code", "message", "fix" } }` document on stdout and logs on stderr. `submissions tail` and `hosting logs` stream one JSON record per line. Exit codes include `3` for auth or scope, `4` for validation, `5` for conflict, and `6` for required confirmation. `atmyapp help --json` describes every command.
 
 Use `atmyapp help content get --json` to get the output JSON Schema for a command.
 

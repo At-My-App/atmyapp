@@ -16,6 +16,7 @@ npx atmyapp --help
 | --- | --- |
 | [`create`](#atmyapp-create) | Create a new website from a starter |
 | [`use`](#atmyapp-use) | Connect this folder to a project |
+| [`login`, `logout`](#sign-in-from-a-terminal) | Start or revoke a browser login |
 | [`whoami`](#atmyapp-whoami) | Show the project, the key and what it may do |
 | [`doctor`](#atmyapp-doctor) | Check the connection, schema, website and local copy |
 | [`init`](#atmyapp-init) | Write a starter schema |
@@ -28,14 +29,17 @@ npx atmyapp --help
 | [`migrate`](#atmyapp-migrate) | Plan and apply schema changes |
 | [`migrate-status`](#atmyapp-migrate-status) | Check a migration whose result was lost |
 | [`submissions tail`](#atmyapp-submissions-tail) | Follow form submissions live |
+| [`stage commit`](#publish-a-named-draft) | Publish a named draft |
+| [`hosting`](#website-hosting) | Inspect, build and promote website releases |
+| [`keys`](#manage-keys-from-the-cli) | Manage project keys |
 | [`snapshot`](#atmyapp-snapshot) | Download content for offline fallback |
 | [`upload`](#atmyapp-upload), [`generate`](#atmyapp-generate) | Write files to project storage directly (advanced) |
 
-Commands that talk to the project use, in this order: the `--url`, `--token` and `--project-id` options, the `ATMYAPP_CLI_URL`, `ATMYAPP_CLI_KEY` and `ATMYAPP_PROJECT_ID` environment variables, and the session saved by `atmyapp use`. In CI or an agent's shell, set the two variables and skip `use`. `--verbose` prints detailed logs.
+Commands that talk to the project use the `--url`, `--token` and `--project-id` options first, followed by the `ATMYAPP_CLI_URL`, `ATMYAPP_CLI_KEY` and `ATMYAPP_PROJECT_ID` environment variables, the saved browser login, and the connection saved by `atmyapp use`. In CI or an agent's shell, set the environment variables. `--verbose` prints detailed logs.
 
 ### Output for scripts and agents
 
-With `--json`, a command prints exactly one JSON document on stdout and its logs on stderr:
+With `--json`, command results use the following envelopes. `submissions tail` and `hosting logs` emit one JSON record per line.
 
 ```json
 { "ok": true, "data": { … } }
@@ -105,6 +109,9 @@ When you create a key, you choose what it's for. A key only works for the comman
 | Download content snapshots | `snapshot` (also reads content and the schema) |
 | Stage content for review | `stage`, `members ls`, `content pull --session` |
 | Watch form messages | `submissions tail` |
+| Publish content to the live project (`content.publish`) | `stage commit` |
+| Read hosting status and releases (`hosting.read`) | `hosting status`, `hosting releases ls`, `hosting logs` with current developer access |
+| Deploy and promote website releases (`hosting.deploy`) | `hosting deploy`, `hosting promote` and hosting reads |
 
 New keys read the schema and content, stage content for review, upload the schema and download snapshots by default. A key without the scope a command needs fails with exit code `3` and names the scope.
 
@@ -115,6 +122,29 @@ If the server requires a newer CLI, JSON output contains `upgrade_required`, the
 The dashboard shows a key once, when you create it. Afterwards only its last characters are listed (`ama_pk_…k3f9`). If you lose a key, create a new one and revoke the old one.
 
 A key also stops working when the person who created it loses access to the project or can no longer do what the key is for. **Settings → CLI keys** then shows it as **Stopped** with the reason. Create a new key to replace it, and update the secret in your CI.
+
+### Sign in from a terminal
+
+~~~sh
+npx atmyapp login --project my-site --scopes content.read,content.stage,hosting.read
+npx atmyapp whoami
+npx atmyapp logout
+~~~
+
+Match the code printed in the terminal to the browser page and review the project and scopes before approving. Omit `--project` to choose a project in the browser when the API URL does not already select one. The default scopes are `schema.read,content.read`. Use `--url` to choose a different API and `--no-browser` to open the printed link yourself.
+
+The session is tied to your current access to one project and expires after 30 days. Sign in again to refresh it. Revoke an active session with `logout` or under **Settings → CLI keys → Your CLI logins**. The CLI uses the OS keychain when available and falls back to an owner-only `~/.config/atmyapp/credentials.json` file (or the corresponding `XDG_CONFIG_HOME` path). Precedence is command options, environment variables, browser login, then `.ama/session.json`.
+
+### Manage keys from the CLI
+
+~~~sh
+npx atmyapp login --project my-site --scopes keys.manage,content.read
+npx atmyapp keys create --name "CI content reader" --scopes content.read --env-file .env.local
+npx atmyapp keys ls
+npx atmyapp keys revoke <id>
+~~~
+
+A login needs `keys.manage` and current project developer access. It can create a project key only with scopes included in that login. `keys create` returns the hint and writes the secret as `ATMYAPP_CLI_KEY` in the selected file. `keys ls` returns project key hints and existing content API key values. Pass `--dry-run` to preview a create or revoke request.
 
 ## Local spaces and review
 
@@ -145,11 +175,33 @@ npx atmyapp stage review --to reviewer@example.com --message "Review the new tit
 | `entries delete <c> <id>`, `entries move <c> <id> --before <id>` | Stage an entry deletion or change its order. Move also accepts `--after`, `--first`, or `--last` |
 | `stage push [refs…]`, `stage status`, `stage ls [--mine]`, `stage diff [ref]` | Save and inspect a named draft |
 | `stage preview [--wait]`, `stage review --to <email-or-id> --message <text>`, `stage extend --ttl 3d` | Preview or hand off a draft, or extend its lifetime |
+| `stage commit -m <message> [--accept-warnings]` | Publish the active space's named draft with `content.publish` |
 | `stage undo [stepId]`, `stage discard --yes` | Undo a saved step or close the server draft while keeping local edits |
 | `content pull --session` | Copy saved reviewer edits into your space without overwriting unpushed changes |
 | `init --agents` | Add or refresh these instructions in `AGENTS.md` |
 
 Write commands support `--dry-run`. Use the operation ID printed by `stage push` to resume with `stage push --operation-id <id>`. The CLI stages files in batches and uses the saved revision to detect concurrent edits. A version conflict returns exit code `5` and the current item. An expired draft or a draft in review returns `7`. When a draft expires, the next push starts a new one.
+
+### Publish a named draft
+
+~~~sh
+npx atmyapp stage commit -m "Update the spring menu" --dry-run
+npx atmyapp stage commit -m "Update the spring menu" --json
+~~~
+
+Grant `content.publish` explicitly to a login or project key. The command publishes saved changes from the linked named draft and returns the Git commit SHA and projection status. If warnings need consent, it returns `needs_confirmation` with exit `6`. Repeat with `--accept-warnings` in a terminal, review the exact warnings, and confirm. After an interrupted publish, repeat the same message in the same space to recover the operation.
+
+## Website hosting
+
+| Command | Purpose |
+| --- | --- |
+| `hosting status [--content-commit <sha>]` | Show deployments, active releases, build presets, domains, and how far published content has reached each website |
+| `hosting deploy [--deployment <id>] [--wait] [--timeout 15m]` | Start a release with the deployment's configured preset. Choose a deployment when the project has more than one |
+| `hosting releases ls [--deployment <id>]` | List release IDs and build states |
+| `hosting logs <releaseId> [--follow] [--deployment <id>]` | Fetch build logs or poll for changes until the build finishes |
+| `hosting promote <releaseId> [--deployment <id>]` | Make a ready release live |
+
+Use `--dry-run` to inspect the target of a deploy or promotion. `hosting deploy --wait` waits up to 16 minutes by default. Exit `1` with `build_failed` includes the last available log lines. Exit `1` with `deploy_timeout` includes the release ID so you can keep following it. With `--json`, `hosting logs` writes newline-delimited JSON records for log lines and status changes.
 
 Drafts normally expire after 24 hours of inactivity. Review extends the deadline to seven days. A send-back resets it to 24 hours. The reviewer can edit or send the draft back from **Website → Drafts**, and a member with publishing permission can publish it. Run `content pull` after publishing.
 

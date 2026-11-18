@@ -259,12 +259,43 @@ async function checkAuthoring(cwd, fixture, fixturePath) {
 
 async function main() {
   assert(
-    ["prepare", "verify", "draft-prepare", "draft-verify", "authoring"].includes(phase) && fixtureFile && workDir,
-    "Usage: node packages/cli/scripts/live-smoke.mjs <prepare|verify|draft-prepare|draft-verify|authoring> <fixture.json> <scratch-dir>",
+    ["prepare", "verify", "draft-prepare", "draft-verify", "authoring", "c5"].includes(phase) && fixtureFile && workDir,
+    "Usage: node packages/cli/scripts/live-smoke.mjs <prepare|verify|draft-prepare|draft-verify|authoring|c5> <fixture.json> <scratch-dir>",
   );
   const fixture = JSON.parse(await readFile(fixtureFile, "utf8"));
   const cwd = resolve(workDir);
   await mkdir(cwd, { recursive: true, mode: 0o700 });
+  if (phase === "c5") {
+    const config = fixture.c5 ?? {};
+    const hostingKey = env("ATMYAPP_CLI_SMOKE_HOSTING_KEY");
+    const status = await run(cwd, ["hosting", "status"], { key: hostingKey });
+    assert(status.deployments.length > 0, "The test project needs a website deployment.");
+    const deploymentId = config.deploymentId ?? status.deployments[0].id;
+    const listed = await run(cwd, ["hosting", "releases", "ls", "--deployment", deploymentId], { key: hostingKey });
+    assert(Array.isArray(listed.releases));
+    assert((await run(cwd, ["hosting", "deploy", "--dry-run", "--deployment", deploymentId], { key: hostingKey })).dryRun);
+    if (config.publishSpace) {
+      const command = ["stage", "commit", "-m", "C5 staging smoke", "--space", config.publishSpace];
+      await run(cwd, command, { key: env("ATMYAPP_CLI_KEY"), exit: 3, error: "missing_scope" });
+      const publishKey = env("ATMYAPP_CLI_SMOKE_PUBLISH_KEY");
+      const plan = await run(cwd, [...command, "--dry-run"], { key: publishKey });
+      assert(plan.inspection.ready && !plan.inspection.warnings?.length, "Prepare a conflict-free test draft without warnings.");
+      if (config.publish === true) {
+        const receipt = await run(cwd, command, { key: publishKey });
+        assert(receipt.commitSha && ["projected", "pending"].includes(receipt.projection));
+      }
+    }
+    if (config.browserLogin === true) {
+      const whoami = await run(cwd, ["whoami"], { key: "" });
+      assert.equal(whoami.sources.token, "login");
+      const keys = await run(cwd, ["keys", "ls"], { key: "" });
+      assert(Array.isArray(keys.projectKeys) && Array.isArray(keys.contentApiKeys));
+      const setup = await run(cwd, ["keys", "create", "--name", "Staging smoke", "--scopes", "content.read", "--dry-run"], { key: "" });
+      assert(setup.dryRun);
+    }
+    console.log("C5 staging smoke passed.");
+    return;
+  }
   if (phase === "authoring") return checkAuthoring(cwd, fixture, resolve(fixtureFile));
   if (phase.startsWith("draft-")) {
     assert(typeof fixture.document === "string" && typeof fixture.pointer === "string", "Set fixture.document and fixture.pointer.");
