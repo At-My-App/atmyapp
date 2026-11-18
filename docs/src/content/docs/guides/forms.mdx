@@ -172,3 +172,35 @@ To watch submissions arrive, including rejected ones with their reason, run [`at
 The submission endpoints accept real submissions, including from preview pages. When the service can tell a submission came from a preview, it labels it *preview*. Disable forms in your preview UI unless you mean to send real messages. Astro's form component does this by default.
 
 See also: [Spam protection](/guides/form-spam-protection/) · [Limits and error codes](/reference/submissions/)
+
+
+## Cookie-free visit details
+
+The SDK attaches a small current-visit snapshot to browser submissions. It uses
+`sessionStorage` in the current tab and expires after 30 minutes without activity.
+It does not use cookies, a persistent visitor ID, raw advertising click IDs, or
+full query strings. The metadata travels with the form; there is no analytics
+beacon or extra request. If storage is blocked, only the current page's context
+is available and the form still submits normally.
+
+The updated Astro integration installs the capture script on every page. For
+other frameworks or plain HTML, initialize it in your shared browser layout so
+that it sees the landing page before the visitor navigates to the form:
+
+```js
+import { installSubmissionVisit } from '@atmyapp/core/visit';
+installSubmissionVisit();
+```
+
+The SDK's `submissions.submit` and enhanced forms attach this context
+automatically. Native POST forms targeting AtMyApp's public form endpoint are
+covered by the installed `formdata` listener. For a custom endpoint origin, pass
+`formOrigins: ['https://your-edge.example']` to the installer. Form overrides
+that send to another destination do not receive the metadata.
+
+New submissions show approximate location, source, campaign when provided,
+landing page, submission page, and device in mobile and web form details.
+Location comes from the browser's request at the edge; server-to-server calls
+are left without a sender location. Unknown sources remain unknown. Existing
+submissions cannot be backfilled, and websites must rebuild with the updated
+SDK/integration to preserve the arrival source across pages.

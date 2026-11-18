@@ -1,3 +1,4 @@
+import { getSubmissionVisit, installSubmissionVisit, SUBMISSION_VISIT_FIELD } from "./submissionVisit";
 import {
   AtMyAppClientOptions,
   SubmissionCaptcha,
@@ -482,6 +483,7 @@ function withReturnTo(
 export const createSubmissionsClient = <TSchema = unknown>(
   clientOptions: AtMyAppClientOptions
 ): SubmissionsClient<TSchema> => {
+  installSubmissionVisit();
   const submissionsUrl = `${clientOptions.baseUrl}/submissions`;
   const fetchImpl = clientOptions.customFetch ?? fetch;
   const schemaDocument = normalizeRuntimeSchema(clientOptions.schema);
@@ -637,7 +639,16 @@ export const createSubmissionsClient = <TSchema = unknown>(
         return failure("validation_failed", "Some fields are missing or invalid.", { fields: checked.fields });
     }
 
-    const { body, contentType } = await encode(data, options.captchaToken);
+    const visit = getSubmissionVisit();
+    let payloadData = data;
+    if (visit) {
+      if (data instanceof FormData) {
+        payloadData = new FormData();
+        data.forEach((value, key) => (payloadData as FormData).append(key, value));
+        payloadData.set(SUBMISSION_VISIT_FIELD, JSON.stringify(visit));
+      } else payloadData = { ...data, [SUBMISSION_VISIT_FIELD]: JSON.stringify(visit) };
+    }
+    const { body, contentType } = await encode(payloadData, options.captchaToken);
     const headers: Record<string, string> = {
       Authorization: `Bearer ${clientOptions.apiKey}`,
       // Every attempt carries the same key, so the service stores it once.

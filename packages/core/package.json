@@ -50,6 +50,10 @@
       "default": "./dist/forms/index.js"
     },
     "./package.json": "./package.json",
-    "./dist/*": "./dist/*"
+    "./dist/*": "./dist/*",
+    "./visit": {
+      "types": "./dist/client/submissionVisit.d.ts",
+      "default": "./dist/client/submissionVisit.js"
+    }
   }
 }

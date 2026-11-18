@@ -20,6 +20,7 @@ export default function atmyapp(
         command,
         updateConfig,
         injectRoute,
+        injectScript,
       }) => {
         const env: Environment = {};
         const mode = command === "dev" ? "development" : "production";
@@ -75,6 +76,10 @@ export default function atmyapp(
             ],
           },
         });
+        const formOrigins = [options.baseUrl, env.ATMYAPP_BASE_URL, env.ATMYAPP_API_URL]
+          .filter((value): value is string => !!value)
+          .flatMap((value) => { try { return [new URL(value).origin]; } catch { return []; } });
+        injectScript("page", `import { installSubmissionVisit } from "@atmyapp/core/visit"; installSubmissionVisit(${JSON.stringify({ formOrigins })});`);
         if (options.diagnostics)
           injectRoute({
             pattern: "/.well-known/atmyapp/diagnostics.json",

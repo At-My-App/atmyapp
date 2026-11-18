@@ -52,7 +52,7 @@ Your website and your terminal talk to different hosts with different credential
 | **Project API URL** `https://edge.atmyapp.com/v0/projects/<id>` | **Settings → API keys** | Your website (`baseUrl`, `ATMYAPP_API_URL`) | No |
 | **API key** | **Settings → API keys** | Your website (`apiKey`, `ATMYAPP_API_KEY`) | No. It reads published content and sends forms, so it can ship in browser code. |
 | **CLI URL** `https://api.atmyapp.com/v0/projects/<id>` | **Settings → CLI keys** | `atmyapp use --url` | No |
-| **CLI key** | **Settings → CLI keys** | `atmyapp use --token`, CI | **Yes.** It can change your schema. Keep it out of the repository and out of browser code. |
+| **CLI key** (`ama_pk_…`) | **Settings → CLI keys**, shown once when created | `atmyapp use --token`, CI | **Yes.** Depending on [what it's for](/reference/cli/#what-a-cli-key-can-do), it can change your schema or read form messages. Keep it out of the repository and out of browser code. |
 | **Preview key** | Added to preview URLs by AtMyApp | Requests that render drafts | Treat it as private. It expires on its own. |
 
 <Aside type="caution" title="Two hosts, on purpose">

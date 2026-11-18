@@ -55,6 +55,8 @@ Start by making errors visible. With `@atmyapp/core`, set `errorPolicy: "throw"`
 | --- | --- | --- |
 | `AtMyApp session not configured. Run 'atmyapp use' first…` | The CLI isn't connected in this folder | Run `npx atmyapp use` in the project root. |
 | `CLI key belongs to project '…'` | The CLI URL and key are from different projects | Copy the command from **Settings → CLI keys** again. |
+| `This key isn't allowed to …` | The key wasn't created for this command | Create a key that can do it in **Settings → CLI keys**. See [What a CLI key can do](/reference/cli/#what-a-cli-key-can-do). |
+| The key worked before and now doesn't | It was revoked, or its creator lost access to the project | Check **Settings → CLI keys**: a stopped key shows the reason. Create a new key. |
 | No schema file found | The file name isn't recognised | Name it `atmyapp.schema.ts` (or `.mts`, `.js`, `.mjs`, `.json`) in the project root. |
 | `The migration is blocked. Nothing was changed.` | The change would make stored content invalid | Read the plan. See [What the plan blocks](/guides/schema-changes/#what-the-plan-blocks-and-how-to-unblock-it). |
 | `This plan changes stored content. Review it and run again with --yes` | A confirmation was needed without a terminal | Review the plan, then rerun with `--yes`. |

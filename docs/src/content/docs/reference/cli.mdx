@@ -63,6 +63,20 @@ Verifies the CLI key, saves the session to `.ama/session.json` and adds that fil
 The CLI URL (`api.atmyapp.com`) is not the Project API URL your website uses (`edge.atmyapp.com`). See [Keys and URLs](/concepts/how-it-works/#keys-and-urls).
 </Aside>
 
+### What a CLI key can do
+
+When you create a key, you choose what it's for. A key only works for the commands you picked:
+
+| Choice in the dashboard | Commands |
+| --- | --- |
+| Upload the schema and files | `migrate`, `upload` |
+| Download content snapshots | `snapshot` |
+| Watch form messages | `submissions tail` |
+
+The dashboard shows a key once, when you create it. Afterwards only its last characters are listed (`ama_pk_…k3f9`). If you lose a key, create a new one and revoke the old one.
+
+A key also stops working when the person who created it loses access to the project or can no longer do what the key is for. **Settings → CLI keys** then shows it as **Stopped** with the reason. Create a new key to replace it, and update the secret in your CI.
+
 ## `atmyapp init`
 
 ```sh

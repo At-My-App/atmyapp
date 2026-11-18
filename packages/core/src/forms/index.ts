@@ -1,3 +1,5 @@
+import { getSubmissionVisit, SUBMISSION_VISIT_FIELD } from "../client/submissionVisit";
+export { getSubmissionVisit, installSubmissionVisit } from "../client/submissionVisit";
 /**
  * `@atmyapp/core/forms`: progressive enhancement for plain HTML forms that
  * post to an AtMyApp form address. No client, API key or framework needed;
@@ -182,6 +184,7 @@ export function enhanceSubmissionForm(
 ): () => void {
   if (form.dataset[ENHANCED]) return () => undefined;
   form.dataset[ENHANCED] = "true";
+  getSubmissionVisit(form.ownerDocument.defaultView ?? undefined);
   const doc = form.ownerDocument;
   const messages: SubmissionFormMessages = {
     ...DEFAULT_MESSAGES,
@@ -273,9 +276,12 @@ export function enhanceSubmissionForm(
       const target = new URL(form.action, doc.baseURI);
       const returnTo = target.searchParams.get("returnTo");
       target.searchParams.delete("returnTo");
+      const body = new FormData(form, (event as SubmitEvent).submitter ?? undefined);
+      const visit = getSubmissionVisit(form.ownerDocument.defaultView ?? undefined);
+      if (visit) body.set(SUBMISSION_VISIT_FIELD, JSON.stringify(visit));
       const response = await fetch(target.toString(), {
         method: "POST",
-        body: new FormData(form, (event as SubmitEvent).submitter ?? undefined),
+        body,
         headers: { Accept: "application/json", "Idempotency-Key": idempotencyKey },
       });
       const payload = (await response.json().catch(() => null)) as {
