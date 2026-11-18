@@ -47,7 +47,6 @@ Run your website with `ATMYAPP_CLIENT_MODE=local` to see the active space. A rev
 | Command | Purpose |
 | --- | --- |
 | `space create/use/ls/rm/gc` | Manage local spaces and unused stored objects |
-| `content edit/rm/set/patch` | Edit a local document, file or entry |
 | `content status/diff/grep/validate` | Inspect and validate a space |
 | `entries create/update/delete/move` | Change collection entries in a space |
 | `stage push/status/ls/diff` | Upload changes and inspect named drafts |
@@ -121,3 +120,17 @@ Use `atmyapp help content get --json` to get the output JSON Schema for a comman
 ## License
 
 ISC
+
+
+## Merging and assets
+
+Run `atmyapp content refresh doc:home` to pull and merge against your saved base. If a field conflicts, run `atmyapp content resolve doc:home --take theirs --pointer /title`. The working file keeps your version until you resolve its conflicts. Run `atmyapp stage conflicts` to check the linked draft against the published head.
+
+| Command | Purpose |
+| --- | --- |
+| `assets put doc:home#/hero cover.jpg --alt "Cover"` | Attach a file to an asset field |
+| `files put media/menu.pdf menu.pdf` | Stage a regular storage file |
+| `files put public:logo.svg logo.svg` | Stage a project public asset |
+| `content rm public:logo.svg` | Stage removal of a project public asset |
+
+`stage push` sends related content and attachments together, using 8 MiB parts for large named uploads. A pending push retains its operation ID and captured bytes. Rerun with `stage push --operation-id <id>` after an interruption. `content pull --media` also downloads public assets and gives the merge a local copy of remote binary edits.
