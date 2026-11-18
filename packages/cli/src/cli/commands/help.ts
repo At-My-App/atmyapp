@@ -57,7 +57,7 @@ export function helpCommand(program: Command): Command {
         const data: HelpResult = {
           ...describeCommand(target),
           exitCodes: EXIT,
-          output: "Each outputSchema describes the JSON that command writes, including errors or one record per line for submissions tail.",
+          output: "Each outputSchema describes the JSON that command writes. Submissions tail and hosting logs emit one record per line.",
         };
         printJson({ ok: true, data });
       } else target.outputHelp();

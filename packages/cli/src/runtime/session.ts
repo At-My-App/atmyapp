@@ -1,4 +1,5 @@
 import { CliError, EXIT } from "./errors";
+import { cliApiUrl } from "./auth";
 
 /** The CLI's own credentials. Websites use ATMYAPP_API_URL / ATMYAPP_API_KEY instead. */
 export const CLI_ENV = {
@@ -20,16 +21,17 @@ export interface CredentialSources {
   /** Usually process.env. */
   env?: Record<string, string | undefined>;
   /** Contents of .ama/session.json, if any. */
-  sessionFile?: { token?: string; url?: string; projectId?: string } | null;
+  sessionFile?: Partial<CliSession> | null | (() => Partial<CliSession> | null);
+  loginSession?: CliSession | null | (() => CliSession | null);
 }
 
-export type CredentialSource = "flag" | "env" | "session-file";
+export type CredentialSource = "flag" | "env" | "login" | "session-file";
 
 export interface ResolvedSession extends CliSession {
   sources: { token: CredentialSource; url: CredentialSource; projectId: CredentialSource | "url" };
 }
 
-function pick(
+export function connectionOverride(
   name: "token" | "url" | "projectId",
   sources: CredentialSources,
 ): { value?: string; source?: CredentialSource } {
@@ -37,30 +39,61 @@ function pick(
   if (flag) return { value: flag, source: "flag" };
   const env = sources.env?.[CLI_ENV[name]]?.trim();
   if (env) return { value: env, source: "env" };
-  const file = sources.sessionFile?.[name]?.trim();
-  if (file) return { value: file, source: "session-file" };
   return {};
 }
 
 export function detectProjectIdFromUrl(url: string): string | undefined {
   const match = url.match(/\/projects\/([^/?#]+)/i);
-  return match?.[1];
+  try { return match ? decodeURIComponent(match[1]) : undefined; }
+  catch { return undefined; }
 }
 
 /**
  * Credentials for a command: flags, then ATMYAPP_CLI_* environment variables,
- * then .ama/session.json. The project ID falls back to the one in the URL.
+ * then a matching browser login, then .ama/session.json.
  */
 export function resolveCredentials(sources: CredentialSources): ResolvedSession {
-  const token = pick("token", sources);
-  const url = pick("url", sources);
-  let projectId: { value?: string; source?: CredentialSource | "url" } = pick("projectId", sources);
+  const requestedUrl = connectionOverride("url", sources);
+  const requestedProject = connectionOverride("projectId", sources).value ??
+    (requestedUrl.value && detectProjectIdFromUrl(requestedUrl.value));
+  let login: CliSession | null | undefined;
+  let file: Partial<CliSession> | null | undefined;
+  let inspectedLogin = false;
+  let inspectedFile = false;
+
+  function pick(name: keyof CliSession): { value?: string; source?: CredentialSource } {
+    const override = connectionOverride(name, sources);
+    if (override.value) return override;
+    if (!inspectedLogin) {
+      login = typeof sources.loginSession === "function" ? sources.loginSession() : sources.loginSession;
+      inspectedLogin = true;
+      if (login && requestedProject && login.projectId !== requestedProject) login = null;
+      if (login && requestedUrl.value) {
+        try {
+          if (cliApiUrl(login.url, "") !== cliApiUrl(requestedUrl.value, "")) login = null;
+        } catch { login = null; }
+      }
+    }
+    if (login) return { value: login[name], source: "login" };
+    if (!inspectedFile) {
+      file = typeof sources.sessionFile === "function" ? sources.sessionFile() : sources.sessionFile;
+      inspectedFile = true;
+    }
+    const value = file?.[name]?.trim();
+    return value ? { value, source: "session-file" } : {};
+  }
+
+  const token = pick("token");
+  const url = pick("url");
+  let projectId: { value?: string; source?: CredentialSource | "url" } = connectionOverride("projectId", sources);
+  if (!projectId.value && requestedProject) projectId = { value: requestedProject, source: "url" };
+  if (!projectId.value) projectId = pick("projectId");
   if (!projectId.value && url.value) {
     const fromUrl = detectProjectIdFromUrl(url.value);
     if (fromUrl) projectId = { value: fromUrl, source: "url" };
   }
 
-  const connect = `Run 'atmyapp use --url <cli-url> --token <cli-key>', or set ${CLI_ENV.url} and ${CLI_ENV.token}.`;
+  const connect = `Run 'atmyapp login' or set ${CLI_ENV.url} and ${CLI_ENV.token}.`;
   if (!token.value && !url.value) {
     throw new CliError("not_connected", "This folder is not connected to an AtMyApp project.", {
       exitCode: EXIT.auth,

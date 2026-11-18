@@ -18,6 +18,9 @@ import { localesCommand } from "./commands/locales";
 import { helpCommand } from "./commands/help";
 import { spaceCommand } from "./commands/space";
 import { membersCommand, stageCommand } from "./commands/stage";
+import { loginCommand, logoutCommand } from "./commands/login";
+import { hostingCommand } from "./commands/hosting";
+import { keysCommand } from "./commands/keys";
 import { CLI_VERSION } from "./output";
 
 const program = new Command()
@@ -29,6 +32,8 @@ const program = new Command()
 program.addCommand(initCommand());
 program.addCommand(createCommand());
 program.addCommand(useCommand());
+program.addCommand(loginCommand());
+program.addCommand(logoutCommand());
 program.addCommand(whoamiCommand());
 program.addCommand(doctorCommand());
 program.addCommand(schemaCommand());
@@ -36,6 +41,8 @@ program.addCommand(contentCommand());
 program.addCommand(entriesCommand());
 program.addCommand(spaceCommand());
 program.addCommand(stageCommand());
+program.addCommand(hostingCommand());
+program.addCommand(keysCommand());
 program.addCommand(membersCommand());
 program.addCommand(assetsCommand());
 program.addCommand(filesCommand());

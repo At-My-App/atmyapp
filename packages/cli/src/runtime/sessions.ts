@@ -147,7 +147,7 @@ export async function listMembers(api: ApiClient, capability?: string) {
   return response(z.array(memberSchema), await api.json("GET", "members", { query: { capability } }));
 }
 
-function requireLink(space: SpaceFile): string {
+export function requireLink(space: SpaceFile): string {
   if (!space.session)
     throw new CliError("session_required", "This space has no named draft yet.", {
       exitCode: EXIT.session,

@@ -1,4 +1,4 @@
-import { buildCliAuthVerifyUrl } from "./auth";
+import { buildCliAuthVerifyUrl, CLI_SESSION_PREFIX, cliApiUrl } from "./auth";
 import { CliError, EXIT } from "./errors";
 import type { CliSession } from "./session";
 
@@ -10,6 +10,7 @@ export interface RequestOptions {
   body?: unknown;
   /** Expected statuses besides 2xx that should not throw (e.g. 404 → null). */
   allow?: number[];
+  signal?: AbortSignal;
 }
 
 export interface BytesResponse {
@@ -77,7 +78,7 @@ interface ErrorBody {
   sessions?: unknown[];
 }
 
-function errorFromResponse(status: number, body: ErrorBody | null, path: string): CliError {
+function errorFromResponse(status: number, body: ErrorBody | null, path: string, usesLogin = false): CliError {
   const message = body?.error || `Request failed with status ${status}.`;
   const code = body?.code;
   if (status === 426 && code === "cli_upgrade_required") {
@@ -117,7 +118,8 @@ function errorFromResponse(status: number, body: ErrorBody | null, path: string)
       exitCode: EXIT.auth,
       status,
       details: { scopes: body?.scopes ?? [] },
-      fix: `Create a CLI key with ${(body?.scopes ?? []).join(" or ") || "the needed scope"} in Settings → CLI keys, then run 'atmyapp use' with it.`,
+      fix: usesLogin ? "Run 'atmyapp login --scopes' with the required scopes."
+        : `Create a CLI key with ${(body?.scopes ?? []).join(" or ") || "the needed scope"} in Settings → CLI keys, then run 'atmyapp use' with it.`,
     });
   }
   if (code === "project_key_not_accepted") {
@@ -131,11 +133,19 @@ function errorFromResponse(status: number, body: ErrorBody | null, path: string)
     });
   }
   if (status === 401) {
-    return new CliError("unauthenticated", "The CLI key was not accepted. It may be revoked or for another project.", {
+    return new CliError("unauthenticated", usesLogin ? "The CLI login was not accepted. It may have expired or been revoked." : "The CLI key was not accepted. It may be revoked or for another project.", {
       exitCode: EXIT.auth,
       status,
-      fix: "Run 'atmyapp whoami' to check the connection, or 'atmyapp use' with a current key.",
+      fix: usesLogin ? "Run 'atmyapp login' again." : "Run 'atmyapp whoami' to check the connection, or 'atmyapp use' with a current key.",
     });
+  }
+  if (code === "publication-warnings" || code === "commit-conflict" || code === "hard-validation-failure" ||
+      code === "commit-in-progress" || code === "stale-resolutions-token" || code === "build_failed" || code === "slow_down" ||
+      code === "device_expired" || code === "device_denied") {
+    const details = body?.details ?? (body?.data && typeof body.data === "object" ? body.data as Record<string, unknown> : undefined);
+    const exitCode = code === "hard-validation-failure" ? EXIT.validation : code === "commit-conflict" ? EXIT.conflict :
+      code === "device_expired" || code === "device_denied" ? EXIT.auth : EXIT.error;
+    return new CliError(code, message, { status, details, exitCode });
   }
   if (status === 403) return new CliError("forbidden", message, { exitCode: EXIT.auth, status });
   if (status === 404) return new CliError("not_found", message, { status, details: { path } });
@@ -190,18 +200,20 @@ export class ApiClient {
 
   private headers(json: boolean): Record<string, string> {
     return {
-      Authorization: `Bearer ${this.session.token}`,
+      ...(this.session.token ? { Authorization: `Bearer ${this.session.token}` } : {}),
       ...(json ? { "Content-Type": "application/json" } : {}),
       ...(this.cliVersion ? { "X-AtMyApp-CLI-Version": this.cliVersion } : {}),
     };
   }
 
-  async send(method: string, url: string, body?: unknown, raw = false): Promise<Response> {
+  async send(method: string, url: string, body?: unknown, raw = false, signal?: AbortSignal, redirect?: RequestRedirect): Promise<Response> {
     try {
       return await this.fetchImpl(url, {
         method,
         headers: raw ? { ...this.headers(false), "Content-Type": "application/octet-stream" } : this.headers(body !== undefined),
         body: raw ? body as ArrayBuffer : body === undefined ? undefined : JSON.stringify(body),
+        signal,
+        redirect,
       });
     } catch (error) {
       throw new CliError(
@@ -214,14 +226,23 @@ export class ApiClient {
 
   /** A JSON request against the project API; `{ success, data }` is unwrapped. */
   async json<T>(method: string, subPath: string, options: RequestOptions = {}): Promise<T | null> {
-    const response = await this.send(method, this.url(subPath, options.query), options.body);
+    return this.jsonAt<T>(method, this.url(subPath, options.query), subPath, options);
+  }
+
+  async cliAuth<T>(method: string, subPath: string, options: RequestOptions = {}): Promise<T | null> {
+    return this.jsonAt<T>(method, cliApiUrl(this.session.url, "cli-auth/" + subPath), "cli-auth/" + subPath, options, "error");
+  }
+
+  private async jsonAt<T>(method: string, url: string, subPath: string, options: RequestOptions, redirect?: RequestRedirect): Promise<T | null> {
+    const usesLogin = this.session.token.startsWith(CLI_SESSION_PREFIX);
+    const response = await this.send(method, url, options.body, false, options.signal, redirect);
     const body = await readJson(response);
     if (!response.ok) {
       if (options.allow?.includes(response.status)) return null;
-      throw errorFromResponse(response.status, body as ErrorBody, subPath);
+      throw errorFromResponse(response.status, body as ErrorBody, subPath, usesLogin);
     }
     if (body && typeof body === "object" && (body as ErrorBody).success === false) {
-      throw errorFromResponse(response.status, body as ErrorBody, subPath);
+      throw errorFromResponse(response.status, body as ErrorBody, subPath, usesLogin);
     }
     return unwrap(body) as T;
   }
@@ -262,6 +283,7 @@ export class ApiClient {
 
   /** The key check outside project scope (`/v0/cli-keys/auth/verify`). */
   async verifyKey<T>(): Promise<T> {
+    if (this.session.token.startsWith(CLI_SESSION_PREFIX)) return (await this.cliAuth<T>("GET", "session"))!;
     const response = await this.send("GET", buildCliAuthVerifyUrl(this.session.url));
     const body = await readJson(response);
     if (!response.ok || (body as ErrorBody)?.success === false) {

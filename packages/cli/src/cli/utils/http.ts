@@ -10,6 +10,7 @@ export type {
 import { existsSync } from "fs";
 import { join } from "path";
 import { resolveCredentials } from "../../runtime/session";
+import { readBrowserLogin } from "../../runtime/credentials";
 import { getConfig, type AmaConfig } from "./config";
 
 export interface AmaSession {
@@ -63,7 +64,7 @@ interface ApiResponseBody<T> {
 
 /**
  * Credentials for older commands: overrides (flags), then the ATMYAPP_CLI_*
- * environment variables, then .ama/session.json (runtime/session.ts).
+ * environment variables, browser login, then .ama/session.json (runtime/session.ts).
  */
 export function resolveSession(overrides: SessionOverrides = {}): AmaSession {
   let sessionFile: AmaConfig | null = null;
@@ -72,7 +73,7 @@ export function resolveSession(overrides: SessionOverrides = {}): AmaSession {
   } catch {
     sessionFile = null;
   }
-  const resolved = resolveCredentials({ flags: overrides, env: process.env, sessionFile });
+  const resolved = resolveCredentials({ flags: overrides, env: process.env, sessionFile, loginSession: readBrowserLogin });
   return { token: resolved.token, projectId: resolved.projectId, url: resolved.url };
 }
 

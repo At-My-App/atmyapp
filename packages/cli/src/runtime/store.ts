@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { CliError } from "./errors";
 import { sha256Hex } from "./fingerprint";
+import { lockFile } from "./fileLock";
 import type { DeliveredAsset } from "./views";
 
 /**
@@ -263,7 +264,7 @@ export class ContentStore {
    */
   lockPublished(): () => void {
     fs.mkdirSync(this.root, { recursive: true });
-    const release = this.lock(path.join(this.root, ".lock"), "Another 'atmyapp content pull' is updating the local copy.");
+    const release = lockFile(path.join(this.root, ".lock"), "Another 'atmyapp content pull' is updating the local copy.");
     try {
       const previous = this.spaceDir(PUBLISHED + ".old");
       if (!fs.existsSync(this.spaceDir(PUBLISHED)) && fs.existsSync(previous))
@@ -278,42 +279,7 @@ export class ContentStore {
   lockSpace(space: string): () => void {
     const directory = this.spaceDir(space);
     fs.mkdirSync(directory, { recursive: true });
-    return this.lock(path.join(directory, ".lock"), `Space '${space}' is being updated.`);
-  }
-
-  private lock(lock: string, message: string): () => void {
-    const take = () => {
-      const fd = fs.openSync(lock, "wx");
-      try {
-        fs.writeSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }));
-      } finally {
-        fs.closeSync(fd);
-      }
-    };
-    try {
-      take();
-    } catch (error: any) {
-      if (error?.code !== "EEXIST") throw error;
-      const age = Date.now() - fs.statSync(lock).mtimeMs;
-      let active = false;
-      try {
-        const { pid } = JSON.parse(fs.readFileSync(lock, "utf8"));
-        if (Number.isSafeInteger(pid) && pid > 0) {
-          process.kill(pid, 0);
-          active = true;
-        }
-      } catch (cause) {
-        active = (cause as NodeJS.ErrnoException).code === "EPERM";
-      }
-      if (active || age < 10 * 60_000) {
-        throw new CliError("store_locked", message, {
-          fix: `Wait for it to finish. If none is running, delete ${lock}.`,
-        });
-      }
-      fs.rmSync(lock, { force: true });
-      take();
-    }
-    return () => fs.rmSync(lock, { force: true });
+    return lockFile(path.join(directory, ".lock"), `Space '${space}' is being updated.`);
   }
 }
 

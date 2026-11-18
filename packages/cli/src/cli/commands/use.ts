@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { CLI_SESSION_PREFIX } from "../../runtime/auth";
 import * as fs from "fs";
 import * as path from "path";
 import { ApiClient } from "../../runtime/api";
@@ -62,6 +63,9 @@ export function useCommand(): Command {
           const authToken = await value(options.token, CLI_ENV.token, "Enter the CLI key: ", "--token", "CLI key");
           if (!projectUrl) throw new CliError("missing_url", "Project URL is required.", { exitCode: EXIT.usage });
           if (!authToken) throw new CliError("missing_token", "CLI key is required.", { exitCode: EXIT.usage });
+          if (authToken.startsWith(CLI_SESSION_PREFIX)) {
+            throw new CliError("browser_login_token", "Browser login tokens are saved by 'atmyapp login'.", { exitCode: EXIT.auth });
+          }
 
           logger.info("Verifying CLI authentication...");
           let verified: VerifiedCliAuth & { valid: boolean };

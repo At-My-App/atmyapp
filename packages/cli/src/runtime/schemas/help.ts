@@ -6,6 +6,7 @@ import {
   schemaShowSchema,
   useResultSchema,
   whoamiResultSchema,
+  cliErrorEnvelopeSchema,
 } from "./commands";
 import {
   contentMapSchema,
@@ -14,6 +15,10 @@ import {
   readOutputSchema,
 } from "./content";
 import { contentPullResultSchema, draftOutputSchemas } from "./drafts";
+import { hostingStatusSchema, hostingDeploySchema, hostingLogRecordSchema, hostingPromoteSchema, hostingReleasesSchema } from "../hosting";
+import { keyCreateSchema, keyRevokeSchema, keysListSchema } from "../keys";
+import { loginResultSchema, logoutResultSchema } from "../login";
+import { stageCommitResultSchema } from "../publish";
 
 const description = z.object({
   name: z.string(),
@@ -48,6 +53,17 @@ export type HelpResult = z.infer<typeof helpResultSchema>;
 const outputs = new Map<string, z.ZodType>([
   ["use", outputEnvelope(useResultSchema)],
   ["whoami", outputEnvelope(whoamiResultSchema)],
+  ["login", outputEnvelope(loginResultSchema)],
+  ["logout", outputEnvelope(logoutResultSchema)],
+  ["stage commit", outputEnvelope(stageCommitResultSchema)],
+  ["hosting status", outputEnvelope(hostingStatusSchema)],
+  ["hosting deploy", outputEnvelope(hostingDeploySchema)],
+  ["hosting releases ls", outputEnvelope(hostingReleasesSchema)],
+  ["hosting promote", outputEnvelope(hostingPromoteSchema)],
+  ["hosting logs", z.union([hostingLogRecordSchema, cliErrorEnvelopeSchema])],
+  ["keys ls", outputEnvelope(keysListSchema)],
+  ["keys create", outputEnvelope(keyCreateSchema)],
+  ["keys revoke", outputEnvelope(keyRevokeSchema)],
   ["doctor", outputEnvelope(doctorResultSchema)],
   ["schema show", outputEnvelope(schemaShowSchema)],
   ["content ls", outputEnvelope(contentMapSchema)],

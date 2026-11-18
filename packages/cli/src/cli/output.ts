@@ -5,6 +5,7 @@ import * as path from "path";
 import { ApiClient } from "../runtime/api";
 import { CliError, EXIT, toCliError } from "../runtime/errors";
 import { resolveCredentials, type ResolvedSession } from "../runtime/session";
+import { readBrowserLogin } from "../runtime/credentials";
 import { Logger } from "./logger";
 
 // Resolves from both src/cli and dist/cli to the package root.
@@ -22,12 +23,12 @@ export interface CommonOptions extends ConnectionOptions {
 }
 
 /** Adds --json, --verbose and the connection overrides every remote command takes. */
-export function withCommonOptions(command: Command): Command {
+export function withCommonOptions(command: Command, output: { ndjson?: boolean } = {}): Command {
   return command
-    .option("--json", "Print one JSON document on stdout (logs go to stderr)", false)
+    .option("--json", output.ndjson ? "Print one JSON record per line on stdout" : "Print one JSON document on stdout (logs go to stderr)", false)
     .option("--verbose", "Show more detail", false)
-    .option("--url <url>", "Project CLI URL (overrides ATMYAPP_CLI_URL and .ama/session.json)")
-    .option("--token <key>", "CLI key (overrides ATMYAPP_CLI_KEY and .ama/session.json)")
+    .option("--url <url>", "Override the project API URL")
+    .option("--token <key>", "Override the CLI credential")
     .option("--project-id <id>", "Project ID, when the URL does not contain it");
 }
 
@@ -48,7 +49,8 @@ export function resolveCliSession(options: ConnectionOptions): ResolvedSession {
   return resolveCredentials({
     flags: { token: options.token, url: options.url, projectId: options.projectId },
     env: process.env,
-    sessionFile: readSessionFile(),
+    loginSession: readBrowserLogin,
+    sessionFile: readSessionFile,
   });
 }
 
@@ -86,17 +88,24 @@ export async function runAction<T>(
   options: CommonOptions,
   action: (context: ActionContext) => Promise<T>,
   render: (result: T, context: ActionContext) => void,
+  output: { ndjson?: boolean } = {},
 ): Promise<void> {
   const json = Boolean(options.json);
   const logger = new Logger(Boolean(options.verbose), { stderr: json });
   const context = { logger, json };
   try {
     const result = await action(context);
-    if (json) printJson({ ok: true, data: result });
+    if (json) {
+      if (!output.ndjson) printJson({ ok: true, data: result });
+    }
     else render(result, context);
   } catch (raw) {
     const error = toCliError(raw);
-    if (json) printJson({ ok: false, error: error.toJSON() });
+    if (json) {
+      const result = { ok: false, error: error.toJSON() };
+      if (output.ndjson) process.stdout.write(JSON.stringify(result) + "\n");
+      else printJson(result);
+    }
     else {
       logger.error(error.message, options.verbose && error.code === "unexpected" ? raw : undefined);
       if (error.fix) console.error(chalk.gray(`  ${error.fix}`));

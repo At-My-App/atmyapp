@@ -1,5 +1,8 @@
 import { outdatedTranslations } from "../../runtime/locales";
 import { Command, Option } from "commander";
+import { createInterface } from "node:readline/promises";
+import { stripVTControlCharacters } from "node:util";
+import { CliError } from "../../runtime/errors";
 import {
   discardStage,
   extendSession,
@@ -15,6 +18,7 @@ import {
   undoStage,
 } from "../../runtime/sessions";
 import { draftSchemaWarnings } from "../../runtime/compile";
+import { stageCommit } from "../../runtime/publish";
 import { connect, printValue, runAction, table } from "../output";
 import { confirm, draftOptions, maybeConnect, workFor, type DraftOptions } from "./draftOptions";
 
@@ -26,6 +30,43 @@ function printOutdated(items: Array<{ ref: string; locales: string[] }>) {
 export function stageCommand() {
   return new Command("stage")
     .description("Stage local content and hand it to a reviewer")
+    .addCommand(draftOptions(new Command("commit"), { write: true })
+      .description("Publish the active space’s named draft")
+      .requiredOption("-m, --message <message>", "Publication message")
+      .option("--accept-warnings", "Accept publication warnings in an interactive terminal")
+      .option("--operation-id <id>", "Resume a publish with this operation ID")
+      .addHelpText("after", "\nExamples:\n  atmyapp stage commit -m 'Update website copy' --dry-run\n  atmyapp stage commit -m 'Update website copy'")
+      .action((options: DraftOptions & { message: string; acceptWarnings?: boolean; operationId?: string }) => runAction(options,
+        async ({ json }) => {
+          let shown = false;
+          const printWarnings = (issues: Array<{ message?: unknown; path?: unknown }>) => {
+            for (const issue of issues) {
+              if (typeof issue.message !== "string") continue;
+              console.error(stripVTControlCharacters((typeof issue.path === "string" ? issue.path + " " : "") + issue.message));
+            }
+            shown = true;
+          };
+          try {
+            return await stageCommit(connect(options).api, workFor(options), {
+              ...options, terminal: Boolean(process.stdin.isTTY),
+              confirmWarnings: async (issues) => {
+                printWarnings(issues);
+                const terminal = createInterface({ input: process.stdin, output: process.stderr });
+                try { return /^y(es)?$/i.test((await terminal.question("Publish with these warnings? [y/N] ")).trim()); }
+                finally { terminal.close(); }
+              },
+            });
+          } catch (error) {
+            if (!json && !shown && error instanceof CliError && error.code === "needs_confirmation" && Array.isArray(error.details?.issues)) {
+              printWarnings(error.details.issues);
+            }
+            throw error;
+          }
+        },
+        (result, { logger }) => {
+          if (result.dryRun) printValue(result.inspection);
+          else logger.info("Published " + result.commitSha + " (projection " + result.projection + ").");
+        })))
     .addCommand(draftOptions(new Command("conflicts"))
       .description("Inspect conflicts between a named draft and current published content")
       .addHelpText("after", "\nExample: atmyapp stage conflicts --json")

@@ -25,7 +25,9 @@ async function safeReadText(response: Response): Promise<string | null> {
   }
 }
 
-export function buildCliAuthVerifyUrl(url: string): string {
+export const CLI_SESSION_PREFIX = "ama_cs_";
+
+export function cliApiUrl(url: string, subPath: string): string {
   const parsedUrl = new URL(stripTrailingSlashes(url));
   parsedUrl.search = "";
   parsedUrl.hash = "";
@@ -41,15 +43,19 @@ export function buildCliAuthVerifyUrl(url: string): string {
   }
 
   const normalizedPathSegments = parsedUrl.pathname.split("/").filter(Boolean);
-  const verifyPath =
+  const v0Path =
     normalizedPathSegments[normalizedPathSegments.length - 1] === "v0"
-      ? "cli-keys/auth/verify"
-      : "v0/cli-keys/auth/verify";
+      ? ""
+      : "v0/";
 
   return new URL(
-    verifyPath,
+    v0Path + subPath,
     `${stripTrailingSlashes(parsedUrl.toString())}/`,
   ).toString();
+}
+
+export function buildCliAuthVerifyUrl(url: string, token?: string): string {
+  return cliApiUrl(url, token?.startsWith(CLI_SESSION_PREFIX) ? "cli-auth/session" : "cli-keys/auth/verify");
 }
 
 export async function verifyCliAuthentication(options: {
@@ -62,7 +68,7 @@ export async function verifyCliAuthentication(options: {
     throw new Error("Fetch is not available in this runtime.");
   }
 
-  const verifyUrl = buildCliAuthVerifyUrl(options.url);
+  const verifyUrl = buildCliAuthVerifyUrl(options.url, options.token);
   const response = await fetchApi(verifyUrl, {
     method: "GET",
     headers: {

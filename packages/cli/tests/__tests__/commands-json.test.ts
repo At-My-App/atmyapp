@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { contentCommand } from "../../src/cli/commands/content";
 import { helpCommand } from "../../src/cli/commands/help";
+import { hostingCommand } from "../../src/cli/commands/hosting";
 import { useCommand } from "../../src/cli/commands/use";
 import { whoamiCommand } from "../../src/cli/commands/whoami";
 import { EXIT } from "../../src/runtime/errors";
@@ -115,5 +116,31 @@ describe("--json output and exit codes", () => {
     expect(output.data.options.find((option: any) => option.flags === "--view <view>").choices).toEqual(["stored", "delivered", "overlay", "effective"]);
     expect(outputSchemaFor("help")!.parse(output)).toEqual(output);
     expect(output.data.outputSchema).toMatchObject({ oneOf: expect.any(Array) });
+  });
+
+  it("hosting logs --json writes an NDJSON record per line", async () => {
+    process.env.ATMYAPP_CLI_URL = "https://api.test/v0/projects/p1";
+    process.env.ATMYAPP_CLI_KEY = "ama_pk_example";
+    const deployment = { id: "site", name: "Site", build_preset_id: "preset" };
+    globalThis.fetch = jest.fn(async (url) => {
+      if (String(url).endsWith("/logs")) return Response.json({ releaseId: "build", status: "ready", logs: "one\ntwo" });
+      if (String(url).endsWith("/releases/build")) return Response.json({ release: { id: "build", deployment_id: "site", status: "ready" } });
+      return Response.json({ deployments: [deployment] });
+    });
+    let output = "";
+    const write = jest.spyOn(process.stdout, "write").mockImplementation((chunk) => { output += String(chunk); return true; });
+    try { await hostingCommand().parseAsync(["node", "hosting", "logs", "build", "--json"]); }
+    finally { write.mockRestore(); }
+    const records = output.trimEnd().split("\n").map((line) => outputSchemaFor("hosting logs")!.parse(JSON.parse(line)));
+    expect(records).toEqual([
+      { type: "log", releaseId: "build", line: "one" }, { type: "log", releaseId: "build", line: "two" },
+      { type: "status", releaseId: "build", status: "ready" },
+    ]);
+  });
+
+  it("use refuses to copy a browser token into the workspace", async () => {
+    const output = await run(useCommand(), ["--url", "https://api.test", "--token", "ama_cs_" + "a".repeat(64), "--json"]);
+    expect(output).toMatchObject({ ok: false, error: { code: "browser_login_token" } });
+    expect(fs.existsSync(".ama/session.json")).toBe(false);
   });
 });
