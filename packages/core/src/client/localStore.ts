@@ -1,4 +1,4 @@
-import { mergeVariantOverlay } from "@atmyapp/structure";
+import { compileSchema, mergeVariantOverlay, resolveDefinitionForPath, type CompiledSchema, type Definition, type SchemaDocument } from "@atmyapp/structure";
 import { loadNodeBuiltin } from "./nodeBuiltins";
 
 /**
@@ -77,6 +77,7 @@ function nodeModules(): { fs: NodeFs; path: NodePath; url: NodeUrl } | null {
 
 export class LocalStore {
   private readonly manifest: StoreManifest;
+  private readonly schema?: CompiledSchema;
   private readonly space: { dir: string; deletions: Set<string> } | null;
 
   private constructor(
@@ -85,6 +86,11 @@ export class LocalStore {
     spaceName: string | null,
   ) {
     this.manifest = JSON.parse(node.fs.readFileSync(node.path.join(root, "published", "manifest.json"), "utf8"));
+    const schema = this.readJsonFile<SchemaDocument>(node.path.join(root, "published", "schema.json"));
+    if (schema) {
+      try { this.schema = compileSchema(schema); }
+      catch { /* Legacy local snapshots may only provide usable content files. */ }
+    }
     if (spaceName && spaceName !== "published" && /^[a-z0-9-]{1,40}$/.test(spaceName)) {
       const dir = node.path.join(root, spaceName);
       const spaceFile = this.readJsonFile<SpaceFile>(node.path.join(dir, "space.json"));
@@ -145,10 +151,11 @@ export class LocalStore {
     return /json/i.test(record?.mimeType ?? "") || /\.jsonx?$/i.test(storagePath);
   }
 
-  private translate(value: unknown, variantFile: string | null): unknown {
+  private translate(value: unknown, variantFile: string | null, definition?: Definition): unknown {
     const variant = variantFile ? this.readJsonFile<StoredVariant>(variantFile) : null;
     if (!variant) return value;
-    return variant.mode === "replace" ? variant.data : mergeVariantOverlay(value, variant.data);
+    const field = definition && "fields" in definition ? { kind: "object" as const, fields: definition.fields } : undefined;
+    return variant.mode === "replace" ? variant.data : mergeVariantOverlay(value, variant.data, field);
   }
 
   /** Stored asset references → what websites receive; `$file` → a local file URL. */
@@ -180,7 +187,7 @@ export class LocalStore {
     } catch {
       return null;
     }
-    return this.deliver(this.translate(value, this.fileVariant(storagePath, context.locale)), this.node.path.dirname(file));
+    return this.deliver(this.translate(value, this.fileVariant(storagePath, context.locale), this.schema && resolveDefinitionForPath(this.schema, storagePath)?.definition), this.node.path.dirname(file));
   }
 
   readFile(storagePath: string, context: LocalReadContext = {}): string | Buffer | null {
@@ -233,7 +240,7 @@ export class LocalStore {
       const variant = translate ? this.locate([...base, "locales", `${encodeSegment(context.locale!)}.json`], `entry-locale:${collection}:${id}:${context.locale}`) : null;
       entries.push({
         id,
-        data: this.deliver(this.translate(wrapper.data, variant), path.dirname(file!)) as Record<string, unknown>,
+        data: this.deliver(this.translate(wrapper.data, variant, this.schema?.document.definitions[collection]), path.dirname(file!)) as Record<string, unknown>,
         createdAt: wrapper.createdAt,
         updatedAt: wrapper.updatedAt,
       });
