@@ -20,3 +20,4 @@ export * from "./websiteMetadata";
 export * from "./valueValidation";
 export * from "./normalization";
 export * from "./localizedIdentities";
+export * from "./variantMerge";
