@@ -89,6 +89,20 @@ describe("local content store (format 2)", () => {
     expect(store.listCollection("posts").map((entry) => entry.id)).toEqual(["e1", "easter"]);
   });
 
+  it("applies locale and file deletions only inside the chosen space", () => {
+    write(path.join(root, "spring", "space.json"), {
+      version: 1,
+      deletions: ["file-locale:home.json:de", "entry-locale:posts:e1:de", "file:logo.png"],
+    });
+    const store = LocalStore.open({ space: "spring" })!;
+    expect(store.readJson("home.json", { locale: "de" })).toMatchObject({ title: "Hello spring" });
+    expect(store.listCollection("posts", { locale: "de" })[0]?.data.title).toBe("First");
+    expect(store.staticUrl("logo.png")).toBeNull();
+    const published = LocalStore.open({ publishedOnly: true })!;
+    expect(published.readJson("home.json", { locale: "de" })).toMatchObject({ title: "Hallo" });
+    expect(published.staticUrl("logo.png")).toContain("/logo");
+  });
+
   it("finds the active space from ATMYAPP_SPACE or .current", () => {
     process.env.ATMYAPP_SPACE = "spring";
     expect((LocalStore.open()!.readJson("home.json") as any).title).toBe("Hello spring");

@@ -85,7 +85,7 @@ export class LocalStore {
     spaceName: string | null,
   ) {
     this.manifest = JSON.parse(node.fs.readFileSync(node.path.join(root, "published", "manifest.json"), "utf8"));
-    if (spaceName && spaceName !== "published") {
+    if (spaceName && spaceName !== "published" && /^[a-z0-9-]{1,40}$/.test(spaceName)) {
       const dir = node.path.join(root, spaceName);
       const spaceFile = this.readJsonFile<SpaceFile>(node.path.join(dir, "space.json"));
       this.space = node.fs.existsSync(dir) ? { dir, deletions: new Set(spaceFile?.deletions ?? []) } : null;
@@ -168,7 +168,7 @@ export class LocalStore {
 
   private fileVariant(storagePath: string, locale?: string): string | null {
     if (!locale || locale === this.manifest.localization?.defaultLocale) return null;
-    return this.locate(["locales", "f", ...encodePath(storagePath), `${encodeSegment(locale)}.json`], `file:${storagePath}`);
+    return this.locate(["locales", "f", ...encodePath(storagePath), `${encodeSegment(locale)}.json`], `file-locale:${storagePath}:${locale}`);
   }
 
   readJson(storagePath: string, context: LocalReadContext = {}): unknown | null {
@@ -197,6 +197,7 @@ export class LocalStore {
 
   /** A local file URL for downloaded or space files, else the published URL. */
   staticUrl(storagePath: string): string | null {
+    if (this.space?.deletions.has(`file:${storagePath}`)) return null;
     const file = this.locate(["f", ...encodePath(storagePath)], `file:${storagePath}`);
     if (file) return this.node.url.pathToFileURL(file).href;
     return this.manifest.files[storagePath]?.url ?? null;
@@ -229,7 +230,7 @@ export class LocalStore {
       const file = this.locate([...base, "entry.json"], key);
       const wrapper = file ? this.readJsonFile<{ data?: Record<string, unknown>; createdAt?: string; updatedAt?: string }>(file) : null;
       if (!wrapper?.data) continue;
-      const variant = translate ? this.locate([...base, "locales", `${encodeSegment(context.locale!)}.json`], key) : null;
+      const variant = translate ? this.locate([...base, "locales", `${encodeSegment(context.locale!)}.json`], `entry-locale:${collection}:${id}:${context.locale}`) : null;
       entries.push({
         id,
         data: this.deliver(this.translate(wrapper.data, variant), path.dirname(file!)) as Record<string, unknown>,
