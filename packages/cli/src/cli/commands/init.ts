@@ -6,12 +6,8 @@ import {
   type CanonicalSchemaTemplateName,
   initializeCanonicalSchema,
 } from "../utils/canonical-schema";
-import {
-  createProjectApiKey,
-  listProjectEnvironments,
-  resolveSession,
-  type ProjectEnvironment,
-} from "../utils/http";
+import { resolveSession } from "../utils/http";
+import { ensureStoreIgnored } from "../../runtime/store";
 
 interface InitCommandOptions {
   path?: string;
@@ -23,117 +19,42 @@ interface InitCommandOptions {
   projectId?: string;
 }
 
-function askQuestion(query: string): Promise<string> {
-  return new Promise((resolve) => {
-    const rl = require("readline").createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    rl.question(query, (answer: string) => {
-      rl.close();
-      resolve(answer);
-    });
-  });
-}
-
-async function askYesNo(query: string): Promise<boolean> {
-  const answer = (await askQuestion(query)).trim().toLowerCase();
-  return answer === "y" || answer === "yes";
-}
-
-function selectDefaultEnvironment(
-  environments: ProjectEnvironment[],
-): ProjectEnvironment | undefined {
-  const preferredNames = ["production", "prod", "main", "default"];
-
-  for (const name of preferredNames) {
-    const match = environments.find(
-      (environment) => environment.name.toLowerCase() === name,
-    );
-    if (match) {
-      return match;
-    }
-  }
-
-  return [...environments].sort((left, right) => left.id - right.id)[0];
-}
-
 function supportsClientTemplate(template: CanonicalSchemaTemplateName): boolean {
   return template === "minimal" || template === "blog";
 }
 
-function getDefaultApiKeyName(template: CanonicalSchemaTemplateName): string {
-  switch (template) {
-    case "blog":
-      return "Blog Template Key";
-    case "minimal":
-      return "Minimal Template Key";
-    default:
-      return "AtMyApp API Key";
-  }
-}
-
-async function maybeCreateApiKey(
+/**
+ * Websites need a content API key. A CLI key may not create one (keys are
+ * created by a person in the dashboard), so `init` says where to get it.
+ */
+function printApiKeyHint(
   logger: Logger,
   options: InitCommandOptions,
   template: CanonicalSchemaTemplateName,
-): Promise<void> {
+): void {
   if (!supportsClientTemplate(template)) {
     return;
   }
 
-  let session;
+  let contentApiUrl: string | null = null;
   try {
-    session = resolveSession({
+    const session = resolveSession({
       token: options.token,
       url: options.url,
       projectId: options.projectId,
     });
+    contentApiUrl = getContentApiUrl(session.url, session.projectId);
   } catch {
-    logger.info(
-      "Skipping API key creation. Run `atmyapp use` first or pass --url, --token, and --project-id to enable it.",
-    );
-    return;
+    contentApiUrl = null;
   }
 
-  const shouldCreateKey = await askYesNo(
-    "Create a new project API key for this template now? [y/N]: ",
+  logger.info(
+    "Your website reads content with an API key. Create one in Settings → API keys, then add these lines to your env file:",
   );
-  if (!shouldCreateKey) {
-    return;
-  }
-
-  const environments = await listProjectEnvironments(session);
-  const environment = selectDefaultEnvironment(environments);
-
-  if (!environment) {
-    logger.warn(
-      "No environments were found for this project, so no API key was created.",
-    );
-    return;
-  }
-
-  const defaultName = getDefaultApiKeyName(template);
-  const providedName = (
-    await askQuestion(`API key name (${defaultName}): `)
-  ).trim();
-  const apiKeyName = providedName || defaultName;
-
-  const apiKey = await createProjectApiKey({
-    ...session,
-    name: apiKeyName,
-    environmentId: environment.id,
-  });
-
-  logger.success(
-    `Created API key "${apiKey.name}" for environment "${environment.name}".`,
-  );
-  const contentApiUrl = getContentApiUrl(session.url, session.projectId);
-  logger.info("Copy these lines into your env file:");
   console.log(
     `ATMYAPP_API_URL=${contentApiUrl ?? "<Project API URL from Settings → API keys>"}`,
   );
-  console.log(`ATMYAPP_API_KEY=${apiKey.id}`);
+  console.log("ATMYAPP_API_KEY=<API key from Settings → API keys>");
 }
 
 /**
@@ -188,13 +109,8 @@ export function initCommand(): Command {
           logger.info(`Client ready at ${result.clientPath}.`);
         }
 
-        try {
-          await maybeCreateApiKey(logger, options, result.template);
-        } catch (error: unknown) {
-          const message =
-            error instanceof Error ? error.message : "Unknown error";
-          logger.warn(`Template files were created, but API key creation failed: ${message}`);
-        }
+        printApiKeyHint(logger, options, result.template);
+        ensureStoreIgnored();
 
         logger.info("Next step: run `atmyapp migrate --dry-run --verbose`.");
       } catch (error: unknown) {

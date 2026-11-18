@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { createRequire } from "module";
 import path from "path";
 import ts from "typescript";
+import { CLI_ENV } from "../../runtime/session";
 
 export interface AmaConfig {
   token?: string;
@@ -116,17 +117,30 @@ export function loadProjectConfig(
   }
 }
 
+/** ATMYAPP_CLI_URL / ATMYAPP_CLI_KEY / ATMYAPP_PROJECT_ID, when set. */
+function environmentSession(env: NodeJS.ProcessEnv = process.env): AmaConfig {
+  const config: AmaConfig = {};
+  if (env[CLI_ENV.url]?.trim()) config.url = env[CLI_ENV.url]!.trim();
+  if (env[CLI_ENV.token]?.trim()) config.token = env[CLI_ENV.token]!.trim();
+  if (env[CLI_ENV.projectId]?.trim()) config.projectId = env[CLI_ENV.projectId]!.trim();
+  return config;
+}
+
 export function getMigrateConfig(
   cwd: string = process.cwd(),
   options: MigrateConfigOptions = {},
 ): AmaConfig {
   const { configPath } = getSessionPaths(cwd);
+  const fromEnv = environmentSession();
+  const envComplete = Boolean(fromEnv.url && fromEnv.token);
   const sessionConfig =
-    options.allowMissingSession && !existsSync(configPath) ? {} : getConfig(cwd);
+    (options.allowMissingSession || envComplete) && !existsSync(configPath) ? {} : getConfig(cwd);
   const projectConfig = loadProjectConfig(cwd);
 
   return {
     ...sessionConfig,
+    // Environment variables win over the session file (CI, agents).
+    ...fromEnv,
     description: projectConfig.description ?? sessionConfig.description,
     args: mergeObjects(sessionConfig.args, projectConfig.args),
     metadata: mergeObjects(sessionConfig.metadata, projectConfig.metadata),

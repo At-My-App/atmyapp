@@ -62,13 +62,20 @@ interface LatestSnapshotResponse {
 }
 
 const DEFAULT_OUTPUT_PATH = ".ama/local";
-const API_BASE = "https://ama-core.maciekgamro.workers.dev";
-
 /**
- * Get the work-container API URL for snapshot operations
+ * The work-container API URL for snapshot operations, on the same host as the
+ * session's project URL (`…/v0/work-container/projects/<id>/<endpoint>`).
  */
-function getSnapshotApiUrl(projectId: string, endpoint: string): string {
-  return `${API_BASE}/v0/work-container/projects/${projectId}/${endpoint}`;
+export function getSnapshotApiUrl(sessionUrl: string, projectId: string, endpoint: string): string {
+  const parsed = new URL(sessionUrl.replace(/\/+$/, ""));
+  const segments = parsed.pathname.split("/").filter(Boolean);
+  const projectIndex = segments.indexOf("projects");
+  const base = projectIndex === -1 ? segments : segments.slice(0, projectIndex);
+  const prefix = base[base.length - 1] === "v0" ? base : [...base, "v0"];
+  parsed.pathname = `/${[...prefix, "work-container", "projects", encodeURIComponent(projectId), endpoint].join("/")}`;
+  parsed.search = "";
+  parsed.hash = "";
+  return parsed.toString();
 }
 
 /**
@@ -79,7 +86,7 @@ async function createSnapshot(
   options: SnapshotCommandOptions,
   logger: Logger
 ): Promise<SnapshotResponse> {
-  const url = getSnapshotApiUrl(session.projectId, "snapshot");
+  const url = getSnapshotApiUrl(session.url, session.projectId, "snapshot");
 
   logger.info(`Creating snapshot for project ${session.projectId}...`);
   logger.verbose_log(`POST ${url}`);
@@ -115,7 +122,7 @@ async function getLatestSnapshot(
   logger: Logger
 ): Promise<LatestSnapshotResponse> {
   const branch = options.branch ?? "main";
-  const url = `${getSnapshotApiUrl(session.projectId, "latest-snapshot")}?branch=${branch}`;
+  const url = `${getSnapshotApiUrl(session.url, session.projectId, "latest-snapshot")}?branch=${encodeURIComponent(branch)}`;
 
   logger.verbose_log(`GET ${url}`);
 
@@ -221,9 +228,12 @@ function formatBytes(bytes: number): string {
 }
 
 export function snapshotCommand(): Command {
-  const command = new Command("snapshot").description(
-    "Manage storage snapshots for local fallback"
-  );
+  const command = new Command("snapshot")
+    .description("Manage storage snapshots for local fallback (.ama/local)")
+    .addHelpText(
+      "after",
+      "\n'atmyapp content pull' keeps a newer local copy in .ama/content: it updates only what changed, includes translations, and is read by the SDK's local and with-fallback modes."
+    );
 
   // Subcommand: create
   command

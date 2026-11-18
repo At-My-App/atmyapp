@@ -1,127 +1,104 @@
 import { Command } from "commander";
-import { Logger } from "../logger";
-import { setConfig } from "../utils/config";
-import {
-  detectProjectIdFromUrl,
-  verifyCliAuthentication,
-} from "../utils/http";
 import * as fs from "fs";
 import * as path from "path";
+import { CliError, EXIT } from "../../runtime/errors";
+import { CLI_ENV, detectProjectIdFromUrl } from "../../runtime/session";
+import { ensureStoreIgnored } from "../../runtime/store";
+import { requireTerminal, runAction } from "../output";
+import { setConfig } from "../utils/config";
+import { verifyCliAuthentication } from "../utils/http";
 
 interface UseCommandOptions {
   token?: string;
   url?: string;
   projectId?: string;
   verbose?: boolean;
+  json?: boolean;
+}
+
+function ask(query: string): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = require("readline").createInterface({ input: process.stdin, output: process.stderr });
+    rl.question(query, (answer: string) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
+
+async function value(given: string | undefined, envName: string, question: string, flag: string, label: string): Promise<string> {
+  const provided = given?.trim() || process.env[envName]?.trim();
+  if (provided) return provided;
+  requireTerminal(`The ${label} is required.`, `${flag} (or set ${envName})`);
+  return (await ask(question)).trim();
+}
+
+function ignoreSessionFile(cwd: string) {
+  const gitignorePath = path.join(cwd, ".gitignore");
+  const entry = "\n# AtMyApp configuration\n.ama/session.json\n";
+  if (!fs.existsSync(gitignorePath)) fs.writeFileSync(gitignorePath, entry);
+  else if (!fs.readFileSync(gitignorePath, "utf8").includes(".ama/session.json")) fs.appendFileSync(gitignorePath, entry);
 }
 
 export function useCommand(): Command {
   return new Command("use")
-    .description("Set authentication token for an AtMyApp project")
-    .option("-t, --token <token>", "Authentication token")
-    .option("-u, --url <url>", "Project base URL")
+    .description("Connect this folder to an AtMyApp project with a CLI key")
+    .option("-t, --token <token>", `CLI key (or ${CLI_ENV.token})`)
+    .option("-u, --url <url>", `Project CLI URL (or ${CLI_ENV.url})`)
     .option("-p, --project-id <id>", "Project identifier override")
+    .option("--json", "Print the result as JSON", false)
     .option("--verbose", "Enable verbose logging")
-    .action(async (options: UseCommandOptions) => {
-      const logger = new Logger(Boolean(options.verbose));
+    .addHelpText(
+      "after",
+      `\nIn CI or agent shells you can skip 'use': set ${CLI_ENV.url} and ${CLI_ENV.token} and every command reads them.`,
+    )
+    .action((options: UseCommandOptions) =>
+      runAction(
+        options,
+        async ({ logger }) => {
+          const projectUrl = await value(options.url, CLI_ENV.url, "Enter the project URL: ", "--url", "project URL");
+          const authToken = await value(options.token, CLI_ENV.token, "Enter the CLI key: ", "--token", "CLI key");
+          if (!projectUrl) throw new CliError("missing_url", "Project URL is required.", { exitCode: EXIT.usage });
+          if (!authToken) throw new CliError("missing_token", "CLI key is required.", { exitCode: EXIT.usage });
 
-      const rlQuestion = (query: string): Promise<string> => {
-        return new Promise((resolve) => {
-          const rl = require("readline").createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-          rl.question(query, (answer: string) => {
-            rl.close();
-            resolve(answer);
-          });
-        });
-      };
-
-      try {
-        // Prompt user for URL and token if not provided
-        const projectUrl = (
-          options.url || (await rlQuestion("Enter the project URL: "))
-        ).trim();
-        const authToken = (
-          options.token ||
-          (await rlQuestion("Enter the authentication token: "))
-        ).trim();
-
-        if (!projectUrl) {
-          throw new Error("Project URL is required.");
-        }
-
-        if (!authToken) {
-          throw new Error("Authentication token is required.");
-        }
-
-        logger.info("Verifying CLI authentication...");
-
-        const verifiedAuth = await verifyCliAuthentication({
-          url: projectUrl,
-          token: authToken,
-        });
-
-        const detectedProjectId = detectProjectIdFromUrl(projectUrl);
-        const requestedProjectId = options.projectId || detectedProjectId;
-
-        if (
-          requestedProjectId &&
-          requestedProjectId !== verifiedAuth.projectId
-        ) {
-          throw new Error(
-            `CLI key belongs to project '${verifiedAuth.projectId}', but '${requestedProjectId}' was provided in the URL or --project-id option.`
-          );
-        }
-
-        const projectId = verifiedAuth.projectId;
-
-        // Create .ama directory if it doesn't exist
-        const amaDir = path.join(process.cwd(), ".ama");
-        if (!fs.existsSync(amaDir)) {
-          fs.mkdirSync(amaDir, { recursive: true });
-          logger.verbose_log(`Created directory ${amaDir}.`);
-        }
-
-        // Add .gitignore if it doesn't exist or update it
-        const gitignorePath = path.join(process.cwd(), ".gitignore");
-        const gitignoreEntry = "\n# AtMyApp configuration\n.ama/session.json\n";
-
-        if (!fs.existsSync(gitignorePath)) {
-          fs.writeFileSync(gitignorePath, gitignoreEntry);
-          logger.verbose_log(`Created ${gitignorePath} with AtMyApp ignore rules.`);
-        } else {
-          const currentContent = fs.readFileSync(gitignorePath, "utf8");
-          if (!currentContent.includes(".ama/session.json")) {
-            fs.appendFileSync(gitignorePath, gitignoreEntry);
-            logger.verbose_log(`Updated ${gitignorePath} with AtMyApp ignore rules.`);
+          logger.info("Verifying CLI authentication...");
+          let verified: Awaited<ReturnType<typeof verifyCliAuthentication>>;
+          try {
+            verified = await verifyCliAuthentication({ url: projectUrl, token: authToken });
+          } catch (error) {
+            throw new CliError("unauthenticated", error instanceof Error ? error.message : String(error), {
+              exitCode: EXIT.auth,
+              fix: "Copy a current key from Settings → CLI keys.",
+            });
           }
-        }
 
-        const configData = { token: authToken, projectId, url: projectUrl };
-        setConfig(configData);
+          const requested = options.projectId || detectProjectIdFromUrl(projectUrl);
+          if (requested && requested !== verified.projectId) {
+            throw new CliError(
+              "project_mismatch",
+              `CLI key belongs to project '${verified.projectId}', but '${requested}' was provided in the URL or --project-id option.`,
+              { exitCode: EXIT.auth },
+            );
+          }
 
-        // Save session data to .ama/session.json
-        fs.writeFileSync(
-          path.join(amaDir, "session.json"),
-          JSON.stringify(configData, null, 2)
-        );
-
-        logger.success(
-          `CLI authentication verified for project '${projectId}' (${verifiedAuth.keyName}).`
-        );
-        logger.success("Authentication details saved for the project.");
-        logger.info(`Session file stored at ${path.join(amaDir, "session.json")}.`);
-        logger.warn(
-          "Keep your .ama/session.json file private and exclude it from version control."
-        );
-        logger.info("Session file has been added to the project .gitignore file.");
-      } catch (error: unknown) {
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
-        logger.error(`Configuration update failed: ${message}`, error);
-        process.exit(1);
-      }
-    });
+          const cwd = process.cwd();
+          fs.mkdirSync(path.join(cwd, ".ama"), { recursive: true });
+          ignoreSessionFile(cwd);
+          ensureStoreIgnored(cwd);
+          const configData = { token: authToken, projectId: verified.projectId, url: projectUrl };
+          setConfig(configData);
+          return {
+            projectId: verified.projectId,
+            keyName: verified.keyName,
+            url: projectUrl,
+            sessionFile: path.join(cwd, ".ama", "session.json"),
+          };
+        },
+        (result, { logger }) => {
+          logger.success(`CLI authentication verified for project '${result.projectId}' (${result.keyName}).`);
+          logger.info(`Session file stored at ${result.sessionFile} (added to .gitignore).`);
+          logger.warn("Keep your .ama/session.json file private and exclude it from version control.");
+        },
+      ),
+    );
 }

@@ -31,6 +31,7 @@ import {
   type UploadStructureClearRequest,
 } from "../../runtime";
 import type { OutputDefinition } from "../types/migrate";
+import { EXIT } from "../../runtime/errors";
 
 type MigrateCommandOptions = MigrateOptions & {
   clearCollection?: string[];
@@ -324,7 +325,7 @@ export function migrateCommand(): Command {
           if (options.json)
             printJson(error.result ?? { status: "failed", error: error.message });
           logger.error(error.message);
-          process.exit(1);
+          process.exit(migrationExitCode(error.result?.status));
         }
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
         const message =
@@ -472,6 +473,20 @@ export function migrateStatusCommand(): Command {
         }
       },
     );
+}
+
+/** Exit codes agents can branch on (runtime/errors.ts EXIT). */
+export function migrationExitCode(status: unknown): number {
+  switch (status) {
+    case "confirmation-required":
+      return EXIT.confirmation;
+    case "blocked":
+      return EXIT.validation;
+    case "stale":
+      return EXIT.conflict;
+    default:
+      return EXIT.error;
+  }
 }
 
 /** The only stdout output in --json mode. */

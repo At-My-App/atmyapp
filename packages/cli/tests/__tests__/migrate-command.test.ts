@@ -150,7 +150,7 @@ describe("migrate command", () => {
     );
     await run();
     expect(applyRemoteMigration).not.toHaveBeenCalled();
-    expect(exit).toHaveBeenCalledWith(1);
+    expect(exit).toHaveBeenCalledWith(6);
   });
 
   it("applies declared operations with --yes", async () => {
@@ -192,7 +192,7 @@ describe("migrate command", () => {
     await run();
     expect(logMigrationConflictGuidance).toHaveBeenCalled();
     expect(applyRemoteMigration).not.toHaveBeenCalled();
-    expect(exit).toHaveBeenCalledWith(1);
+    expect(exit).toHaveBeenCalledWith(4);
   });
 
   it("plans again with suggested clears when the dangerous flag is set", async () => {

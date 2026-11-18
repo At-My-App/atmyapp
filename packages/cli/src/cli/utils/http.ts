@@ -7,6 +7,9 @@ export type {
   VerifiedCliAuth,
   VerifyCliAuthResponseBody,
 } from "../../runtime/auth";
+import { existsSync } from "fs";
+import { join } from "path";
+import { resolveCredentials } from "../../runtime/session";
 import { getConfig, type AmaConfig } from "./config";
 
 export interface AmaSession {
@@ -58,46 +61,19 @@ interface ApiResponseBody<T> {
   error: string;
 }
 
+/**
+ * Credentials for older commands: overrides (flags), then the ATMYAPP_CLI_*
+ * environment variables, then .ama/session.json (runtime/session.ts).
+ */
 export function resolveSession(overrides: SessionOverrides = {}): AmaSession {
-  let config: AmaConfig = {};
-
+  let sessionFile: AmaConfig | null = null;
   try {
-    config = getConfig();
-  } catch (error) {
-    if (!overrides.token && !overrides.url && !overrides.projectId) {
-      throw new Error(
-        "AtMyApp session not configured. Run 'atmyapp use' first or supply --url, --token, and --project-id options."
-      );
-    }
+    sessionFile = existsSync(join(process.cwd(), ".ama", "session.json")) ? getConfig() : null;
+  } catch {
+    sessionFile = null;
   }
-
-  const token = overrides.token ?? config.token;
-  const projectId = overrides.projectId ?? config.projectId;
-  const url = overrides.url ?? config.url;
-
-  if (!token) {
-    throw new Error(
-      "Authentication token is missing. Run 'atmyapp use' or provide it with --token."
-    );
-  }
-
-  if (!url) {
-    throw new Error(
-      "Project URL is missing. Run 'atmyapp use' or provide it with --url."
-    );
-  }
-
-  if (!projectId) {
-    throw new Error(
-      "Project ID is missing. Ensure the URL contains /projects/{id} or pass --project-id."
-    );
-  }
-
-  return {
-    token,
-    projectId,
-    url: stripTrailingSlashes(url),
-  };
+  const resolved = resolveCredentials({ flags: overrides, env: process.env, sessionFile });
+  return { token: resolved.token, projectId: resolved.projectId, url: resolved.url };
 }
 
 export function createAmaFetch(session: AmaSession) {
@@ -143,10 +119,7 @@ export function buildProjectApiUrl(
   return parsedUrl.toString();
 }
 
-export function detectProjectIdFromUrl(url: string): string | undefined {
-  const match = url.match(/\/projects\/([^/?#]+)/i);
-  return match?.[1];
-}
+export { detectProjectIdFromUrl } from "../../runtime/session";
 
 export function projectUrl(
   session: AmaSession,
