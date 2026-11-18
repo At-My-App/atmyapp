@@ -488,6 +488,36 @@ describe("content pull and the local copy", () => {
     expect(await pullContent(api, {}, cwd)).toMatchObject({ mode: "up-to-date", baseCommit: "c2" });
   });
 
+  it("recovers the published copy after interruption between directory renames", async () => {
+    const api = client(new FakeProject());
+    const store = new ContentStore(cwd);
+    await pullContent(api, {}, cwd);
+    fs.renameSync(store.spaceDir(), store.spaceDir("published.old"));
+    expect(await pullContent(api, {}, cwd)).toMatchObject({ mode: "up-to-date", baseCommit: "c1" });
+    expect(fs.existsSync(store.filePath("home.json"))).toBe(true);
+  });
+
+  it("keeps the last complete published copy after a failed incremental pull", async () => {
+    const project = new FakeProject();
+    const api = client(project);
+    await pullContent(api, {}, cwd);
+    const store = new ContentStore(cwd);
+    const before = store.readManifest();
+    const entry = fs.readFileSync(store.entryPath("posts", "e1"));
+    project.head = "c2";
+    project.diffs["c1..c2"] = { changes: [
+      { key: "entry:posts:e1", kind: "entry", change: "deleted", label: "e1", path: "" },
+      { key: "file:home.json", kind: "file", change: "modified", label: "home.json", path: "" },
+    ] };
+    project.extra.push((url) => url.pathname.endsWith("/storage/f/home.json") ? json({ error: "offline" }, 503) : undefined);
+    await expect(pullContent(api, {}, cwd)).rejects.toThrow();
+    expect(store.readManifest()).toEqual(before);
+    expect(fs.readFileSync(store.entryPath("posts", "e1"))).toEqual(entry);
+    project.extra = [];
+    expect(await pullContent(api, {}, cwd)).toMatchObject({ mode: "incremental", baseCommit: "c2" });
+    expect(fs.existsSync(store.entryPath("posts", "e1"))).toBe(false);
+  });
+
   it("falls back to a full pull when the diff is truncated or the schema changed", async () => {
     const project = new FakeProject();
     const api = client(project);

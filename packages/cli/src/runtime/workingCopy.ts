@@ -360,6 +360,7 @@ export async function editLocalContent(input: {
   remove?: boolean;
   edit?: (previous: unknown) => unknown;
   replaceData?: boolean;
+  existence?: "new" | "existing";
   placement?: { field: string } & Placement;
 }) {
   const { work } = input;
@@ -369,6 +370,11 @@ export async function editLocalContent(input: {
   const action = (space: SpaceFile) => {
     const existing = readBytes(file);
     const published = work.published(ref);
+    const exists = !!existing || published.fingerprint !== null || !!space.items[key]?.staged;
+    if (input.existence === "new" && exists)
+      throw new CliError("entry_exists", `${formatRef(ref)} already exists.`, { exitCode: EXIT.conflict });
+    if (input.existence === "existing" && !exists)
+      throw new CliError("not_found", `${formatRef(ref)} is not in this working copy.`, { exitCode: EXIT.usage });
     if (!input.remove && existing && !input.edit && !input.placement && !space.deletions.includes(key))
       return { ref: formatRef(ref), file, dryRun: !!input.dryRun, changed: false };
     const item = recordWorkItem(space, work, ref);
@@ -393,7 +399,10 @@ export async function editLocalContent(input: {
       if (value === undefined) remove();
       else if (!input.dryRun) {
         space.deletions = space.deletions.filter((deleted) => deleted !== key);
-        if (input.replaceData !== undefined) item.replaceData = input.replaceData;
+        if (ref.kind === "entry" && input.edit && !ref.locale) {
+          // A later merge must preserve fields removed by a replacement or JSON Patch.
+          item.replaceData = item.replaceData || (input.replaceData ?? true);
+        } else if (input.replaceData !== undefined) item.replaceData = input.replaceData;
         if (input.placement) item.placement = input.placement;
         const publishedFile = work.filename(ref, work.store.published);
         const publishedBytes = readBytes(publishedFile);

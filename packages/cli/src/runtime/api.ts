@@ -183,6 +183,11 @@ export class ApiClient {
     return projectApiUrl(this.session.url, this.session.projectId, subPath, query);
   }
 
+  get projectBase(): string {
+    const { origin, pathname } = new URL(this.url(""));
+    return origin + pathname;
+  }
+
   private headers(json: boolean): Record<string, string> {
     return {
       Authorization: `Bearer ${this.session.token}`,

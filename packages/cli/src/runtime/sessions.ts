@@ -112,7 +112,8 @@ const route = (id?: string) => "staging/named" + (id ? "/" + encodeURIComponent(
 const scope = (id: string) => ({ kind: "named", branch: "main", sessionId: id });
 
 export function assertProject(api: ApiClient, work: WorkingCopy) {
-  if (api.session.projectId !== work.manifest.projectId)
+  if (api.session.projectId !== work.manifest.projectId ||
+      (work.manifest.projectBase && work.manifest.projectBase !== api.projectBase))
     throw new CliError("project_mismatch", "This working copy belongs to another project.", { exitCode: EXIT.auth });
 }
 
@@ -436,7 +437,6 @@ export async function push(work: WorkingCopy, api: ApiClient | undefined, option
         }),
       );
       space.session = { sessionId: session.sessionId, createdAt: session.createdAt };
-      space.lastPushOperationId = operationId;
       journal = {
         sessionId: session.sessionId,
         operationId,
@@ -492,6 +492,8 @@ export async function push(work: WorkingCopy, api: ApiClient | undefined, option
       }
       throw error;
     }
+    space.lastPushOperationId = journal.operationId;
+    writeSpace(work.store, space);
     work.store.remove(journalFile(work));
     const items = journal.batches
       .flat()
@@ -517,7 +519,7 @@ export async function stageStatus(work: WorkingCopy, api?: ApiClient) {
     space: work.name,
     session,
     link: space.session,
-    operationId: space.lastPushOperationId,
+    operationId: readJournal(work)?.operationId ?? space.lastPushOperationId,
     items: work.itemStates(space).map(workSummary),
   };
 }
@@ -643,16 +645,26 @@ function editableRef(work: WorkingCopy, item: DraftItem): SpaceRef | undefined {
 export async function pullSession(api: ApiClient, work: WorkingCopy, dryRun = false) {
   assertProject(api, work);
   const action = async (space: SpaceFile) => {
+    const journal = readJournal(work);
+    if (journal)
+      throw new CliError("pending_push", "Finish the pending push before pulling reviewer edits.", {
+        exitCode: EXIT.conflict,
+        fix: `Run 'atmyapp stage push --operation-id ${journal.operationId}'.`,
+      });
     const draft = await getNamedSession(api, requireLink(space));
     if (draft.status !== "active")
       throw sessionError("session_expired", "This draft has ended. Pull the published copy.");
+    if (!draft.items) throw new CliError("invalid_response", "The server did not return the draft items.");
     const local = new Map(work.itemStates(space).map((item) => [item.key, item]));
+    const remoteKeys = new Set<string>();
     const results = [];
-    for (const item of draft.items ?? []) {
+    for (const item of draft.items) {
       const ref = editableRef(work, item);
       if (!ref) continue;
       const key = itemKey(ref);
+      remoteKeys.add(key);
       const current = local.get(key);
+      if (current?.staged?.itemRevision === item.itemRevision) continue;
       if (current?.sha256 && current.state !== "published" && current.sha256 !== current.staged?.sha256)
         throw new CliError("conflict", `Local edits to ${formatRef(ref)} would be overwritten.`, {
           exitCode: EXIT.conflict,
@@ -671,12 +683,21 @@ export async function pullSession(api: ApiClient, work: WorkingCopy, dryRun = fa
             representation: "value",
           },
         });
-        const text = Buffer.from(bytes?.bytes ?? []).toString("utf8");
+        if (!bytes) throw new CliError("invalid_response", `Missing draft value for ${formatRef(ref)}.`);
+        const text = Buffer.from(bytes.bytes).toString("utf8");
         value = /json/i.test(work.mime(ref)) ? JSON.parse(text) : text;
       }
       results.push({ ref, item, value });
     }
     if (!dryRun) {
+      const latest = new Map(work.itemStates(space).map((item) => [item.key, item]));
+      for (const { ref } of results) {
+        const key = itemKey(ref);
+        if (latest.get(key)?.sha256 !== local.get(key)?.sha256)
+          throw new CliError("conflict", `Local edits to ${formatRef(ref)} changed during the pull.`, {
+            exitCode: EXIT.conflict,
+          });
+      }
       for (const { ref, item, value } of results) {
         const key = itemKey(ref);
         const entry = recordWorkItem(space, work, ref);
@@ -692,9 +713,16 @@ export async function pullSession(api: ApiClient, work: WorkingCopy, dryRun = fa
         }
         entry.staged = { itemRevision: item.itemRevision, sha256, at: new Date().toISOString() };
       }
-      const currentKeys = new Set(results.map(({ ref }) => itemKey(ref)));
       for (const [key, entry] of Object.entries(space.items)) {
-        if (!currentKeys.has(key)) delete entry.staged;
+        if (!entry.staged || remoteKeys.has(key)) continue;
+        const current = latest.get(key);
+        if (current && current.sha256 === entry.staged.sha256) {
+          work.store.remove(current.file);
+          space.deletions = space.deletions.filter((deleted) => deleted !== key);
+          delete space.items[key];
+        } else {
+          delete entry.staged;
+        }
       }
       writeSpace(work.store, space);
     }
@@ -707,31 +735,31 @@ export async function pullSession(api: ApiClient, work: WorkingCopy, dryRun = fa
 export async function reconcilePublishedSpaces(api: ApiClient, store: ContentStore) {
   for (const name of spaceNames(store)) {
     const loaded = readSpace(store, name);
-    if (!loaded.session || !Object.values(loaded.items).some((item) => item.staged)) continue;
+    if (!loaded.session) continue;
     await withSpace(store, name, async (space) => {
       const work = new WorkingCopy(store, name);
       assertProject(api, work);
       if (!space.session) return;
       let published = false;
       try {
-        published = (await getNamedSession(api, space.session.sessionId)).status === "committed";
+        const draft = await getNamedSession(api, space.session.sessionId);
+        if (draft.status === "active") return;
+        published = draft.status === "committed";
       } catch (error) {
-        if (!(
-          error instanceof CliError &&
-          ["session_expired", "not_found", "missing_scope", "forbidden", "network", "server_error"].includes(error.code)
-        ))
-          throw error;
+        if (!(error instanceof CliError)) throw error;
+        if (["missing_scope", "forbidden", "network", "server_error"].includes(error.code)) return;
+        if (!["session_expired", "not_found"].includes(error.code)) throw error;
       }
       let changed = false;
       for (const item of work.itemStates(space)) {
         if (!item.staged || item.sha256 !== item.staged.sha256) continue;
-        const converged = item.deleted
+        const converged = published || (item.deleted
           ? item.published.fingerprint === null
           : !item.placement &&
             !item.ref.locale &&
             contentFingerprint(item.ref.kind === "entry" ? "entry" : "file", work.value(item)) ===
-              item.published.fingerprint;
-        if (!published && !converged) continue;
+              item.published.fingerprint);
+        if (!converged) continue;
         work.store.remove(item.file);
         space.deletions = space.deletions.filter((key) => key !== item.key);
         delete space.items[item.key];

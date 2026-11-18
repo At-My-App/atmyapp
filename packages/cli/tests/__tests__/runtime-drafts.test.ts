@@ -4,7 +4,9 @@ import * as path from "node:path";
 import { assertDraftValid, compileDraft, INLINE_LIMIT, serverItemKey, stageBatches } from "../../src/runtime/compile";
 import { editEntry, moveEntry } from "../../src/runtime/entryDrafts";
 import { EXIT } from "../../src/runtime/errors";
-import { sha256Hex } from "../../src/runtime/fingerprint";
+import { ApiClient } from "../../src/runtime/api";
+import { pullContent } from "../../src/runtime/pull";
+import { contentFingerprint, sha256Hex } from "../../src/runtime/fingerprint";
 import { applyJsonPatch } from "../../src/runtime/jsonPatch";
 import {
   discardStage,
@@ -133,7 +135,8 @@ test("resumes an accepted push with stable IDs, previews, imports reviewer edits
   api.interrupt = true;
   await expect(push(work, api.client, { operationId: "cli-retry" })).rejects.toMatchObject({ code: "network" });
   const saved = readSpace(store, "release");
-  expect(saved.lastPushOperationId).toBe("cli-retry");
+  expect((await stageStatus(work)).operationId).toBe("cli-retry");
+  await expect(pullSession(api.client, work)).rejects.toMatchObject({ code: "pending_push" });
   const entryId = Object.values(saved.items).find((item) => item.newFile)?.ref?.entryId;
   expect(entryId).toMatch(/^[0-9a-f-]{36}$/);
   expect(fs.existsSync(newFile)).toBe(true);
@@ -236,4 +239,92 @@ test("JSON Patch supports escaped paths, arrays, copying and moving atomically",
     "test did not match",
   );
   expect(source).toEqual({ "": "empty", "x/y": [1, 2], copy: {} });
+});
+
+test.each([true, false])("protects draft spaces when switching projects (full=%s)", async (full) => {
+  const { work, store, manifest } = draftFixture(cwd);
+  const fetch = jest.fn();
+  const original = new FakeDraftApi().client;
+  manifest.projectBase = original.projectBase;
+  store.writeManifest(manifest);
+  const { file } = await editLocalContent({ work, ref: "doc:about", edit: () => ({ title: "Keep this draft" }) });
+  for (const session of [
+    { ...original.session, projectId: "other-project" },
+    { ...original.session, url: "https://another.example.test" },
+  ]) {
+    const other = new ApiClient(session, { fetch });
+    await expect(pullContent(other, { full }, cwd)).rejects.toMatchObject({ code: "project_mismatch" });
+    await expect(push(new WorkingCopy(store, "release"), other)).rejects.toMatchObject({ code: "project_mismatch" });
+  }
+  expect(fetch).not.toHaveBeenCalled();
+  expect(store.readManifest()).toEqual(manifest);
+  expect(fs.readFileSync(file, "utf8")).toContain("Keep this draft");
+});
+
+test("preserves receipts when an active draft matches published content or cannot be read", async () => {
+  const { work, store, manifest } = draftFixture(cwd);
+  const api = new FakeDraftApi();
+  const data = { title: "Matching draft" };
+  await editLocalContent({ work, ref: "doc:about", edit: () => data });
+  await push(work, api.client);
+  manifest.files["about.json"].fingerprint = contentFingerprint("file", data);
+  store.writeManifest(manifest);
+  const original = readSpace(store, "release");
+  await reconcilePublishedSpaces(api.client, store);
+  expect(readSpace(store, "release")).toEqual(original);
+  jest.spyOn(api, "request").mockRejectedValueOnce(new TypeError("offline"));
+  await reconcilePublishedSpaces(api.client, store);
+  expect(readSpace(store, "release")).toEqual(original);
+});
+
+test("imports reviewer removals without resurrecting them and preserves later edits", async () => {
+  const { work } = draftFixture(cwd);
+  const api = new FakeDraftApi();
+  await editLocalContent({ work, ref: "doc:about", remove: true });
+  await editLocalContent({ work, ref: "file:notes.txt", edit: () => "Initial notes" });
+  await editEntry({ work, collection: "posts", entryId: "first", data: { title: "First edit" } });
+  await push(work, api.client);
+  const first = api.items.get("entry|5:posts|5:first|-")!;
+  await editEntry({ work, collection: "posts", entryId: "first", data: { title: "Second edit" } });
+  await editLocalContent({ work, ref: "file:notes.txt", edit: () => "Keep my notes" });
+  api.items.clear();
+  api.items.set(first.itemKey, first);
+  await pullSession(api.client, work);
+  const remaining = work.itemStates();
+  expect(remaining.map((item) => [item.key, item.state])).toEqual([
+    ["entry:posts:first", "staged+modified"], ["file:notes.txt", "modified"],
+  ]);
+  expect(work.value(remaining[0])).toMatchObject({ title: "Second edit" });
+  expect(work.value(remaining[1])).toBe("Keep my notes");
+  expect((await push(work, api.client)).staged).toBe(2);
+});
+
+test("an interrupted journal write can retry the same operation ID", async () => {
+  const { work, store } = draftFixture(cwd);
+  const api = new FakeDraftApi();
+  await editLocalContent({ work, ref: "doc:about", edit: () => ({ title: "Retry" }) });
+  const write = store.writeJson.bind(store);
+  const spy = jest.spyOn(store, "writeJson").mockImplementation((file, data, object) => {
+    if (file.endsWith(".push.json")) throw new Error("Disk full");
+    return write(file, data, object);
+  });
+  await expect(push(work, api.client, { operationId: "retry" })).rejects.toThrow("Disk full");
+  spy.mockRestore();
+  expect(api.writes).toHaveLength(0);
+  expect(await push(work, api.client, { operationId: "retry" })).toMatchObject({ staged: 1 });
+  expect(await push(work, api.client, { operationId: "retry" })).toMatchObject({ staged: 0 });
+  expect(api.creates).toBe(1);
+  expect(api.writes).toHaveLength(1);
+});
+
+test("retains replacement semantics when a field is removed between entry merges", async () => {
+  const { work } = draftFixture(cwd);
+  await editEntry({ work, collection: "posts", entryId: "first", data: { title: "Revised" } });
+  await editLocalContent({ work, ref: "entry:posts/first", edit: (value) =>
+    applyJsonPatch(value, [{ op: "remove", path: "/order" }]),
+  });
+  await editEntry({ work, collection: "posts", entryId: "first", data: { title: "Final" } });
+  const compiled = compileDraft(work, work.itemStates());
+  expect(compiled.items[0].operation.operation).toMatchObject({ data: { title: "Final" }, replaceData: true });
+  expect(compiled.items[0].operation.operation).not.toHaveProperty("data.order");
 });

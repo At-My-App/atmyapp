@@ -11,7 +11,8 @@ import {
   type Localization,
   type RawEntry,
 } from "./content";
-import { CliError } from "./errors";
+import { CliError, EXIT } from "./errors";
+import { spaceNames } from "./spaces";
 import { contentFingerprint, sha256Hex } from "./fingerprint";
 import { fetchRemoteSchema, type RemoteSchema } from "./schema";
 import {
@@ -434,7 +435,16 @@ export async function pullContent(api: ApiClient, options: PullOptions = {}, cwd
   const release = store.lockPublished();
   try {
     ensureStoreIgnored(cwd);
-    const existing = options.full ? null : store.readManifest();
+    const hasSpaces = spaceNames(store).length > 0;
+    const previous = !options.full || hasSpaces ? store.readManifest() : null;
+    const sameProject = previous?.projectId === api.session.projectId &&
+      (!previous.projectBase || previous.projectBase === api.projectBase);
+    if (hasSpaces && previous && !sameProject)
+      throw new CliError("project_mismatch", "The local draft spaces belong to another project.", {
+        exitCode: EXIT.auth,
+        fix: "Pull this project in a separate directory.",
+      });
+    const existing = options.full ? null : previous;
     const notes: string[] = [];
     const media = options.media ?? existing?.media === "full";
     const counts = { files: 0, entries: 0, translations: 0, removed: 0 };
@@ -442,30 +452,40 @@ export async function pullContent(api: ApiClient, options: PullOptions = {}, cwd
     const head = await headCommit(api);
     const canIncrement =
       existing &&
-      existing.projectId === api.session.projectId &&
+      sameProject &&
       existing.baseCommit &&
       head &&
       (existing.media === "full") === media;
 
     if (canIncrement && existing.baseCommit === head) {
+      if (!existing.projectBase) {
+        existing.projectBase = api.projectBase;
+        store.writeManifest(existing);
+      }
       return { mode: "up-to-date", baseCommit: head, previousCommit: head, ...counts, notes, dir: store.spaceDir() };
     }
 
     const schema = await fetchRemoteSchema(api);
-    const localization = await readLocalization(api).catch(() => null);
+    const localization = await readLocalization(api);
+    const staging = store.withPublished(`${PUBLISHED}.next`);
+    staging.clearPublished();
 
     if (canIncrement) {
       const previousCommit = existing.baseCommit;
       const diff = await diffSince(api, existing.baseCommit!, head!);
       if (diff && !diff.truncated) {
-        const ctx: PullContext = { api, store, schema, localization, manifest: existing, media, progress, counts };
+        store.copyPublishedTo(staging);
+        staging.writeSchema(schema.raw);
+        const ctx: PullContext = { api, store: staging, schema, localization, manifest: existing, media, progress, counts };
+        existing.projectBase = api.projectBase;
         existing.schemaHash = schema.hash;
         existing.localization = localization;
         const applied = await applyChanges(ctx, diff.changes);
         if (applied.ok) {
           existing.baseCommit = await settle(ctx, head, notes);
           existing.pulledAt = new Date().toISOString();
-          store.writeManifest(existing);
+          staging.writeManifest(existing);
+          store.promotePublished(staging.published);
           return { mode: "incremental", baseCommit: existing.baseCommit, previousCommit, ...counts, notes, dir: store.spaceDir() };
         }
         notes.push(`${applied.reason} Reading everything again.`);
@@ -479,10 +499,10 @@ export async function pullContent(api: ApiClient, options: PullOptions = {}, cwd
 
     // Full pull, written aside and swapped in when complete.
     const manifest = emptyManifest({ projectId: api.session.projectId, branch: "main" });
+    manifest.projectBase = api.projectBase;
     manifest.schemaHash = schema.hash;
     manifest.localization = localization;
     manifest.media = media ? "full" : "lazy";
-    const staging = store.withPublished(`${PUBLISHED}.next`);
     staging.clearPublished();
     staging.writeSchema(schema.raw);
     const ctx: PullContext = { api, store: staging, schema, localization, manifest, media, progress, counts };

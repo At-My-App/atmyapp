@@ -33,12 +33,13 @@ export async function mapLimit<T, R>(items: T[], limit: number, task: (item: T, 
       results[index] = await task(items[index], index);
     }
   });
-  await Promise.all(workers);
+  const outcomes = await Promise.allSettled(workers);
+  for (const outcome of outcomes) if (outcome.status === "rejected") throw outcome.reason;
   return results;
 }
 
 export async function readLocalization(api: ApiClient): Promise<Localization | null> {
-  const value = await api.json<Localization | null>("GET", "localization");
+  const value = await api.json<Localization | null>("GET", "localization", { allow: [404] });
   if (!value || !Array.isArray(value.supportedLocales)) return null;
   return { defaultLocale: value.defaultLocale, supportedLocales: value.supportedLocales };
 }

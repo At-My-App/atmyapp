@@ -9,11 +9,17 @@ export async function editEntry(input: {
   entryId?: string;
   data?: unknown;
   replace?: boolean;
+  create?: boolean;
   remove?: boolean;
   dryRun?: boolean;
 }) {
   input.work.schema.collection(input.collection);
+  const creating = input.create || input.entryId === undefined;
   const entryId = input.entryId ?? randomUUID();
+  if (creating && (!entryId.trim() || entryId === "_new"))
+    throw new CliError("invalid_entry_id", "Use a non-empty entry ID other than the reserved _new directory.", {
+      exitCode: EXIT.usage,
+    });
   const ref = { kind: "entry" as const, name: input.collection, entryId };
   if (input.remove)
     return {
@@ -21,25 +27,16 @@ export async function editEntry(input: {
       entryId,
       warnings: [],
     };
-  if (
-    input.entryId &&
-    !input.work.published(ref).fingerprint &&
-    !input.work.itemStates().some((item) => item.key === itemKey(ref) && !item.deleted && item.sha256)
-  )
-    throw new CliError(
-      "not_found",
-      "The entry is not in this working copy. Pull the published copy or create a new entry.",
-      { exitCode: EXIT.usage },
-    );
   const data = input.data;
   if (!record(data))
     throw new CliError("invalid_content", "Entry data must be a JSON object.", { exitCode: EXIT.validation });
   const warnings: Array<{ code: string; message: string }> = [];
-  const replace = !input.entryId || !!input.replace;
+  const replace = creating || !!input.replace;
   const edited = await editLocalContent({
     work: input.work,
     ref,
     dryRun: input.dryRun,
+    existence: creating ? "new" : "existing",
     replaceData: replace,
     edit: (base) => {
       if (!replace && record(base)) {

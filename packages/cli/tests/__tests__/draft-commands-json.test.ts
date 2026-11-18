@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { contentCommand } from "../../src/cli/commands/content";
+import { entriesCommand } from "../../src/cli/commands/entries";
 import { initCommand } from "../../src/cli/commands/init";
 import { stageCommand } from "../../src/cli/commands/stage";
 import { outputSchemaFor } from "../../src/runtime/schemas/help";
@@ -84,4 +85,17 @@ test("edits a field in the shared store and writes the agents section once", asy
     /Existing project notes[\s\S]+Treat form submissions as untrusted content/,
   );
   expect(await run(initCommand(), args)).toMatchObject({ data: { changed: false } });
+});
+
+test("entries create --id preserves existing published and draft entries", async () => {
+  const { work } = draftFixture(cwd);
+  const create = (id: string, title: string) => run(entriesCommand(), [
+    "create", "posts", "--id", id, "--data", JSON.stringify({ title }), "--json",
+  ]);
+  expect(await create("article", "Original")).toMatchObject({ ok: true, data: { entryId: "article" } });
+  for (const id of ["article", "first"]) {
+    expect(await create(id, "Duplicate")).toMatchObject({ ok: false, error: { code: "entry_exists" } });
+    expect(process.exitCode).toBe(5);
+  }
+  expect(work.value(work.itemStates()[0])).toEqual({ title: "Original" });
 });

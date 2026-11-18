@@ -66,6 +66,7 @@ export interface EntryRecord {
 export interface StoreManifest {
   version: typeof STORE_VERSION;
   projectId: string;
+  projectBase?: string;
   branch: string;
   /** Git commit the copy matches; null when the project has no Git history. */
   baseCommit: string | null;
@@ -229,6 +230,10 @@ export class ContentStore {
     fs.rmSync(this.spaceDir(), { recursive: true, force: true });
   }
 
+  copyPublishedTo(destination: ContentStore) {
+    fs.cpSync(this.spaceDir(), destination.spaceDir(), { recursive: true, mode: fs.constants.COPYFILE_FICLONE });
+  }
+
   /**
    * Replaces published/ with the copy written under `next` in one rename, so
    * readers see either the old copy or the new one, never a half-written one.
@@ -238,7 +243,12 @@ export class ContentStore {
     const old = path.join(this.root, `${PUBLISHED}.old`);
     fs.rmSync(old, { recursive: true, force: true });
     if (fs.existsSync(live)) fs.renameSync(live, old);
-    fs.renameSync(path.join(this.root, next), live);
+    try {
+      fs.renameSync(path.join(this.root, next), live);
+    } catch (error) {
+      if (fs.existsSync(old)) fs.renameSync(old, live);
+      throw error;
+    }
     fs.rmSync(old, { recursive: true, force: true });
   }
 
@@ -248,7 +258,16 @@ export class ContentStore {
    */
   lockPublished(): () => void {
     fs.mkdirSync(this.root, { recursive: true });
-    return this.lock(path.join(this.root, ".lock"), "Another 'atmyapp content pull' is updating the local copy.");
+    const release = this.lock(path.join(this.root, ".lock"), "Another 'atmyapp content pull' is updating the local copy.");
+    try {
+      const previous = this.spaceDir(PUBLISHED + ".old");
+      if (!fs.existsSync(this.spaceDir(PUBLISHED)) && fs.existsSync(previous))
+        fs.renameSync(previous, this.spaceDir(PUBLISHED));
+      return release;
+    } catch (error) {
+      release();
+      throw error;
+    }
   }
 
   lockSpace(space: string): () => void {

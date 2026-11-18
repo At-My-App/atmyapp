@@ -27,12 +27,13 @@ export function addEntryDraftCommands(command: Command) {
         .description("Create a new entry in the active space")
         .argument("<collection>")
         .requiredOption("--data <json-or-file>", "Entry data as JSON or @file")
+        .option("--id <id>", "Use this ID for the new entry")
         .addHelpText("after", "\nExample: atmyapp entries create posts --data @post.json")
-        .action((collection: string, options: DraftOptions & { data: string }) =>
+        .action((collection: string, options: DraftOptions & { data: string; id?: string }) =>
           runAction(
             options,
             async () =>
-              editEntry({ work: workFor(options), collection, data: jsonInput(options.data), dryRun: options.dryRun }),
+              editEntry({ work: workFor(options), collection, create: true, entryId: options.id, data: jsonInput(options.data), dryRun: options.dryRun }),
             renderEntry,
           ),
         ),
