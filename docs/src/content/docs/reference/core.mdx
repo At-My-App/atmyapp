@@ -167,6 +167,8 @@ Set `ATMYAPP_CLIENT_MODE=local` to switch a dev server to the local copy without
 
 **Spaces.** Drafts live in a space, `.ama/content/<space>/`, which holds only the documents and entries it changes. Local mode shows the space named by `ATMYAPP_SPACE`, then `localStorage.space`, then `.ama/content/.current`, then `default`, over the published copy. `with-fallback` never shows drafts, so a live site can't serve unpublished content.
 
+Use `atmyapp space create <name>` and `atmyapp space use <name>` to work in a space. Local mode applies deletions from the same space, including deletions of individual translations. See the [CLI workflow](/reference/cli/#local-spaces-and-review).
+
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `localStorage.path` | `.ama/content`, then `.ama/local` | Local content folder, relative to the working directory (Node only). `.ama/local` holds older snapshots from `atmyapp snapshot download`. |
