@@ -1,5 +1,21 @@
 # create-atmyapp
 
+## 0.2.3
+
+### Patch Changes
+
+- e5e210b: The `astro-tailwind` starter registers the `atmyapp()` integration (without it, builds failed to resolve `virtual:atmyapp/config`), depends on the current `@atmyapp/astro`, `@atmyapp/core` and `@atmyapp/structure`, and its `.env.example` uses `ATMYAPP_API_URL` with the content host. `atmyapp init` now prints `ATMYAPP_API_URL` with the content (`edge`) host instead of the CLI URL, and the generated client prefers it. `atmyapp --version` reports the installed version.
+- Updated dependencies [9be0ddb]
+- Updated dependencies [e5e210b]
+- Updated dependencies [c02fca9]
+- Updated dependencies [8f60f5a]
+- Updated dependencies [0cf224a]
+- Updated dependencies [43e57cb]
+- Updated dependencies [df2bed2]
+- Updated dependencies [f3f951c]
+- Updated dependencies [e5e210b]
+  - @atmyapp/cli@0.5.0
+
 ## 0.2.2
 
 ### Patch Changes
