@@ -1,5 +1,12 @@
 # @atmyapp/structure
 
+## 0.6.0
+
+### Minor Changes
+
+- f3f951c: Edit translations from source-checked segments or a merged local view. Share locale overlays and source history across CLI, SDK, and server workflows.
+- 9be0ddb: Export `mergeVariantOverlay`, which applies a translation overlay to its source content the way the server does (list items matched by `_key`).
+
 ## 0.5.0
 
 ### Minor Changes

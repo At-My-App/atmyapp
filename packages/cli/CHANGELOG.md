@@ -1,5 +1,36 @@
 # @atmyapp/cli
 
+## 0.5.0
+
+### Minor Changes
+
+- 9be0ddb: Read the project from the terminal or a coding agent: `atmyapp whoami`, `doctor`, `schema show`, `content ls|get|pull`, `entries ls|get`, `assets get` and `locales status`. Content is named the same way everywhere (`doc:home@de#/hero/title`, `entry:posts/8f2a`), reads show the stored, delivered, overlay or effective view, and `content pull` keeps a local copy in `.ama/content` that later pulls update with only what changed.
+
+  Every command now reads `ATMYAPP_CLI_URL` and `ATMYAPP_CLI_KEY`, prints `{ ok, data }` or `{ ok, error: { code, message, fix } }` with `--json`, uses documented exit codes, and never waits for input without a terminal. `atmyapp help --json` describes every command.
+
+  Fixes: `atmyapp snapshot` used a fixed server instead of the session's; `atmyapp init` no longer tries to create a website API key with the CLI key (it prints where to create one).
+
+- c02fca9: Add repeatable `entries ls --where` filters and keyset cursors for remote collections. Older cursors remain valid, and unfiltered listings still work with an older AtMyApp server.
+- 0cf224a: Merge published changes into local spaces and stage files and attachments with resumable named uploads.
+- 43e57cb: Edit AtMyApp content in local spaces, validate it, and submit named drafts for dashboard review. The local SDK applies space-specific file and translation deletions.
+- df2bed2: Add scoped browser login, named draft publishing, website deployment and release commands, and project key management.
+- f3f951c: Edit translations from source-checked segments or a merged local view. Share locale overlays and source history across CLI, SDK, and server workflows.
+- e5e210b: `atmyapp submissions tail [type]` follows form submissions as they arrive: received ones with their environment, sender and a snippet; rejected ones with the reason; and inbox changes. `--json` prints NDJSON for scripts. Live visitor data is hidden unless `--include-live-data` is passed; test and local submissions always show in full.
+
+### Patch Changes
+
+- e5e210b: The `astro-tailwind` starter registers the `atmyapp()` integration (without it, builds failed to resolve `virtual:atmyapp/config`), depends on the current `@atmyapp/astro`, `@atmyapp/core` and `@atmyapp/structure`, and its `.env.example` uses `ATMYAPP_API_URL` with the content host. `atmyapp init` now prints `ATMYAPP_API_URL` with the content (`edge`) host instead of the CLI URL, and the generated client prefers it. `atmyapp --version` reports the installed version.
+- 8f60f5a: Local mode images and files now load in the browser: the Astro dev server serves `.ama/content` at `/__atmyapp/content/`, and the client returns URLs on that route (set `ATMYAPP_LOCAL_ASSET_BASE` with other frameworks) instead of `file://` URLs, which browsers refuse on web pages. `$file` values that point outside the local store are no longer turned into URLs. Incremental `content pull` now hard-links unchanged files instead of copying the whole local copy.
+- Updated dependencies [03686a1]
+- Updated dependencies [8f60f5a]
+- Updated dependencies [9be0ddb]
+- Updated dependencies [43e57cb]
+- Updated dependencies [f3f951c]
+- Updated dependencies [e5e210b]
+- Updated dependencies [9be0ddb]
+  - @atmyapp/core@0.7.0
+  - @atmyapp/structure@0.6.0
+
 ## 0.4.0
 
 ### Minor Changes
