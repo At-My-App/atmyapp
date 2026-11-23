@@ -158,7 +158,33 @@ export class LocalStore {
     return variant.mode === "replace" ? variant.data : mergeVariantOverlay(value, variant.data, field);
   }
 
-  /** Stored asset references → what websites receive; `$file` → a local file URL. */
+  /**
+   * A browser-loadable URL for a file inside the store. Pages served over
+   * http(s) can't load file:// URLs, so a dev server that serves the store
+   * (the Astro integration does) sets ATMYAPP_LOCAL_ASSET_BASE to its route.
+   * Null for a path outside the store.
+   */
+  private fileUrl(file: string): string | null {
+    const { fs, path, url } = this.node;
+    const realpath = (target: string) => {
+      try {
+        return fs.realpathSync(target);
+      } catch {
+        return path.resolve(target);
+      }
+    };
+    // A missing file still gets a (broken) URL, so templates reading `.url`
+    // keep working; symbolic links are resolved when the file exists.
+    const real = realpath(file);
+    const root = realpath(this.root);
+    const relative = path.relative(root, real);
+    if (!relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) return null;
+    const base = process.env.ATMYAPP_LOCAL_ASSET_BASE?.trim();
+    if (base) return base.replace(/\/?$/, "/") + relative.split(path.sep).map(encodeURIComponent).join("/");
+    return url.pathToFileURL(real).href;
+  }
+
+  /** Stored asset references → what websites receive; `$file` → a URL for the local file. */
   private deliver(value: unknown, baseDir: string): unknown {
     if (typeof value === "string") return this.manifest.assets[`__blob:${value}`] ?? value;
     if (Array.isArray(value)) return value.map((item) => this.deliver(item, baseDir));
@@ -168,7 +194,10 @@ export class LocalStore {
     if (typeof record.__blob === "string") return this.manifest.assets[`__blob:${record.__blob}`] ?? value;
     if (typeof record.$file === "string") {
       const { $file, ...rest } = record;
-      return { ...rest, url: this.node.url.pathToFileURL(this.node.path.resolve(baseDir, $file)).href };
+      // Same rule as the CLI: a relative path to a file inside the store.
+      const { path } = this.node;
+      const fileUrl = !$file || path.isAbsolute($file) || path.win32.isAbsolute($file) ? null : this.fileUrl(path.resolve(baseDir, $file));
+      return fileUrl ? { ...rest, url: fileUrl } : value;
     }
     return Object.fromEntries(Object.entries(record).map(([key, item]) => [key, this.deliver(item, baseDir)]));
   }
@@ -206,7 +235,7 @@ export class LocalStore {
   staticUrl(storagePath: string): string | null {
     if (this.space?.deletions.has(`file:${storagePath}`)) return null;
     const file = this.locate(["f", ...encodePath(storagePath)], `file:${storagePath}`);
-    if (file) return this.node.url.pathToFileURL(file).href;
+    if (file) return this.fileUrl(file);
     return this.manifest.files[storagePath]?.url ?? null;
   }
 

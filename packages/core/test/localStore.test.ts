@@ -89,6 +89,23 @@ describe("local content store (format 2)", () => {
     expect(store.listCollection("posts").map((entry) => entry.id)).toEqual(["e1", "easter"]);
   });
 
+  it("gives browser-loadable URLs when a dev server serves the store, and keeps $file inside it", () => {
+    process.env.ATMYAPP_LOCAL_ASSET_BASE = "/__atmyapp/content/";
+    write(path.join(root, "spring", "f", "hero-new.png"), "png");
+    write(path.join(root, "spring", "f", "logo.png"), "png");
+    const store = LocalStore.open({ space: "spring" })!;
+    expect((store.readJson("home.json") as any).hero).toEqual({ alt: "New", url: "/__atmyapp/content/spring/f/hero-new.png" });
+    expect(store.staticUrl("logo.png")).toBe("/__atmyapp/content/spring/f/logo.png");
+    write(path.join(root, "spring", "f", "home.json"), {
+      title: "Escapes",
+      hero: { $file: "../../../../outside.png" },
+      icon: { $file: "/etc/passwd" },
+    });
+    const escaped = LocalStore.open({ space: "spring" })!.readJson("home.json") as any;
+    expect(escaped.hero).toEqual({ $file: "../../../../outside.png" });
+    expect(escaped.icon).toEqual({ $file: "/etc/passwd" });
+  });
+
   it("applies locale and file deletions only inside the chosen space", () => {
     write(path.join(root, "spring", "space.json"), {
       version: 1,

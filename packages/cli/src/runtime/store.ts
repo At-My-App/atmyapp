@@ -236,8 +236,29 @@ export class ContentStore {
     fs.rmSync(this.spaceDir(), { recursive: true, force: true });
   }
 
+  /**
+   * Copies published/ for an incremental pull. Files are hard-linked: every
+   * store write replaces a file by rename (a new inode), so a linked file is
+   * never changed through the other name, and unchanged media costs nothing.
+   * Falls back to copying where links aren't possible.
+   */
   copyPublishedTo(destination: ContentStore) {
-    fs.cpSync(this.spaceDir(), destination.spaceDir(), { recursive: true, mode: fs.constants.COPYFILE_FICLONE });
+    const copy = (from: string, to: string) => {
+      fs.mkdirSync(to, { recursive: true });
+      for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+        const source = path.join(from, entry.name);
+        const target = path.join(to, entry.name);
+        if (entry.isDirectory()) copy(source, target);
+        else if (entry.isFile()) {
+          try {
+            fs.linkSync(source, target);
+          } catch {
+            fs.copyFileSync(source, target, fs.constants.COPYFILE_FICLONE);
+          }
+        }
+      }
+    };
+    copy(this.spaceDir(), destination.spaceDir());
   }
 
   /**

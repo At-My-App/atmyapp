@@ -163,7 +163,7 @@ The client can read a local copy of the project's content instead of the API:
 
 Make the copy with [`atmyapp content pull`](/reference/cli/#atmyapp-content-pull). It's stored in `.ama/content`, includes translations, and gives your code the same shapes as the API: images arrive as `{ url, alt }`, from their published URLs unless you pulled with `--media`.
 
-Set `ATMYAPP_CLIENT_MODE=local` to switch a dev server to the local copy without changing code; the variable overrides `clientMode`. With `@atmyapp/astro`, local mode needs no API key, and the dev server reloads when the copy changes.
+Set `ATMYAPP_CLIENT_MODE=local` to switch a dev server to the local copy without changing code; the variable overrides `clientMode`. With `@atmyapp/astro`, local mode needs no API key, and the dev server reloads when the copy changes. Images and files from the local copy, including `$file` drafts, are served by the dev server at `/__atmyapp/content/`, because browsers don't load `file://` URLs from a web page. With another framework, serve `.ama/content` yourself and set `ATMYAPP_LOCAL_ASSET_BASE` to its URL path; otherwise the client returns `file://` URLs, which only work outside a browser.
 
 **Spaces.** Drafts live in a space, `.ama/content/<space>/`, which holds only the documents and entries it changes. Local mode shows the space named by `ATMYAPP_SPACE`, then `localStorage.space`, then `.ama/content/.current`, then `default`, over the published copy. `with-fallback` never shows drafts, so a live site can't serve unpublished content.
 

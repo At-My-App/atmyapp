@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseEnv } from "node:util";
 import { ENV_KEYS, resolveDevMode, type Environment } from "./config.js";
+import { LOCAL_CONTENT_ROUTE, serveLocalContent } from "./localContent.js";
 export type AtMyAppIntegrationOptions = {
   apiKey?: string;
   baseUrl?: string;
@@ -94,6 +95,10 @@ export default function atmyapp(
       // reload the page so local mode shows the change.
       "astro:server:setup": ({ server }) => {
         const root = fileURLToPath(new URL(".ama/content/", projectRoot));
+        // Local mode's images and files: same-origin URLs instead of file://,
+        // which browsers refuse to load from an http page.
+        server.middlewares.use(LOCAL_CONTENT_ROUTE, serveLocalContent(root));
+        process.env.ATMYAPP_LOCAL_ASSET_BASE ??= LOCAL_CONTENT_ROUTE;
         server.watcher.add(root);
         let timer: ReturnType<typeof setTimeout> | undefined;
         const reload = (file: string) => {
