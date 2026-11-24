@@ -32,7 +32,7 @@ interface PlaceholderResponseBody {
 
 export function generateCommand(): Command {
   return new Command("generate")
-    .description("Generate a placeholder file in project storage")
+    .description("Generate a placeholder file in project storage (deprecated)")
     .requiredOption("--path <path>", "POSIX project-relative path to generate")
     .option("-t, --token <token>", "Authentication token override")
     .option("-u, --url <url>", "Project base URL override")
@@ -44,6 +44,8 @@ export function generateCommand(): Command {
     .option("--verbose", "Enable verbose logging")
     .action(async (options: GenerateCommandOptions) => {
       const logger = new Logger(Boolean(options.verbose));
+      // stderr only: scripts that parse stdout keep working.
+      console.error("'atmyapp generate' is deprecated and will be removed in a future version. Use 'atmyapp files put' or the content commands ('atmyapp content set', 'atmyapp entries create'), then 'atmyapp stage push'.");
 
       try {
         const session = resolveSession({

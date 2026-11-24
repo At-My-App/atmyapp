@@ -1,19 +1,23 @@
-import { Command } from "commander";
-import { Logger } from "../logger";
-import { resolveSession, projectUrl, type AmaSession } from "../utils/http";
+import { Command, Option } from "commander";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
-import { execSync } from "child_process";
+import type { ApiClient } from "../../runtime/api";
+import { CliError, EXIT } from "../../runtime/errors";
+import { replaceWithArchive, snapshotDestination } from "../../runtime/snapshotFiles";
+import type { Logger } from "../logger";
+import { connect, runAction, withCommonOptions, type CommonOptions } from "../output";
 
-interface SnapshotCommandOptions {
-  token?: string;
-  url?: string;
-  projectId?: string;
-  verbose?: boolean;
+type SnapshotCommandOptions = CommonOptions & {
   branch?: string;
   forceSync?: boolean;
   output?: string;
-}
+  force?: boolean;
+  /** Hidden one-version aliases for the old -t/-u/-p flags. */
+  t?: string;
+  u?: string;
+  p?: string;
+};
 
 interface SnapshotResponse {
   success: boolean;
@@ -78,153 +82,73 @@ export function getSnapshotApiUrl(sessionUrl: string, projectId: string, endpoin
   return parsed.toString();
 }
 
-/**
- * Create a new snapshot
- */
-async function createSnapshot(
-  session: AmaSession,
-  options: SnapshotCommandOptions,
-  logger: Logger
-): Promise<SnapshotResponse> {
-  const url = getSnapshotApiUrl(session.url, session.projectId, "snapshot");
+async function failure(response: Response, what: string): Promise<CliError> {
+  const text = await response.text().catch(() => "");
+  let message = text;
+  try { message = (JSON.parse(text) as { error?: string }).error ?? text; } catch { /* plain text */ }
+  const status = response.status;
+  return new CliError(status === 401 ? "unauthenticated" : status === 403 ? "forbidden" : "snapshot_failed",
+    `Could not ${what}: ${message || `status ${status}`}`, {
+      status,
+      exitCode: status === 401 || status === 403 ? EXIT.auth : EXIT.error,
+      fix: status === 403 ? "Snapshots need a key with the snapshot scope." : undefined,
+    });
+}
 
+/** Create a new snapshot. */
+async function createSnapshot(api: ApiClient, options: SnapshotCommandOptions, logger: Logger): Promise<NonNullable<SnapshotResponse["data"]>> {
+  const { session } = api;
+  const url = getSnapshotApiUrl(session.url, session.projectId, "snapshot");
   logger.info(`Creating snapshot for project ${session.projectId}...`);
   logger.verbose_log(`POST ${url}`);
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${session.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      branch: options.branch ?? "main",
-      forceFullSync: options.forceSync ?? false,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Failed to create snapshot: ${response.status} - ${errorText}`
-    );
-  }
-
-  return response.json();
+  const response = await api.send("POST", url, { branch: options.branch ?? "main", forceFullSync: options.forceSync ?? false });
+  if (!response.ok) throw await failure(response, "create the snapshot");
+  const result = (await response.json()) as SnapshotResponse;
+  if (!result.success || !result.data) throw new CliError("snapshot_failed", result.error ?? "Failed to create the snapshot.");
+  return result.data;
 }
 
-/**
- * Get the latest snapshot info
- */
-async function getLatestSnapshot(
-  session: AmaSession,
-  options: SnapshotCommandOptions,
-  logger: Logger
-): Promise<LatestSnapshotResponse> {
-  const branch = options.branch ?? "main";
-  const url = `${getSnapshotApiUrl(session.url, session.projectId, "latest-snapshot")}?branch=${encodeURIComponent(branch)}`;
-
+/** The latest snapshot, if any. */
+async function getLatestSnapshot(api: ApiClient, options: SnapshotCommandOptions, logger: Logger): Promise<LatestSnapshotResponse["data"] | null> {
+  const { session } = api;
+  const url = `${getSnapshotApiUrl(session.url, session.projectId, "latest-snapshot")}?branch=${encodeURIComponent(options.branch ?? "main")}`;
   logger.verbose_log(`GET ${url}`);
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${session.token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Failed to get latest snapshot: ${response.status} - ${errorText}`
-    );
-  }
-
-  return response.json();
+  const response = await api.send("GET", url);
+  if (response.status === 404) return null;
+  if (!response.ok) throw await failure(response, "read the latest snapshot");
+  return ((await response.json()) as LatestSnapshotResponse).data ?? null;
 }
 
-/**
- * Download a snapshot from the given URL
- */
-async function downloadSnapshotFile(
-  downloadUrl: string,
-  token: string,
-  outputPath: string,
-  logger: Logger
-): Promise<string> {
+/** Downloads the ZIP to `outputPath`. */
+async function downloadSnapshotFile(downloadUrl: string, token: string, outputPath: string, logger: Logger): Promise<void> {
   logger.info("Downloading snapshot...");
   logger.verbose_log(`GET ${downloadUrl}`);
-
-  const response = await fetch(downloadUrl, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Failed to download snapshot: ${response.status} - ${errorText}`
-    );
-  }
-
-  // Ensure output directory exists
-  const outputDir = path.dirname(outputPath);
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
-
-  // Write the ZIP file
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  fs.writeFileSync(outputPath, buffer);
-
-  return outputPath;
+  const response = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw await failure(response, "download the snapshot");
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, Buffer.from(await response.arrayBuffer()));
 }
 
-/**
- * Extract a ZIP file to a directory
- */
-function extractZip(zipPath: string, extractDir: string, logger: Logger): void {
-  logger.info("Extracting snapshot...");
-
-  // Ensure extract directory exists and is empty
-  if (fs.existsSync(extractDir)) {
-    // Remove existing contents
-    fs.rmSync(extractDir, { recursive: true, force: true });
-  }
-  fs.mkdirSync(extractDir, { recursive: true });
-
-  // Use tar on Unix or PowerShell on Windows
-  const isWindows = process.platform === "win32";
-
-  try {
-    if (isWindows) {
-      // Use PowerShell's Expand-Archive
-      execSync(
-        `powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force"`,
-        { stdio: "pipe" }
-      );
-    } else {
-      // Use unzip on Unix
-      execSync(`unzip -o "${zipPath}" -d "${extractDir}"`, { stdio: "pipe" });
-    }
-  } catch (error) {
-    throw new Error(
-      `Failed to extract snapshot: ${error instanceof Error ? error.message : error}`
-    );
-  }
-}
-
-/**
- * Format bytes to human readable string
- */
+/** Format bytes to human readable string */
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 Bytes";
   const k = 1024;
   const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
+/** Standard connection options plus the old short flags, hidden for one minor version. */
+function snapshotOptions(command: Command): Command {
+  return withCommonOptions(command)
+    .addOption(new Option("-t <token>", "Same as --token").hideHelp())
+    .addOption(new Option("-u <url>", "Same as --url").hideHelp())
+    .addOption(new Option("-p <id>", "Same as --project").hideHelp())
+    .option("-b, --branch <branch>", "Branch name", "main");
+}
+
+function withAliases(options: SnapshotCommandOptions): SnapshotCommandOptions {
+  return { ...options, token: options.token ?? options.t, url: options.url ?? options.u, project: options.project ?? options.p };
 }
 
 export function snapshotCommand(): Command {
@@ -235,35 +159,14 @@ export function snapshotCommand(): Command {
       "\n'atmyapp content pull' keeps a newer local copy in .ama/content: it updates only what changed, includes translations, and is read by the SDK's local and with-fallback modes."
     );
 
-  // Subcommand: create
-  command
-    .command("create")
+  command.addCommand(snapshotOptions(new Command("create"))
     .description("Create a new storage snapshot (may take a few minutes)")
-    .option("-t, --token <token>", "Authentication token")
-    .option("-u, --url <url>", "Project base URL")
-    .option("-p, --project-id <id>", "Project identifier")
-    .option("-b, --branch <branch>", "Branch name", "main")
     .option("--force-sync", "Force full sync instead of incremental")
-    .option("--verbose", "Enable verbose logging")
-    .action(async (options: SnapshotCommandOptions) => {
-      const logger = new Logger(Boolean(options.verbose));
-
-      try {
-        const session = resolveSession({
-          token: options.token,
-          projectId: options.projectId,
-          url: options.url,
-        });
-
-        const result = await createSnapshot(session, options, logger);
-
-        if (!result.success || !result.data) {
-          throw new Error(result.error ?? "Failed to create snapshot");
-        }
-
-        const { data } = result;
-
-        logger.success("Snapshot created successfully!");
+    .addHelpText("after", "\nExample: atmyapp snapshot create --json")
+    .action((raw: SnapshotCommandOptions) => {
+      const options = withAliases(raw);
+      return runAction(options, ({ logger }) => createSnapshot(connect(options).api, options, logger), (data, { logger }) => {
+        logger.success("Snapshot created.");
         logger.info(`  Project: ${data.projectId}`);
         logger.info(`  Branch: ${data.branch}`);
         logger.info(`  Collections: ${data.stats.collectionsProcessed}`);
@@ -276,97 +179,54 @@ export function snapshotCommand(): Command {
         logger.info("");
         logger.info("To download this snapshot, run:");
         logger.info("  atmyapp snapshot download");
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
-        logger.error(`Snapshot creation failed: ${message}`, error);
-        process.exit(1);
-      }
-    });
+      });
+    }));
 
-  // Subcommand: download
-  command
-    .command("download")
+  command.addCommand(snapshotOptions(new Command("download"))
     .description("Download the latest snapshot to local storage")
-    .option("-t, --token <token>", "Authentication token")
-    .option("-u, --url <url>", "Project base URL")
-    .option("-p, --project-id <id>", "Project identifier")
-    .option("-b, --branch <branch>", "Branch name", "main")
     .option("-o, --output <path>", "Output directory", DEFAULT_OUTPUT_PATH)
-    .option("--verbose", "Enable verbose logging")
-    .action(async (options: SnapshotCommandOptions) => {
-      const logger = new Logger(Boolean(options.verbose));
-
-      try {
-        const session = resolveSession({
-          token: options.token,
-          projectId: options.projectId,
-          url: options.url,
-        });
-
-        // Get the latest snapshot info
+    .option("--force", "Replace a folder that holds files no snapshot created")
+    .addHelpText("after", "\nExample: atmyapp snapshot download --json")
+    .action((raw: SnapshotCommandOptions) => {
+      const options = withAliases(raw);
+      return runAction(options, async ({ logger }) => {
+        // Refuse an unsafe destination before downloading anything.
+        const outputDir = snapshotDestination(options.output, { force: options.force });
+        const { api, session } = connect(options);
         logger.info("Checking for latest snapshot...");
-        const latestResult = await getLatestSnapshot(session, options, logger);
-
+        const latest = await getLatestSnapshot(api, options, logger);
         let downloadUrl: string;
-
-        if (latestResult.data && !latestResult.data.isExpired) {
-          // Use existing snapshot
-          logger.info(
-            `Found existing snapshot from: ${latestResult.data.createdAt}`
-          );
-          downloadUrl = latestResult.data.downloadUrl;
+        let reused = false;
+        if (latest && !latest.isExpired) {
+          logger.info(`Found existing snapshot from: ${latest.createdAt}`);
+          downloadUrl = latest.downloadUrl;
+          reused = true;
         } else {
-          // Need to create a new snapshot first
-          if (latestResult.data?.isExpired) {
-            logger.warn("Latest snapshot has expired, creating a new one...");
-          } else {
-            logger.info("No existing snapshot found, creating a new one...");
-          }
-
-          const createResult = await createSnapshot(session, options, logger);
-
-          if (!createResult.success || !createResult.data) {
-            throw new Error(createResult.error ?? "Failed to create snapshot");
-          }
-
-          downloadUrl = createResult.data.downloadUrl;
-          logger.info(
-            `Snapshot created (${formatBytes(createResult.data.stats.totalSizeBytes)})`
-          );
+          logger.info(latest?.isExpired ? "Latest snapshot has expired, creating a new one..." : "No existing snapshot found, creating a new one...");
+          const created = await createSnapshot(api, options, logger);
+          downloadUrl = created.downloadUrl;
+          logger.info(`Snapshot created (${formatBytes(created.stats.totalSizeBytes)})`);
         }
-
-        // Download the snapshot
-        const outputDir = path.resolve(
-          process.cwd(),
-          options.output ?? DEFAULT_OUTPUT_PATH
-        );
-        const zipPath = path.join(outputDir, "snapshot.zip");
-
-        await downloadSnapshotFile(downloadUrl, session.token, zipPath, logger);
-        logger.success(`Downloaded to: ${zipPath}`);
-
-        // Extract the snapshot
-        extractZip(zipPath, outputDir, logger);
-
-        // Remove the ZIP file after extraction
-        fs.unlinkSync(zipPath);
-
-        logger.success(`Snapshot extracted to: ${outputDir}`);
+        const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "atmyapp-snapshot-"));
+        const zipPath = path.join(workDir, "snapshot.zip");
+        try {
+          await downloadSnapshotFile(downloadUrl, session.token, zipPath, logger);
+          logger.info("Extracting snapshot...");
+          // The previous snapshot is replaced only once the new one is extracted.
+          replaceWithArchive(zipPath, outputDir);
+        } finally {
+          fs.rmSync(workDir, { recursive: true, force: true });
+        }
+        return { outputDir, reused, branch: options.branch ?? "main" };
+      }, (result, { logger }) => {
+        logger.success(`Snapshot extracted to: ${result.outputDir}`);
         logger.info("");
-        logger.info(
-          "Your local storage is now ready. Configure your client with:"
-        );
+        logger.info("Your local storage is now ready. Configure your client with:");
         logger.info('  clientMode: "local"');
         logger.info("  or");
         logger.info('  clientMode: "with-fallback"');
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
-        logger.error(`Snapshot download failed: ${message}`, error);
-        process.exit(1);
-      }
-    });
+      });
+    }));
 
   return command;
 }

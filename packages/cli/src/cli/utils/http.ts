@@ -10,7 +10,7 @@ export type {
 import { existsSync } from "fs";
 import { join } from "path";
 import { resolveCredentials } from "../../runtime/session";
-import { readBrowserLogin } from "../../runtime/credentials";
+import { browserLoginSession } from "../../runtime/credentials";
 import { getConfig, type AmaConfig } from "./config";
 
 export interface AmaSession {
@@ -73,7 +73,8 @@ export function resolveSession(overrides: SessionOverrides = {}): AmaSession {
   } catch {
     sessionFile = null;
   }
-  const resolved = resolveCredentials({ flags: overrides, env: process.env, sessionFile, loginSession: readBrowserLogin });
+  const target = overrides.projectId || process.env.ATMYAPP_PROJECT_ID || sessionFile?.projectId;
+  const resolved = resolveCredentials({ flags: overrides, env: process.env, sessionFile, loginSession: () => browserLoginSession(target) });
   return { token: resolved.token, projectId: resolved.projectId, url: resolved.url };
 }
 

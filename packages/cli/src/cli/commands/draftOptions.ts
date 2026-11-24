@@ -34,7 +34,8 @@ export function maybeConnect(options: CommonOptions) {
       ["not_connected", "missing_token", "missing_url", "missing_project_id"].includes(error.code) &&
       !options.url &&
       !options.token &&
-      !options.projectId
+      !options.projectId &&
+      !options.project
     )
       return undefined;
     throw error;

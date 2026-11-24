@@ -7,16 +7,44 @@ import { CliError, EXIT } from "./errors";
 import { nativeCredential, windowsPrivateFile } from "./nativeCredentials";
 import { lockFile } from "./fileLock";
 import type { CliSession } from "./session";
+import { projectApiUrl } from "./api";
 
 const tokenSchema = z.string().regex(/^ama_cs_[a-f0-9]{64}$/);
-const common = z.object({ url: z.string().url(), projectId: z.string().min(1), expiresAt: z.iso.datetime({ offset: true }) });
+/** How far a login reaches (CliEverywherePlan §4.1.1). */
+export const projectLimitSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("all") }),
+  z.object({ kind: z.literal("orgs"), ids: z.array(z.string().min(1)).min(1) }),
+  z.object({ kind: z.literal("projects"), ids: z.array(z.string().min(1)).min(1) }),
+]);
+export type ProjectLimit = z.infer<typeof projectLimitSchema>;
+// Logins from before multi-project reach always have a projectId and a project URL.
+const common = z.object({
+  url: z.string().url(),
+  projectId: z.string().min(1).nullable(),
+  expiresAt: z.iso.datetime({ offset: true }),
+  projectLimit: projectLimitSchema.nullable().optional(),
+  /** Set by `atmyapp projects use`: the project commands use when nothing else names one. */
+  lastProjectId: z.string().min(1).nullable().optional(),
+});
 const credentialSchema = z.discriminatedUnion("backend", [
   common.extend({ backend: z.literal("keychain"), account: z.uuid() }),
   common.extend({ backend: z.literal("file"), token: tokenSchema }),
 ]);
 type StoredCredential = z.infer<typeof credentialSchema>;
 
-export interface BrowserLogin extends CliSession { expiresAt: string }
+/**
+ * The saved browser login. `projectId` is set for a login limited to one
+ * project (then `url` is that project's URL); a wider login keeps the API URL
+ * and picks a project per command.
+ */
+export interface BrowserLogin {
+  token: string;
+  url: string;
+  projectId: string | null;
+  expiresAt: string;
+  projectLimit?: ProjectLimit | null;
+  lastProjectId?: string | null;
+}
 
 export function credentialsPath() {
   const config = process.env.XDG_CONFIG_HOME;
@@ -67,7 +95,67 @@ function toBrowserLogin(row: StoredCredential | null, options: { includeExpired?
   if (!token.success && options.requireAvailable)
     throw new CliError("credentials_unavailable", "Unlock the OS keychain to retrieve your saved CLI login.", { exitCode: EXIT.auth });
   if (!token.success) return null;
-  return { token: token.data, url: row.url, projectId: row.projectId, expiresAt: row.expiresAt };
+  return {
+    token: token.data, url: row.url, projectId: row.projectId, expiresAt: row.expiresAt,
+    projectLimit: row.projectLimit ?? null, lastProjectId: row.lastProjectId ?? null,
+  };
+}
+
+/**
+ * The saved login as a connection for one project: its own project when it is
+ * limited to one, else `target` (from --project, ATMYAPP_PROJECT_ID or
+ * .ama/session.json), else the project last chosen with `projects use`.
+ */
+export function browserLoginSession(target?: string | null, options: { file?: string } = {}): CliSession | null {
+  const login = readBrowserLogin(options);
+  if (!login) return null;
+  if (login.projectId) return { token: login.token, url: login.url, projectId: login.projectId };
+  const projectId = target || login.lastProjectId;
+  if (!projectId) {
+    throw new CliError("project_required", "You're signed in to several projects; this command needs one.", {
+      exitCode: EXIT.usage,
+      fix: "Pass --project <id>, or run 'atmyapp projects use <id>' in this folder ('atmyapp projects ls' lists them).",
+    });
+  }
+  return { token: login.token, url: projectApiUrl(login.url, projectId, ""), projectId };
+}
+
+/** The saved login for account commands (`projects`, `orgs`): its API URL, no project. */
+export function browserLoginAccount(options: { file?: string } = {}): BrowserLogin | null {
+  return readBrowserLogin(options);
+}
+
+function updateSaved(file: string, change: (row: StoredCredential) => StoredCredential | null) {
+  if (!fs.existsSync(file)) return false;
+  const unlock = lockFile(file + ".lock", "Another command is updating the saved CLI login.");
+  try {
+    const row = readFile(file);
+    const next = row && change(row);
+    if (!next) return false;
+    writePrivateFile(file, JSON.stringify(credentialSchema.parse(next)) + "\n");
+    return true;
+  } finally {
+    unlock();
+  }
+}
+
+/** The server renewed the login (X-AtMyApp-Credential-Expires); keep the saved expiry in step (E34). */
+export function updateBrowserLoginExpiry(token: string, expiresAt: string, file = credentialsPath()): boolean {
+  if (!z.iso.datetime({ offset: true }).safeParse(expiresAt).success) return false;
+  return updateSaved(file, (row) => {
+    const saved = toBrowserLogin(row, { includeExpired: true });
+    if (saved?.token !== token || Date.parse(expiresAt) <= Date.parse(row.expiresAt)) return null;
+    return { ...row, expiresAt };
+  });
+}
+
+/** Remembers the project `projects use` chose, for a login that reaches several. */
+export function setBrowserLoginProject(token: string, projectId: string, file = credentialsPath()): boolean {
+  return updateSaved(file, (row) => {
+    const saved = toBrowserLogin(row, { includeExpired: true });
+    if (saved?.token !== token || row.projectId) return null;
+    return { ...row, lastProjectId: projectId };
+  });
 }
 
 export function readBrowserLogin(options: { includeExpired?: boolean; requireAvailable?: boolean; file?: string } = {}): BrowserLogin | null {

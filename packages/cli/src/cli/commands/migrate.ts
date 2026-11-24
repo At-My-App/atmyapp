@@ -31,9 +31,13 @@ import {
   type UploadStructureClearRequest,
 } from "../../runtime";
 import type { OutputDefinition } from "../types/migrate";
-import { EXIT } from "../../runtime/errors";
+import { CliError, EXIT } from "../../runtime/errors";
+import { projectApiUrl } from "../../runtime/api";
+import { detectProjectIdFromUrl, resolveCredentials } from "../../runtime/session";
+import { browserLoginSession } from "../../runtime/credentials";
+import { requestedProject, withConnectionOptions, type ConnectionOptions } from "../output";
 
-type MigrateCommandOptions = MigrateOptions & {
+type MigrateCommandOptions = MigrateOptions & ConnectionOptions & {
   clearCollection?: string[];
   clearContent?: string[];
   clearColumn?: string[];
@@ -213,7 +217,7 @@ async function runPlannedMigration(input: {
 }
 
 export function migrateCommand(): Command {
-  return new Command("migrate")
+  return withConnectionOptions(new Command("migrate"))
     .description(
       "Plan the schema change against the target environment's content, then apply it",
     )
@@ -273,9 +277,12 @@ export function migrateCommand(): Command {
           );
         }
 
-        const config = getMigrateConfig(process.cwd(), {
-          allowMissingSession: options.dryRun,
-        });
+        // Standard credentials (flags, ATMYAPP_CLI_*, browser login,
+        // .ama/session.json); a dry run needs none.
+        const config = withStandardConnection(
+          getMigrateConfig(process.cwd(), { allowMissingSession: true }),
+          options,
+        );
         ensureAmaDirectory(logger);
         const output = await compileSchema(logger, config as Record<string, unknown>);
         logger.success(
@@ -330,11 +337,63 @@ export function migrateCommand(): Command {
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
         const message =
           error instanceof Error ? error.message : "Unknown error";
-        if (options.json) printJson({ status: "error", error: message });
-        logger.error(`Fatal error after ${totalTime}s: ${message}`, error);
-        process.exit(1);
+        const cliError = error instanceof CliError ? error : undefined;
+        if (options.json) printJson({ status: "error", error: message, ...(cliError ? { code: cliError.code, ...(cliError.fix ? { fix: cliError.fix } : {}) } : {}) });
+        logger.error(`Fatal error after ${totalTime}s: ${message}`, cliError ? undefined : error);
+        if (cliError?.fix) logger.info(cliError.fix);
+        process.exit(cliError?.exitCode ?? 1);
       }
     });
+}
+
+/** One spelling per project URL, so records from older runs still match. */
+function normalizedProjectUrl(url: string): string {
+  const projectId = detectProjectIdFromUrl(url);
+  try {
+    return projectId ? projectApiUrl(url, projectId, "").replace(/\/+$/, "") : url.replace(/\/+$/, "");
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Credentials in the standard order: flags, ATMYAPP_CLI_* variables, a
+ * matching browser login, then what getMigrateConfig read (.ama/session.json).
+ * When they come from the session file, its URL is used exactly as before.
+ * Without credentials a dry run still works.
+ */
+function withStandardConnection<T extends object>(
+  config: T,
+  options: ConnectionOptions & { dryRun?: boolean },
+): T {
+  const fromConfig = config as { url?: unknown; token?: unknown; projectId?: unknown };
+  const text = (value: unknown) => (typeof value === "string" && value.trim() ? value : undefined);
+  const flagsGiven = Boolean(options.token || options.url || requestedProject(options));
+  // A schema push must never land in another project: without --project, a
+  // browser login only counts when it is for the session file's project.
+  const configuredProject = text(fromConfig.projectId) ?? (text(fromConfig.url) && detectProjectIdFromUrl(text(fromConfig.url)!));
+  try {
+    const session = resolveCredentials({
+      flags: { token: options.token, url: options.url, projectId: requestedProject(options) ?? (options.url ? undefined : configuredProject || undefined) },
+      env: process.env,
+      loginSession: () => browserLoginSession(requestedProject(options) ?? configuredProject ?? null),
+      sessionFile: { url: text(fromConfig.url), token: text(fromConfig.token), projectId: text(fromConfig.projectId) },
+    });
+    if (session.sources.url === "session-file" && session.sources.token === "session-file") return config;
+    return {
+      ...config,
+      url: projectApiUrl(session.url, session.projectId, "").replace(/\/+$/, ""),
+      token: session.token,
+      projectId: session.projectId,
+    };
+  } catch (error) {
+    if (!(error instanceof CliError)) throw error;
+    // The session file's URL already names the project in practice; keep the
+    // old behaviour when nothing else was asked for.
+    if (!flagsGiven && text(fromConfig.url)) return config;
+    if (options.dryRun) return config;
+    throw error;
+  }
 }
 
 async function runLegacyUpload(
@@ -377,7 +436,7 @@ async function runLegacyUpload(
 }
 
 export function migrateStatusCommand(): Command {
-  return new Command("migrate-status")
+  return withConnectionOptions(new Command("migrate-status"))
     .description(
       "Check whether a migration was applied, and finish its follow-up work",
     )
@@ -397,7 +456,7 @@ export function migrateStatusCommand(): Command {
     .action(
       async (
         operationIdArgument: string | undefined,
-        options: {
+        options: ConnectionOptions & {
           branch?: string;
           reconcile?: boolean;
           operations?: string;
@@ -413,13 +472,13 @@ export function migrateStatusCommand(): Command {
           const operationId = operationIdArgument ?? record?.operationId;
           if (!operationId)
             throw new Error("No operation ID given and no migration was started from this directory.");
-          const config = getMigrateConfig(process.cwd());
+          const config = withStandardConnection(getMigrateConfig(process.cwd(), { allowMissingSession: true }), options);
           const target = migrationTarget(
             config as Record<string, unknown>,
             options.branch ?? record?.branch,
           );
           // A record names where its migration went; never ask another project.
-          if (record && record.url !== target.url)
+          if (record && normalizedProjectUrl(record.url) !== normalizedProjectUrl(target.url))
             throw new Error(
               `Migration ${operationId} was sent to ${record.url}, but this session uses ${target.url}. Switch back with 'atmyapp use' first.`,
             );
@@ -467,9 +526,11 @@ export function migrateStatusCommand(): Command {
           logger.success("Follow-up work is complete.");
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          if (options.json) printJson({ status: "error", error: message });
+          const cliError = error instanceof CliError ? error : undefined;
+          if (options.json) printJson({ status: "error", error: message, ...(cliError ? { code: cliError.code } : {}) });
           logger.error(message);
-          process.exit(1);
+          if (cliError?.fix) logger.info(cliError.fix);
+          process.exit(cliError?.exitCode ?? 1);
         }
       },
     );

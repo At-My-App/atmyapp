@@ -96,7 +96,8 @@ describe("--json output and exit codes", () => {
     (process.stdin as any).isTTY = false;
     try {
       const output = await run(useCommand(), ["--json"]);
-      expect(output.error).toMatchObject({ code: "needs_confirmation", fix: expect.stringContaining("--url") });
+      // The URL is optional now (a key names its project); only the key is asked for.
+      expect(output.error).toMatchObject({ code: "needs_confirmation", fix: expect.stringContaining("--token") });
       expect(process.exitCode).toBe(EXIT.confirmation);
     } finally {
       (process.stdin as any).isTTY = isTTY;

@@ -155,7 +155,15 @@ test("resumes an accepted push with stable IDs, previews, imports reviewer edits
   });
   expect((await stageStatus(work, api.client)).items.every((item) => item.state === "staged")).toBe(true);
   expect((await stageDiff(api.client, work)).items).toHaveLength(6);
-  expect(await stagePreview(api.client, work)).toMatchObject({ url: expect.stringContaining("amaPreviewKey") });
+  const previewStatus = jest.fn(async (input: string | URL | Request) => {
+    expect(String(input)).toBe("https://preview.example.test/.well-known/atmyapp/preview/status?amaPreviewKey=fixture");
+    return new Response(JSON.stringify({ status: "starting" }), { status: 200 });
+  });
+  expect(await stagePreview(api.client, work, { fetch: previewStatus as typeof fetch })).toMatchObject({
+    url: expect.stringContaining("amaPreviewKey"),
+    state: "starting",
+    ready: false,
+  });
   expect(await requestReview(api.client, work, "editor@example.test", "Review")).toMatchObject({
     session: { reviewState: "in_review" },
   });

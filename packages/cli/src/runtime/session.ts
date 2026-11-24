@@ -110,7 +110,7 @@ export function resolveCredentials(sources: CredentialSources): ResolvedSession 
     throw new CliError(
       "missing_project_id",
       "The project ID is missing: the URL does not contain /projects/<id>.",
-      { exitCode: EXIT.usage, fix: `Pass --project-id or set ${CLI_ENV.projectId}.` },
+      { exitCode: EXIT.usage, fix: `Pass --project <id> or set ${CLI_ENV.projectId}.` },
     );
   }
 

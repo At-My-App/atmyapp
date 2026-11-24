@@ -15,6 +15,8 @@ import {
   type StagedOperation,
 } from "./compile";
 import { CliError, EXIT } from "./errors";
+import { WAITS } from "./duration";
+import { probePreview, previewStateSchema, waitForPreview, type PreviewProbeOptions, type PreviewState } from "./previewReadiness";
 import { formatRef } from "./refs";
 import { contentFingerprint, sha256Hex } from "./fingerprint";
 import { readSpace, spaceNames, withSpace, writeSpace, type SpaceFile, type SpaceRef } from "./spaces";
@@ -553,18 +555,38 @@ export async function stageDiff(api: ApiClient, work: WorkingCopy, ref?: string)
   );
 }
 
-export async function stagePreview(api: ApiClient, work: WorkingCopy, wait = false) {
+export const stagePreviewResultSchema = previewSchema.extend({
+  /** Whether the link shows the draft right now; see `PreviewState`. */
+  state: previewStateSchema,
+  ready: z.boolean(),
+});
+
+export async function stagePreview(
+  api: ApiClient,
+  work: WorkingCopy,
+  options: PreviewProbeOptions & { wait?: boolean; timeoutMs?: number; onWaiting?: (state: PreviewState) => void } = {},
+): Promise<z.infer<typeof stagePreviewResultSchema>> {
   assertProject(api, work);
   const id = requireLink(readSpace(work.store, work.name));
+  let preview: z.infer<typeof previewSchema>;
   for (let attempt = 0; ; attempt++) {
     try {
-      return response(previewSchema, await api.json("POST", route(id) + "/preview", { body: {} }));
+      preview = response(previewSchema, await api.json("POST", route(id) + "/preview", { body: {} }));
+      break;
     } catch (error) {
-      if (!wait || attempt >= 10 || !(error instanceof CliError) || ![409, 503].includes(error.status ?? 0))
+      if (!options.wait || attempt >= 10 || !(error instanceof CliError) || ![409, 503].includes(error.status ?? 0))
         throw error;
-      await delay(1_500);
+      await (options.sleep ?? delay)(1_500);
     }
   }
+  // A release preview is static and always ready; a dev server may be asleep.
+  const state: PreviewState =
+    preview.mode !== "devserver"
+      ? "ready"
+      : options.wait
+        ? await waitForPreview(preview.url, options.timeoutMs ?? WAITS.preview.default, options)
+        : await probePreview(preview.url, options);
+  return { ...preview, state, ready: state === "ready" };
 }
 
 export async function extendSession(api: ApiClient, work: WorkingCopy, ttlSeconds: number, dryRun = false) {

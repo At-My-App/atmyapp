@@ -1,6 +1,6 @@
 import { segmentSchema } from "../locales";
 import { z } from "zod";
-import { draftDiffSchema, memberSchema, namedSessionSchema, previewSchema, stageConflictSchema } from "../sessions";
+import { draftDiffSchema, memberSchema, namedSessionSchema, stageConflictSchema, stagePreviewResultSchema } from "../sessions";
 import { workStates } from "../workingCopy";
 import { pullSummarySchema } from "./content";
 
@@ -56,7 +56,7 @@ export const draftOutputSchemas = {
   "assets put": edit,
   "files put": edit,
   "stage conflicts": stageConflictSchema,
-  "space create": space,
+  "space create": space.extend({ active: z.boolean(), overriddenBy: z.literal("ATMYAPP_SPACE").optional() }),
   "space use": space,
   "space rm": space,
   "space gc": z.object({ dryRun, objects: z.int(), bytes: z.int() }),
@@ -102,7 +102,7 @@ export const draftOutputSchemas = {
   "stage diff": draftDiffSchema,
   "stage undo": stageAction.extend({ stepId: z.string().optional(), restoredItemKeys: z.array(z.string()).optional() }),
   "stage discard": stageAction.extend({ discarded: z.boolean() }),
-  "stage preview": previewSchema,
+  "stage preview": stagePreviewResultSchema,
   "stage extend": stageAction.extend({ ttlSeconds: z.int() }),
   "stage review": stageAction.extend({ reviewer: memberSchema }),
   "members ls": z.object({ members: z.array(memberSchema) }),

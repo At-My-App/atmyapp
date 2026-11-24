@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
 import type { ApiClient } from "./api";
-import { CLI_SESSION_PREFIX } from "./auth";
+import { isPersonalCredential } from "./auth";
 import { writePrivateFile } from "./credentials";
 import { CliError, EXIT } from "./errors";
 import { lockFile } from "./fileLock";
@@ -25,7 +25,7 @@ export const keyRevokeSchema = z.object({ dryRun: z.boolean(), id: keyIdSchema, 
 const requestTimeout = () => AbortSignal.timeout(30_000);
 
 function requireLogin(api: ApiClient) {
-  if (!api.session.token.startsWith(CLI_SESSION_PREFIX)) {
+  if (!isPersonalCredential(api.session.token)) {
     throw new CliError("login_required", "Project keys are managed from a browser login.", {
       exitCode: EXIT.auth, fix: "Run 'atmyapp login --scopes keys.manage,...' and use that session for this project.",
     });
@@ -74,7 +74,7 @@ function withKey(contents: string, token: string): string {
   return output + (output && !output.endsWith(newline) ? newline : "") + assignment + newline;
 }
 
-export async function createKey(api: ApiClient, options: { name: string; scopes: string[]; envFile?: string; dryRun?: boolean }): Promise<z.infer<typeof keyCreateSchema>> {
+export async function createKey(api: ApiClient, options: { name: string; scopes: string[]; envFile?: string; dryRun?: boolean; replace?: boolean }): Promise<z.infer<typeof keyCreateSchema>> {
   requireLogin(api);
   const name = options.name.trim();
   const scopeSchema = z.array(z.enum(PROJECT_KEY_SCOPES)).min(1);
@@ -92,10 +92,24 @@ export async function createKey(api: ApiClient, options: { name: string; scopes:
     throw new CliError("env_file_unavailable", "The target directory must exist and be writable.", { details: { envFile: requested } });
   }
   envContents(envFile);
+  // `--replace`: the active key with this name is revoked and replaced in one
+  // approved request (CliEverywherePlan §4.4.6), for example after its secret was lost.
+  let replaceKeyId: string | undefined;
+  if (options.replace) {
+    const { projectKeys } = await listKeys(api);
+    const existing = projectKeys.find((key) => key.name.toLowerCase() === name.toLowerCase() && key.status !== "revoked");
+    if (!existing) {
+      throw new CliError("key_not_found", `No active key called '${name}' to replace.`, {
+        details: { keys: projectKeys.map(({ id, name: keyName, key_hint }) => ({ id, name: keyName, hint: key_hint })) },
+        fix: "Drop --replace to create a new key.",
+      });
+    }
+    replaceKeyId = existing.id;
+  }
   if (options.dryRun) return { dryRun: true, name, scopes, envFile };
   const unlock = lockFile(envFile + ".atmyapp-lock", "Another command is updating this env file.");
   try {
-    const raw = await api.json("POST", "project-keys", { body: { name, scopes }, signal: requestTimeout() });
+    const raw = await api.json("POST", "project-keys", { body: { name, scopes, ...(replaceKeyId ? { replaceKeyId } : {}) }, signal: requestTimeout() });
     const created = createdSchema.safeParse(raw);
     if (!created.success) throw new CliError("invalid_response", "The server returned an invalid key creation response.");
     const { id, secret } = created.data;

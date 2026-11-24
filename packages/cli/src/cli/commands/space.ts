@@ -13,15 +13,31 @@ export function spaceCommand() {
         .description("Create a space from the published copy or another space")
         .argument("<name>")
         .option("--from <space>", "Copy changes from another space")
+        .option("--no-use", "Keep the current active space instead of switching to the new one")
         .addHelpText("after", "\nExample: atmyapp space create homepage --from published")
-        .action((name: string, options: DraftOptions & { from?: string }) =>
+        .action((name: string, options: DraftOptions & { from?: string; use?: boolean }) =>
           runAction(
             options,
             async () => {
-              const space = createSpace(new ContentStore(), name, options);
-              return { space: space.name, dryRun: !!options.dryRun };
+              const store = new ContentStore();
+              const space = createSpace(store, name, options);
+              // Like `git switch -c`: the next edits go to the space just created.
+              const active = options.use !== false;
+              if (active && !options.dryRun) useSpace(store, space.name);
+              const override = process.env.ATMYAPP_SPACE;
+              return {
+                space: space.name,
+                active,
+                dryRun: !!options.dryRun,
+                ...(active && override && override !== space.name ? { overriddenBy: "ATMYAPP_SPACE" } : {}),
+              };
             },
-            (result) => console.log(result.dryRun ? `Would create '${result.space}'.` : `Created '${result.space}'.`),
+            (result) => {
+              const verb = result.dryRun ? "Would create" : "Created";
+              console.log(result.active ? `${verb} '${result.space}' and switched to it.` : `${verb} '${result.space}'.`);
+              if (result.overriddenBy)
+                console.error(`ATMYAPP_SPACE=${process.env.ATMYAPP_SPACE} still wins in this shell. Unset it to use '${result.space}'.`);
+            },
           ),
         ),
     )

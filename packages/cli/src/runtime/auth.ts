@@ -26,6 +26,13 @@ async function safeReadText(response: Response): Promise<string | null> {
 }
 
 export const CLI_SESSION_PREFIX = "ama_cs_";
+/** Personal tokens made in the dashboard (Account → Personal tokens). */
+export const PERSONAL_TOKEN_PREFIX = "ama_pt_";
+
+/** A browser login or a personal token: acts as a person (CliEverywherePlan §4.1). */
+export function isPersonalCredential(token: string | undefined | null): boolean {
+  return Boolean(token && (token.startsWith(CLI_SESSION_PREFIX) || token.startsWith(PERSONAL_TOKEN_PREFIX)));
+}
 
 export function cliApiUrl(url: string, subPath: string): string {
   const parsedUrl = new URL(stripTrailingSlashes(url));
@@ -55,7 +62,7 @@ export function cliApiUrl(url: string, subPath: string): string {
 }
 
 export function buildCliAuthVerifyUrl(url: string, token?: string): string {
-  return cliApiUrl(url, token?.startsWith(CLI_SESSION_PREFIX) ? "cli-auth/session" : "cli-keys/auth/verify");
+  return cliApiUrl(url, isPersonalCredential(token) ? "cli-auth/session" : "cli-keys/auth/verify");
 }
 
 export async function verifyCliAuthentication(options: {

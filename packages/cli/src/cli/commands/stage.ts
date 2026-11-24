@@ -19,6 +19,7 @@ import {
 } from "../../runtime/sessions";
 import { draftSchemaWarnings } from "../../runtime/compile";
 import { stageCommit } from "../../runtime/publish";
+import { waitTimeout } from "../../runtime/duration";
 import { connect, printValue, runAction, table } from "../output";
 import { confirm, draftOptions, maybeConnect, workFor, type DraftOptions } from "./draftOptions";
 
@@ -207,13 +208,29 @@ export function stageCommand() {
     .addCommand(
       draftOptions(new Command("preview"))
         .description("Get the managed website preview URL")
-        .option("--wait", "Retry while the preview URL is being prepared")
-        .addHelpText("after", "\nExample: atmyapp stage preview --wait")
-        .action((options: DraftOptions & { wait?: boolean }) =>
+        .option("--wait", "Wait until the preview server is ready (it can take a minute to start)")
+        .option("--timeout <duration>", "Longest wait with --wait: 5s to 15m (default 3m)")
+        .addHelpText(
+          "after",
+          "\nThe result's state is ready, starting, error, ended or unknown. While it is starting, the link shows a loading page and reloads itself when ready.\n\nExample: atmyapp stage preview --wait --json",
+        )
+        .action((options: DraftOptions & { wait?: boolean; timeout?: string }) =>
           runAction(
             options,
-            async () => stagePreview(connect(options).api, workFor(options), options.wait),
-            (result) => console.log(result.url),
+            async ({ json }) =>
+              stagePreview(connect(options).api, workFor(options), {
+                wait: options.wait,
+                timeoutMs: waitTimeout("preview", options.timeout),
+                onWaiting: json ? undefined : () => console.error("Waiting for the preview server to start…"),
+              }),
+            (result) => {
+              console.log(result.url);
+              if (result.state === "starting")
+                console.error("The preview server is starting (usually under a minute). Run 'atmyapp stage preview --wait' to wait for it.");
+              else if (result.state === "error")
+                console.error("The preview server failed to start. Run 'atmyapp stage preview --wait' to try again.");
+              else if (result.state === "ended") console.error("This preview has ended. Check 'atmyapp stage status'.");
+            },
           ),
         ),
     )

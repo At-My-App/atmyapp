@@ -1,24 +1,14 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { ApiClient, projectApiUrl, type ApiClientOptions } from "./api";
-import { type BrowserLogin, readBrowserLogin, removeBrowserLogin, saveBrowserLogin } from "./credentials";
+import { type BrowserLogin, projectLimitSchema, readBrowserLogin, removeBrowserLogin, saveBrowserLogin } from "./credentials";
 import { CliError, EXIT } from "./errors";
+import { PROJECT_KEY_SCOPES } from "./scopes";
 
-export const PROJECT_KEY_SCOPES = [
-  "schema.read", "content.read", "content.stage", "schema.push", "snapshot",
-  "forms.tail", "content.publish", "hosting.read", "hosting.deploy",
-] as const;
-const loginScopes = [...PROJECT_KEY_SCOPES, "keys.manage"] as const;
+export { PROJECT_KEY_SCOPES };
 export const DEFAULT_LOGIN_URL = "https://api.atmyapp.com";
-
-export function parseScopes(input: string | undefined, forLogin: boolean): string[] {
-  const accepted: readonly string[] = forLogin ? loginScopes : PROJECT_KEY_SCOPES;
-  const requested = input === undefined && forLogin ? ["schema.read", "content.read"] : (input ?? "").trim().split(/[,\s]+/).filter(Boolean);
-  if (!requested.length || requested.some((scope) => !accepted.includes(scope))) {
-    throw new CliError("invalid_scopes", "Choose scopes from " + accepted.join(", ") + ".", { exitCode: EXIT.usage });
-  }
-  return [...new Set(requested)];
-}
+/** The login protocol that may reach several projects (CliEverywherePlan E34). */
+export const LOGIN_PROTOCOL = 2;
 
 function requireSecureUrl(input: string): URL {
   try {
@@ -38,16 +28,29 @@ const deviceSchema = z.object({
 });
 const exchangeSchema = z.union([
   z.object({ status: z.literal("pending") }),
-  z.object({ token: z.string().regex(/^ama_cs_[a-f0-9]{64}$/), projectId: z.string().min(1), expiresAt: z.iso.datetime({ offset: true }) }),
+  z.object({
+    token: z.string().regex(/^ama_cs_[a-f0-9]{64}$/),
+    projectId: z.string().min(1).nullable(),
+    expiresAt: z.iso.datetime({ offset: true }),
+    projectLimit: projectLimitSchema.nullable().optional(),
+  }),
 ]);
 export const loginResultSchema = z.discriminatedUnion("dryRun", [
   z.object({ dryRun: z.literal(true), projectId: z.string().nullable(), url: z.string(), scopes: z.array(z.string()) }),
-  z.object({ dryRun: z.literal(false), projectId: z.string(), url: z.string(), expiresAt: z.string(), storage: z.enum(["file", "keychain"]) }),
+  z.object({
+    dryRun: z.literal(false),
+    /** Set when the login is limited to one project. */
+    projectId: z.string().nullable(),
+    projectLimit: projectLimitSchema.nullable(),
+    url: z.string(),
+    expiresAt: z.string(),
+    storage: z.enum(["file", "keychain"]),
+  }),
 ]);
 export const logoutResultSchema = z.object({ loggedOut: z.boolean(), dryRun: z.boolean() });
 
 async function revokeLogin(login: BrowserLogin, options?: ApiClientOptions) {
-  const api = new ApiClient(login, options);
+  const api = new ApiClient({ ...login, projectId: login.projectId ?? "" }, options);
   await api.cliAuth("DELETE", "session", { allow: [401], signal: AbortSignal.timeout(15_000) });
 }
 
@@ -62,9 +65,20 @@ export async function login(
   const apiUrl = requireSecureUrl(input.url).href;
   if (input.dryRun) return { dryRun: true, url: apiUrl, projectId: input.projectId ?? null, scopes: input.scopes };
   const api = new ApiClient({ token: "", url: apiUrl, projectId: input.projectId ?? "" }, options);
-  const started = deviceSchema.safeParse(await api.cliAuth("POST", "device", {
-    body: { projectId: input.projectId, scopes: input.scopes }, signal: AbortSignal.timeout(15_000),
-  }));
+  const requested = await api.cliAuth("POST", "device", {
+    body: { protocol: LOGIN_PROTOCOL, projectId: input.projectId, scopes: input.scopes }, signal: AbortSignal.timeout(15_000),
+  }).catch((error: unknown) => {
+    // A server from before multi-project logins doesn't know the newer scopes.
+    if (error instanceof CliError && error.status === 400) {
+      throw new CliError("login_unsupported", "This server doesn't accept these login permissions yet.", {
+        exitCode: EXIT.usage,
+        status: 400,
+        fix: "Ask for the older scopes instead, for example: atmyapp login --project <id> --scopes schema.read,content.read",
+      });
+    }
+    throw error;
+  });
+  const started = deviceSchema.safeParse(requested);
   if (!started.success) throw new CliError("invalid_response", "The server returned an invalid CLI login request.");
   const device = started.data;
   const deadline = Date.now() + device.expiresIn * 1000;
@@ -86,13 +100,25 @@ export async function login(
     const result = exchangeSchema.safeParse(exchanged);
     if (!result.success) throw new CliError("invalid_response", "The server returned an invalid CLI login response.");
     if ("status" in result.data) continue;
-    const entry = { ...result.data, url: projectApiUrl(apiUrl, result.data.projectId, "") };
+    const approved = result.data;
+    // One project: keep that project's URL, as before. Wider: keep the API URL.
+    const entry: BrowserLogin = {
+      token: approved.token,
+      projectId: approved.projectId,
+      url: approved.projectId ? projectApiUrl(apiUrl, approved.projectId, "") : new URL(apiUrl).origin,
+      expiresAt: approved.expiresAt,
+      projectLimit: approved.projectLimit ?? (approved.projectId ? { kind: "projects", ids: [approved.projectId] } : null),
+      lastProjectId: null,
+    };
     try {
       if (input.projectId && entry.projectId !== input.projectId)
         throw new CliError("project_mismatch", "The server approved a different project.", { exitCode: EXIT.auth });
       const { backend, replaced } = saveBrowserLogin(entry, options.file);
       if (replaced && replaced.token !== entry.token) await revokeLogin(replaced, options).catch(() => undefined);
-      return { dryRun: false, projectId: entry.projectId, url: entry.url, expiresAt: entry.expiresAt, storage: backend };
+      return {
+        dryRun: false, projectId: entry.projectId, projectLimit: entry.projectLimit ?? null,
+        url: entry.url, expiresAt: entry.expiresAt, storage: backend,
+      };
     } catch (error) {
       await revokeLogin(entry, options).catch(() => undefined);
       throw error;

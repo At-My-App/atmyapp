@@ -20,8 +20,13 @@ import { spaceCommand } from "./commands/space";
 import { membersCommand, stageCommand } from "./commands/stage";
 import { loginCommand, logoutCommand } from "./commands/login";
 import { hostingCommand } from "./commands/hosting";
+import { domainsCommand } from "./commands/domains";
 import { keysCommand } from "./commands/keys";
-import { CLI_VERSION } from "./output";
+import { orgsCommand, projectsCommand } from "./commands/projects";
+import { statusCommand } from "./commands/status";
+import { analyticsCommand, linksCommand } from "./commands/analytics";
+import { previewCommand } from "./commands/preview";
+import { CLI_VERSION, withApprovalOptions } from "./output";
 
 const program = new Command()
   .name("atmyapp")
@@ -35,6 +40,9 @@ program.addCommand(useCommand());
 program.addCommand(loginCommand());
 program.addCommand(logoutCommand());
 program.addCommand(whoamiCommand());
+program.addCommand(projectsCommand());
+program.addCommand(orgsCommand());
+program.addCommand(statusCommand());
 program.addCommand(doctorCommand());
 program.addCommand(schemaCommand());
 program.addCommand(contentCommand());
@@ -42,6 +50,8 @@ program.addCommand(entriesCommand());
 program.addCommand(spaceCommand());
 program.addCommand(stageCommand());
 program.addCommand(hostingCommand());
+program.addCommand(previewCommand());
+program.addCommand(domainsCommand());
 program.addCommand(keysCommand());
 program.addCommand(membersCommand());
 program.addCommand(assetsCommand());
@@ -53,7 +63,10 @@ program.addCommand(uploadCommand());
 program.addCommand(generateCommand());
 program.addCommand(snapshotCommand());
 program.addCommand(submissionsCommand());
+program.addCommand(analyticsCommand());
+program.addCommand(linksCommand());
 program.addCommand(helpCommand(program));
+withApprovalOptions(program);
 
 program.parseAsync(process.argv).catch((err) => {
   console.error("Error:", err.message);

@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { Command } from "commander";
 import { readBrowserLogin } from "../../runtime/credentials";
-import { DEFAULT_LOGIN_URL, login, logout, parseScopes } from "../../runtime/login";
+import { DEFAULT_LOGIN_URL, login, logout } from "../../runtime/login";
+import { LOGIN_PRESETS, loginScopes } from "../../runtime/scopes";
 import { CLI_ENV, detectProjectIdFromUrl } from "../../runtime/session";
 import { CLI_VERSION, readSessionFile, runAction, type CommonOptions } from "../output";
 
@@ -13,18 +14,29 @@ function openBrowser(url: string) {
   child.unref();
 }
 
-type LoginOptions = CommonOptions & { project?: string; scopes?: string; browser: boolean; dryRun?: boolean };
+type LoginOptions = CommonOptions & { project?: string; preset?: string; scopes?: string; browser: boolean; dryRun?: boolean };
+
+function reachText(result: { projectId: string | null; projectLimit: { kind: string; ids?: string[] } | null }) {
+  if (result.projectId) return result.projectId;
+  const limit = result.projectLimit;
+  if (!limit || limit.kind === "all") return "all your projects";
+  return `${limit.ids?.length ?? 0} ${limit.kind === "orgs" ? "organisation(s)" : "project(s)"}`;
+}
 
 export const loginCommand = () => new Command("login")
-  .description("Sign in from the browser with project-specific permissions")
-  .option("--project <id>", "Project to authorize")
-  .option("--scopes <list>", "Comma-separated permissions (defaults to schema.read,content.read)")
+  .description("Sign in from the browser; one login can reach all your projects")
+  .option("--project <id>", "Limit the login to one project")
+  .option("--preset <name>", `What it may do: ${Object.keys(LOGIN_PRESETS).join(", ")} (default read-only; you can change it in the browser)`)
+  .option("--scopes <list>", "Comma-separated permissions, instead of --preset")
   .option("--url <url>", "Override the AtMyApp API URL")
   .option("--no-browser", "Print the verification link without opening a browser")
   .option("--json", "Print the result as JSON")
   .option("--verbose", "Show more detail")
   .option("--dry-run", "Show the request without starting a login")
-  .addHelpText("after", "\nExample: atmyapp login --project my-site --scopes content.read,content.stage")
+  .addHelpText(
+    "after",
+    "\nThe browser page lets you pick the projects it reaches and change the permissions. It lasts 90 days, renews while you use it, and ends after a year at most.\n\nExamples:\n  atmyapp login --preset everything\n  atmyapp login --project my-site --scopes content.read,content.stage",
+  )
   .action((options: LoginOptions) => runAction(options, async () => {
     let url = options.url || process.env[CLI_ENV.url];
     if (!url) {
@@ -35,7 +47,7 @@ export const loginCommand = () => new Command("login")
     return login({
       url,
       projectId: options.project || process.env[CLI_ENV.projectId] || detectProjectIdFromUrl(url),
-      scopes: parseScopes(options.scopes, true),
+      scopes: loginScopes(options).scopes,
       dryRun: options.dryRun,
     }, {
       cliVersion: CLI_VERSION,
@@ -46,8 +58,9 @@ export const loginCommand = () => new Command("login")
       },
     });
   }, (result) => console.log(result.dryRun
-    ? "Would request " + result.scopes.join(", ") + " for " + (result.projectId ?? "a project you choose in your browser") + "."
-    : "Signed in to " + result.projectId + ". Session expires " + result.expiresAt + ".")));
+    ? "Would request " + result.scopes.join(", ") + " for " + (result.projectId ?? "the projects you choose in your browser") + "."
+    : "Signed in to " + reachText(result) + ". Expires " + result.expiresAt + "." +
+      (result.projectId ? "" : "\nPick a project for this folder with 'atmyapp projects use <id>' ('atmyapp projects ls' lists them)."))));
 
 export const logoutCommand = () => new Command("logout")
   .description("Revoke the browser login saved on this computer")

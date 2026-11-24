@@ -124,7 +124,7 @@ it("separates build failure with log tail from timeout after a release was admit
   } });
   await expect(hostingDeploy(testApi(failed))).rejects.toMatchObject({ code: "build_failed", exitCode: 1, details: { logs: ["start", "end"] } });
   await expect(hostingDeploy(testApi(release), { wait: true, timeoutMs: 0 })).rejects.toMatchObject({
-    code: "deploy_timeout", exitCode: 1, details: { releaseId: "new", status: "pending" },
+    code: "deploy_timeout", exitCode: 8, details: { releaseId: "new", status: "pending", state: "pending", resume: "atmyapp hosting logs new --follow" },
   });
 });
 
@@ -140,15 +140,22 @@ it("exchanges device login without ambient auth, stores fallback privately and r
     }
     expect(headers.has("authorization")).toBe(false);
     expect(init?.redirect).toBe("error");
-    if (String(url).endsWith("/device")) return ok({
+    if (String(url).endsWith("/device")) {
+      // Newer CLIs say they understand multi-project logins (E34).
+      expect(JSON.parse(String(init?.body))).toMatchObject({ protocol: 2, scopes: ["content.read"] });
+      return ok({
       deviceCode: "b".repeat(64), userCode: "ABCDEFGH", verificationUrl: "https://dash.test/cli/authorize?code=ABCDEFGH", interval: 5, expiresIn: 600,
-    });
+      });
+    }
     expect(JSON.parse(String(init?.body))).toEqual({ deviceCode: "b".repeat(64) });
     return ok(++polls === 1 ? { status: "pending" } : { token, projectId: draftProject, expiresAt: expire });
   };
   const verify = jest.fn();
   const result = await login({ url: session.url, scopes: ["content.read"] }, { file, fetch, pause: async () => undefined, verify });
-  expect(result).toEqual({ dryRun: false, projectId: draftProject, expiresAt: expire, storage: "file", url: session.url });
+  expect(result).toEqual({
+    dryRun: false, projectId: draftProject, projectLimit: { kind: "projects", ids: [draftProject] },
+    expiresAt: expire, storage: "file", url: session.url,
+  });
   expect(verify).toHaveBeenCalledWith("https://dash.test/cli/authorize?code=ABCDEFGH", "ABCDEFGH");
   expect(readBrowserLogin({ file })).toMatchObject(session);
   if (process.platform !== "win32") expect(fs.statSync(file).mode & 0o777).toBe(0o600);

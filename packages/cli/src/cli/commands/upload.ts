@@ -79,7 +79,7 @@ interface UploadQueryParams {
 
 export function uploadCommand(): Command {
   return new Command("upload")
-    .description("Upload files to project storage")
+    .description("Upload files to project storage (deprecated: use files put)")
     .argument("[inputs...]")
     .option("-t, --token <token>", "Authentication token override")
     .option("-u, --url <url>", "Project base URL override")
@@ -98,6 +98,8 @@ export function uploadCommand(): Command {
     .option("--verbose", "Enable verbose logging")
     .action(async (inputPatterns: string[], options: UploadCommandOptions) => {
       const logger = new Logger(Boolean(options.verbose));
+      // stderr only: scripts that parse stdout keep working.
+      console.error("'atmyapp upload' is deprecated and will be removed in a future version. Use 'atmyapp files put' (or 'atmyapp assets put' for a field), then 'atmyapp stage push'.");
 
       try {
         const session = resolveSession({

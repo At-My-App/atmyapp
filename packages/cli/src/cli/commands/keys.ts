@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { createKey, listKeys, revokeKey } from "../../runtime/keys";
-import { parseScopes } from "../../runtime/login";
+import { CliError, EXIT } from "../../runtime/errors";
+import { KEY_PRESETS, keyScopes } from "../../runtime/scopes";
 import { connect, runAction, table, withCommonOptions, type CommonOptions } from "../output";
 
 export const keysCommand = () => new Command("keys")
@@ -17,12 +18,18 @@ export const keysCommand = () => new Command("keys")
   .addCommand(withCommonOptions(new Command("create"))
     .description("Create a key and write its value to an env file")
     .requiredOption("--name <name>", "Key name")
-    .requiredOption("--scopes <list>", "Comma-separated project key scopes")
+    .option("--preset <name>", `What it's for: ${Object.keys(KEY_PRESETS).join(", ")}`)
+    .option("--scopes <list>", "Comma-separated project key scopes, instead of --preset")
     .option("--env-file <path>", "Where to write ATMYAPP_CLI_KEY", ".env.local")
     .option("--dry-run", "Show the target file and scopes before creating anything")
-    .addHelpText("after", "\nExample: atmyapp keys create --name CI --scopes content.read --env-file .env.local")
-    .action((options: CommonOptions & { name: string; scopes: string; envFile: string; dryRun?: boolean }) =>
-      runAction(options, () => createKey(connect(options).api, { ...options, scopes: parseScopes(options.scopes, false) }),
+    .option("--replace", "Revoke the active key with this name and create its replacement")
+    .addHelpText("after", "\nProject keys are for CI and servers and belong to the project; on your own computer, use 'atmyapp login'.\nNames are unique among active keys. If a key was created but its secret was lost (key_secret_lost), run the same command with --replace.\n\nExample: atmyapp keys create --name CI --preset ci-deploy --env-file .env.local")
+    .action((options: CommonOptions & { name: string; preset?: string; scopes?: string; envFile: string; dryRun?: boolean; replace?: boolean }) =>
+      runAction(options, () => {
+        const scopes = keyScopes(options);
+        if (!scopes) throw new CliError("invalid_options", "Pass --preset or --scopes.", { exitCode: EXIT.usage, fix: `Presets: ${Object.keys(KEY_PRESETS).join(", ")}.` });
+        return createKey(connect(options).api, { ...options, scopes });
+      },
         (result) => console.log(result.dryRun
           ? "Would create " + result.name + " with " + result.scopes.join(", ") + " and write " + result.envFile + "."
           : "Created " + result.hint + ". Saved in " + result.envFile + "."))))

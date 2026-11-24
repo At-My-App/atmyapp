@@ -1,5 +1,5 @@
-import { buildCliAuthVerifyUrl, CLI_SESSION_PREFIX, cliApiUrl } from "./auth";
-import { CliError, EXIT } from "./errors";
+import { buildCliAuthVerifyUrl, cliApiUrl, isPersonalCredential } from "./auth";
+import { CliError, EXIT, needsPerson } from "./errors";
 import type { CliSession } from "./session";
 
 type QueryScalar = string | number | boolean;
@@ -27,7 +27,42 @@ export interface ApiClientOptions {
   fetch?: typeof fetch;
   /** Sent as X-AtMyApp-CLI-Version so the server can ask for an upgrade. */
   cliVersion?: string;
+  /** Sent as X-AtMyApp-Agent (runtime/agent.ts); advisory only. */
+  agent?: string;
+  /** Called when the server renewed a browser login (X-AtMyApp-Credential-Expires). */
+  onCredentialRenewed?: (expiresAt: string) => void;
+  /** How a request that needs the owner's approval waits (CliEverywherePlan §4.4.2). */
+  approval?: ApprovalOptions;
 }
+
+/** A request waiting for its owner (the server's 428 `approval_required`). */
+export interface PendingApproval {
+  id: string;
+  code: string;
+  url: string;
+  summary: string;
+  class?: string;
+  expiresAt: string;
+  pollAfterMs?: number;
+}
+
+export interface ApprovalOptions {
+  /** `--no-wait`: stop at once with needs_person. */
+  wait?: boolean;
+  /** `--approval-timeout`, in milliseconds (default 3 minutes). */
+  timeoutMs?: number;
+  /** The command that continues after approving, for `details.resume`. */
+  resume?: string;
+  /** Progress for people, on stderr. */
+  onWaiting?: (approval: PendingApproval) => void;
+  onStale?: (message: string) => void;
+  sleep?: (ms: number) => Promise<unknown>;
+}
+
+/** Set when any response this run was a replay of an approved request (x-atmyapp-replayed). */
+export const replayState = { replayed: false };
+
+const APPROVAL_DEFAULT_TIMEOUT_MS = 3 * 60_000;
 
 /** `/v0/projects/<id>/<subPath>` for a session URL in any of the accepted shapes. */
 export function projectApiUrl(
@@ -119,8 +154,34 @@ function errorFromResponse(status: number, body: ErrorBody | null, path: string,
       status,
       details: { scopes: body?.scopes ?? [] },
       fix: usesLogin ? "Run 'atmyapp login --scopes' with the required scopes."
-        : `Create a CLI key with ${(body?.scopes ?? []).join(" or ") || "the needed scope"} in Settings → CLI keys, then run 'atmyapp use' with it.`,
+        : `Create a project key with ${(body?.scopes ?? []).join(" or ") || "the needed scope"} in Settings → Project keys, then run 'atmyapp use' with it.`,
     });
+  }
+  // Approvals (CliEverywherePlan §4.4).
+  if (code === "approval_denied") {
+    return new CliError(code, message, { exitCode: EXIT.auth, status, fix: "Nothing was changed. Ask the owner, or change the request." });
+  }
+  if (code === "approval_limit") {
+    return new CliError(code, message, { status, fix: "Answer or let the waiting requests expire, then try again." });
+  }
+  if (code === "approval_in_progress") {
+    return new CliError(code, message, { exitCode: EXIT.conflict, status, fix: "Run the command again in a moment to see its result." });
+  }
+  if (code === "key_secret_lost") {
+    const name = typeof body?.details?.name === "string" ? body.details.name : "<name>";
+    return new CliError(code, message, {
+      status, details: body?.details,
+      fix: `The key exists but its secret is gone. Replace it: atmyapp keys create --name "${name}" --replace --preset <preset>`,
+    });
+  }
+  if (code === "key_name_taken") {
+    return new CliError(code, message, {
+      exitCode: EXIT.conflict, status, details: body?.details,
+      fix: "Choose another name, or replace that key with --replace.",
+    });
+  }
+  if (code === "personal_credentials_off") {
+    return new CliError(code, message, { exitCode: EXIT.auth, status, fix: "Use 'atmyapp login --project <id>' for one project for now." });
   }
   if (code === "project_key_not_accepted") {
     return new CliError("keys_not_accepted", message, { exitCode: EXIT.auth, status });
@@ -129,8 +190,22 @@ function errorFromResponse(status: number, body: ErrorBody | null, path: string,
     return new CliError("key_stopped", message, {
       exitCode: EXIT.auth,
       status,
-      fix: "Ask someone who can still do this to create a new CLI key.",
+      fix: "Ask someone who can still do this to create a new project key.",
     });
+  }
+  // The inbox's record-level refusals (CliEverywherePlan §5.3).
+  if (code === "live_messages_refused") {
+    return new CliError(code, message, {
+      exitCode: EXIT.auth, status, fix: "This credential sees test messages only. List them with '--env test'.",
+    });
+  }
+  if (code === "erase_not_allowed") {
+    return new CliError(code, message, {
+      exitCode: EXIT.auth, status, fix: "Ask a project admin, or move the submissions to the trash with '--trash'.",
+    });
+  }
+  if (code === "export_too_large") {
+    return new CliError(code, message, { exitCode: EXIT.usage, status, fix: "Narrow the filters and export again." });
   }
   if (status === 401) {
     return new CliError("unauthenticated", usesLogin ? "The CLI login was not accepted. It may have expired or been revoked." : "The CLI key was not accepted. It may be revoked or for another project.", {
@@ -146,6 +221,10 @@ function errorFromResponse(status: number, body: ErrorBody | null, path: string,
     const exitCode = code === "hard-validation-failure" ? EXIT.validation : code === "commit-conflict" ? EXIT.conflict :
       code === "device_expired" || code === "device_denied" ? EXIT.auth : EXIT.error;
     return new CliError(code, message, { status, details, exitCode });
+  }
+  // Project creation refusals (CliEverywherePlan E29) and reach limits keep their reason.
+  if (code && ["partner_quota", "staff_limit", "creation_not_allowed", "credential_project_limit", "not_a_business", "organization_not_found", "project_key_expired"].includes(code)) {
+    return new CliError(code, message, { exitCode: EXIT.auth, status, details: body?.details });
   }
   if (status === 403) return new CliError("forbidden", message, { exitCode: EXIT.auth, status });
   if (status === 404) return new CliError("not_found", message, { status, details: { path } });
@@ -178,6 +257,9 @@ function unwrap(body: unknown): unknown {
 export class ApiClient {
   private readonly fetchImpl: typeof fetch;
   private readonly cliVersion?: string;
+  private readonly agent?: string;
+  private readonly onCredentialRenewed?: (expiresAt: string) => void;
+  private readonly approval: ApprovalOptions;
 
   constructor(
     readonly session: CliSession,
@@ -187,6 +269,9 @@ export class ApiClient {
     if (typeof impl !== "function") throw new CliError("no_fetch", "fetch is not available in this Node version.");
     this.fetchImpl = impl;
     this.cliVersion = options.cliVersion;
+    this.agent = options.agent;
+    this.onCredentialRenewed = options.onCredentialRenewed;
+    this.approval = options.approval ?? {};
   }
 
   url(subPath: string, query?: Record<string, QueryValue>): string {
@@ -203,18 +288,24 @@ export class ApiClient {
       ...(this.session.token ? { Authorization: `Bearer ${this.session.token}` } : {}),
       ...(json ? { "Content-Type": "application/json" } : {}),
       ...(this.cliVersion ? { "X-AtMyApp-CLI-Version": this.cliVersion } : {}),
+      ...(this.agent ? { "X-AtMyApp-Agent": this.agent } : {}),
     };
   }
 
   async send(method: string, url: string, body?: unknown, raw = false, signal?: AbortSignal, redirect?: RequestRedirect): Promise<Response> {
     try {
-      return await this.fetchImpl(url, {
+      const response = await this.fetchImpl(url, {
         method,
         headers: raw ? { ...this.headers(false), "Content-Type": "application/octet-stream" } : this.headers(body !== undefined),
         body: raw ? body as ArrayBuffer : body === undefined ? undefined : JSON.stringify(body),
         signal,
         redirect,
       });
+      const renewed = response.headers?.get?.("X-AtMyApp-Credential-Expires");
+      if (renewed && this.onCredentialRenewed) {
+        try { this.onCredentialRenewed(renewed); } catch { /* Saving the new expiry is best effort. */ }
+      }
+      return response;
     } catch (error) {
       throw new CliError(
         "network",
@@ -234,9 +325,25 @@ export class ApiClient {
   }
 
   private async jsonAt<T>(method: string, url: string, subPath: string, options: RequestOptions, redirect?: RequestRedirect): Promise<T | null> {
-    const usesLogin = this.session.token.startsWith(CLI_SESSION_PREFIX);
-    const response = await this.send(method, url, options.body, false, options.signal, redirect);
-    const body = await readJson(response);
+    const usesLogin = isPersonalCredential(this.session.token);
+    let response = await this.send(method, url, options.body, false, options.signal, redirect);
+    let body = await readJson(response);
+    // Approvals: wait for the owner, then send the same request again. A
+    // changed state (approval_stale) asks once more with the new state.
+    for (let stale = 0; ; ) {
+      const code = (body as ErrorBody | null)?.code;
+      if (response.status === 428 && code === "approval_required") {
+        await this.waitForApproval((body as { approval?: PendingApproval }).approval);
+      } else if (response.status === 409 && code === "approval_stale" && stale === 0) {
+        stale += 1;
+        const details = (body as ErrorBody).details as { now?: string } | undefined;
+        this.approval.onStale?.(`What you approved changed. Asking again${details?.now ? `: ${details.now}` : "."}`);
+      } else break;
+      // The first signal may have run out while waiting; the resend gets its own.
+      response = await this.send(method, url, options.body, false, AbortSignal.timeout(120_000), redirect);
+      body = await readJson(response);
+    }
+    if (response.headers?.get?.("x-atmyapp-replayed") === "1") replayState.replayed = true;
     if (!response.ok) {
       if (options.allow?.includes(response.status)) return null;
       throw errorFromResponse(response.status, body as ErrorBody, subPath, usesLogin);
@@ -245,6 +352,39 @@ export class ApiClient {
       throw errorFromResponse(response.status, body as ErrorBody, subPath, usesLogin);
     }
     return unwrap(body) as T;
+  }
+
+  /**
+   * Polls the credential's own approval until the owner decides (§4.4.2 step
+   * 4). Approved returns; denied, expired or the timeout throw.
+   */
+  private async waitForApproval(pending: PendingApproval | undefined): Promise<void> {
+    if (!pending?.id) throw new CliError("invalid_response", "The server asked for an approval without saying which.");
+    const resume = this.approval.resume;
+    const stop = (message: string) => needsPerson("approval", message, {
+      url: pending.url, resume, expiresAt: pending.expiresAt,
+      details: { approvalId: pending.id, code: pending.code, summary: pending.summary },
+      fix: resume ? `Approve it on your phone, in the dashboard or at ${pending.url}, then run '${resume}' again.` : undefined,
+    });
+    if (this.approval.wait === false) throw stop(`Waiting for your approval: ${pending.summary}`);
+    this.approval.onWaiting?.(pending);
+    const sleep = this.approval.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+    const deadline = Date.now() + (this.approval.timeoutMs ?? APPROVAL_DEFAULT_TIMEOUT_MS);
+    const url = cliApiUrl(this.session.url, "cli-approvals/" + encodeURIComponent(pending.id));
+    for (;;) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw stop(`Still waiting for your approval: ${pending.summary}`);
+      await sleep(Math.min(Math.max(pending.pollAfterMs ?? 2000, 1000), remaining));
+      const response = await this.send("GET", url, undefined, false, AbortSignal.timeout(15_000)).catch(() => null);
+      if (!response) continue;
+      const body = await readJson(response) as { data?: { approval?: { status?: string } } } | null;
+      const status = response.ok ? body?.data?.approval?.status : undefined;
+      if (status === "approved" || status === "used") return;
+      if (status === "denied") {
+        throw new CliError("approval_denied", `You denied this: ${pending.summary}`, { exitCode: EXIT.auth, fix: "Nothing was changed." });
+      }
+      if (status === "expired") throw stop(`The approval request expired: ${pending.summary}`);
+    }
   }
 
   async upload(subPath: string, data: Uint8Array, query: Record<string, QueryValue>) {
@@ -283,7 +423,10 @@ export class ApiClient {
 
   /** The key check outside project scope (`/v0/cli-keys/auth/verify`). */
   async verifyKey<T>(): Promise<T> {
-    if (this.session.token.startsWith(CLI_SESSION_PREFIX)) return (await this.cliAuth<T>("GET", "session"))!;
+    if (isPersonalCredential(this.session.token)) {
+      const query = this.session.projectId ? `?projectId=${encodeURIComponent(this.session.projectId)}` : "";
+      return (await this.cliAuth<T>("GET", "session" + query))!;
+    }
     const response = await this.send("GET", buildCliAuthVerifyUrl(this.session.url));
     const body = await readJson(response);
     if (!response.ok || (body as ErrorBody)?.success === false) {

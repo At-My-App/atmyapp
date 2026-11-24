@@ -4,15 +4,22 @@ const nullableText = z.string().nullable();
 const object = z.record(z.string(), z.unknown());
 
 export const whoamiResultSchema = z.object({
-  projectId: z.string(),
+  /** Null for a wide login with no project chosen yet. */
+  projectId: z.string().nullable(),
   url: z.string(),
   key: z.object({
+    /** `projectKey` (CI), `login` (atmyapp login) or `token` (personal token). */
+    kind: z.enum(["projectKey", "login", "token"]),
     name: z.string(),
     hint: nullableText,
     id: nullableText,
     createdAt: nullableText,
+    expiresAt: nullableText,
+    /** Personal credentials: which projects they reach. */
+    projectLimit: z.unknown().nullable(),
     scopes: z.array(z.string()),
-    effectiveScopes: z.array(z.string()),
+    /** What it may do in the project now; null without a project. */
+    effectiveScopes: z.array(z.string()).nullable(),
     stoppedReason: nullableText,
   }),
   sources: z.record(z.string(), z.string()),

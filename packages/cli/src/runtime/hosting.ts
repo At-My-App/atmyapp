@@ -1,7 +1,9 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import type { ApiClient } from "./api";
-import { CliError, EXIT } from "./errors";
+import { CliError, EXIT, stillPending } from "./errors";
+import { WAITS } from "./duration";
+import { operation } from "./operations";
 
 const statusSchema = z.enum(["pending", "running", "ready", "failed", "archived"]);
 const deploymentSchema = z.object({
@@ -144,17 +146,10 @@ async function buildFailure(api: ApiClient, release: Release, timeout = 5000): P
   });
 }
 
-export function parseDeployTimeout(value: string): number {
-  const match = /^(\d+)(s|m|h)?$/i.exec(value.trim());
-  const factor = { s: 1000, m: 60_000, h: 3_600_000 };
-  const ms = match ? Number(match[1]) * factor[(match[2]?.toLowerCase() ?? "s") as keyof typeof factor] : 0;
-  if (ms < 1000 || ms > 3_600_000)
-    throw new CliError("invalid_timeout", "Use a timeout between 1s and 1h, such as 15m.", { exitCode: EXIT.usage });
-  return ms;
-}
-
 export async function hostingDeploy(api: ApiClient, options: {
   deploymentId?: string; wait?: boolean; timeoutMs?: number; dryRun?: boolean;
+  /** false: build only; the release waits for 'hosting promote' (E37). */
+  promote?: boolean;
   pause?: (ms: number) => Promise<unknown>;
   onRelease?: (id: string) => void;
 } = {}): Promise<z.infer<typeof hostingDeploySchema>> {
@@ -166,11 +161,17 @@ export async function hostingDeploy(api: ApiClient, options: {
   const deployment = rows[0];
   if (options.dryRun) return { dryRun: true, deployment };
   let release: Release;
+  // One ID per deploy, reused if this one is interrupted: a rerun after a lost
+  // response or an approval gets the same release, the next deploy builds again (§11.1 P1-5).
+  const op = operation(api.session, "hosting.deploy", [deployment.id, options.promote !== false]);
   try {
     release = read(z.object({ release: releaseSchema }), await api.json("POST", deploymentRoute(deployment.id) + "/releases", {
-      body: {}, signal: apiTimeout(),
+      body: { operationId: op.id, ...(options.promote === false ? { promote: false } : {}) }, signal: apiTimeout(),
     })).release;
+    op.done();
   } catch (error) {
+    // Refused or failed on the server (4xx): this deploy is over. Interrupted or waiting: keep its ID.
+    if (error instanceof CliError && error.status && error.status >= 400 && error.status < 500 && error.exitCode !== EXIT.confirmation) op.done();
     if (error instanceof CliError && error.code === "build_failed") {
       const failed = releaseSchema.safeParse(error.details?.release);
       if (failed.success && failed.data.deployment_id === deployment.id) return buildFailure(api, failed.data);
@@ -179,11 +180,12 @@ export async function hostingDeploy(api: ApiClient, options: {
   }
   if (release.deployment_id !== deployment.id) throw new CliError("invalid_response", "The server created a release for a different deployment.");
   options.onRelease?.(release.id);
-  const timeoutMs = options.timeoutMs ?? 16 * 60_000;
+  const timeoutMs = options.timeoutMs ?? WAITS.deploy.default;
   const deadline = Date.now() + timeoutMs;
-  const timedOut = () => new CliError("deploy_timeout", "Timed out waiting for release " + release.id + ".", {
+  const timedOut = () => stillPending("deploy_timeout", "Release " + release.id + " is still building.", {
+    state: release.status,
+    resume: "atmyapp hosting logs " + release.id + " --follow",
     details: { releaseId: release.id, deploymentId: deployment.id, status: release.status, timeoutMs },
-    fix: "Check 'atmyapp hosting releases ls' or 'atmyapp hosting logs " + release.id + " --follow'.",
   });
   while (options.wait && !isFinished(release.status)) {
     let remaining = deadline - Date.now();
