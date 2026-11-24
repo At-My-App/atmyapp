@@ -180,9 +180,6 @@ function errorFromResponse(status: number, body: ErrorBody | null, path: string,
       fix: "Choose another name, or replace that key with --replace.",
     });
   }
-  if (code === "personal_credentials_off") {
-    return new CliError(code, message, { exitCode: EXIT.auth, status, fix: "Use 'atmyapp login --project <id>' for one project for now." });
-  }
   if (code === "project_key_not_accepted") {
     return new CliError("keys_not_accepted", message, { exitCode: EXIT.auth, status });
   }
