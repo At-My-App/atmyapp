@@ -1,5 +1,42 @@
 # @atmyapp/cli
 
+## 0.6.0
+
+### Minor Changes
+
+- fcc986b: One contract for agents and scripts:
+
+  - Exit code `6` now means "needs a person", and `error.details.reason` says why (`confirmation`, `dns`, `browser`, `approval`, `review` or `dashboard`). New exit code `8` means a `--wait` reached its `--timeout` while the work is still running; `details.resume` keeps waiting. `hosting deploy`, `stage preview` and `domains check` use them, and `domains check --wait` reports a missing DNS change as `needs_person`.
+  - Every `--timeout` accepts `90s`, `5m` or `1h`, with per-command defaults and limits.
+  - `domains add` is safe to run twice (`unchanged: true`) and reports a domain connected to another website as `already_exists`. `domains rm --if-exists` succeeds when there's nothing to remove.
+  - `--project <id>` replaces `--project-id` (which still works).
+  - Requests carry an `X-AtMyApp-Agent` label when Claude Code runs the CLI, or as set with `ATMYAPP_AGENT`.
+  - `snapshot` takes the standard connection options and `--json`; `-t`, `-u` and `-p` still work for now. `snapshot download` no longer deletes its own download before extracting it.
+  - `migrate` and `migrate-status` take `--project`, `--url` and `--token`, and use a browser login for the same project.
+  - `upload` and `generate` are deprecated in favour of `files put` and the content commands.
+
+- fcc986b: Approvals: with a browser login or personal token, risky actions wait for your approval on your phone, in the dashboard or at a link, then continue on their own. Running the same command again finds the same request, and an action that already ran is reported with `replayed: true` instead of repeating. New common options `--no-wait` and `--approval-timeout`, `hosting deploy --no-promote` for build-only releases, and `keys create --replace` to replace a key whose secret was lost.
+- fcc986b: Daily work from the CLI: `submissions ls|show|files|stats|export|update` for the form inbox (one result per ID, safe to rerun, visitor content marked untrusted), `analytics` and `links` for website traffic, Google search phrases and short links, `preview` to check and control the preview server, and `hosting previews` for preview builds and share links. Durations also accept days (`7d`).
+- fcc986b: `atmyapp domains` manages custom domains from the terminal: `ls`, `show [--debug] [--records-text]`, `add <hostname>`, `edit`, `check [--wait]` and `rm`. Every result includes `setup`: the phase, every DNS record to add, issues with fixes, and next steps. Reading needs `hosting.read`; changes need `hosting.deploy`.
+
+  `stage preview` now reports `state` (`ready`, `starting`, `error`, `ended` or `unknown`). With `--wait [--timeout 3m]` it waits until the preview server is ready, and retries once if it fails to start, instead of returning a link that still shows a loading page.
+
+  `use --token <key>` no longer needs `--url` for production projects: the key names its project. `space create` now switches to the new space; pass `--no-use` to stay on the current one.
+
+- fcc986b: Personal access across projects:
+
+  - `atmyapp login` can reach all your projects, chosen organisations or chosen projects, as you pick on the browser page. `--preset everything|developer|editor|read-only` asks for a preset; without one the login is read-only. Logins last 90 days, renew while in use (the CLI saves the new expiry), and end after a year at most.
+  - New `projects ls`, `projects show`, `projects use <id|name>`, `projects create <name> --org <org> [--use]` (safe to run twice) and `orgs ls [--can-create]`.
+  - New `atmyapp status`: websites, domains needing attention, open drafts and next steps; parts the credential can't read are marked unavailable.
+  - Commands choose their project from `--project`, `ATMYAPP_PROJECT_ID`, `.ama/session.json`, then the project last chosen with `projects use`.
+  - Personal tokens (`ama_pt_…`, from Account → Personal tokens) work like a login when set as `ATMYAPP_CLI_KEY`.
+  - `whoami` shows the credential kind, its reach and expiry, even before a project is chosen.
+  - `keys create --preset ci-deploy|ci-content|forms-feed|read-only`.
+
+### Patch Changes
+
+- fcc986b: Safer retries and downloads: inbox changes and deploys get their own operation IDs, so an interrupted run resumes the same action while the next run is a new one (read, unread, read again all apply; `--command-id` replaces `--note-id`). Erasing asks one approval per form and keeps the approval link (exit 6). Resume instructions never include a `--token`. `snapshot download` refuses unsafe folders and keeps the previous snapshot when extraction fails. `projects create` finds a project an interrupted run created, even on the last free slot.
+
 ## 0.5.0
 
 ### Minor Changes
