@@ -1,5 +1,12 @@
 # @atmyapp/cli
 
+## 0.7.0
+
+### Minor Changes
+
+- 207e558: The project as a file: `atmyapp export` writes `atmyapp.project.json` (secrets by name, never values), `atmyapp plan` shows what differs and `atmyapp apply` makes the project match, asking for one approval for the whole plan. Nothing is deleted without `--prune`, and sections the file leaves out aren't touched. Team from the CLI: `members invite|role|rm` and `invitations ls|revoke`. Requires the matching AtMyApp server release.
+- 207e558: Project setup from the CLI: `code connect github` (one browser step) and `code repos|add|ls|sync|rm`; `projects website connect` for the first website with the repository's suggested settings; `hosting websites|presets`, `env`, `secrets` (values from stdin or an environment variable, never a flag) and `preview create|edit`; `locales add|rm|default|jobs`, `settings images|seo` and `collections edit`; and `forms ls|create|edit|rm|layout` with `forms captcha verify`.
+
 ## 0.6.0
 
 ### Minor Changes
