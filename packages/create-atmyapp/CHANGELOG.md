@@ -1,5 +1,13 @@
 # create-atmyapp
 
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies [207e558]
+- Updated dependencies [207e558]
+  - @atmyapp/cli@0.7.0
+
 ## 0.2.4
 
 ### Patch Changes
