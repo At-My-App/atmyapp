@@ -20,6 +20,7 @@ export const PROJECT_KEY_SCOPES = [
   "schema.read", "content.read", "content.stage", "schema.push", "snapshot",
   "forms.tail", "content.publish", "hosting.read", "hosting.deploy", "hosting.logs", "project.read",
   "forms.read", "forms.triage", "insights.read", "insights.manage", "preview.manage",
+  "hosting.manage", "settings.manage", "forms.manage",
 ] as const;
 
 const READ_ONLY: PersonalScope[] = ["schema.read", "content.read", "hosting.read", "project.read", "account.read", "forms.read", "insights.read"];

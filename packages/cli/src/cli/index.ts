@@ -26,6 +26,11 @@ import { orgsCommand, projectsCommand } from "./commands/projects";
 import { statusCommand } from "./commands/status";
 import { analyticsCommand, linksCommand } from "./commands/analytics";
 import { previewCommand } from "./commands/preview";
+import {
+  addHostingSetup, addLocaleSetup, addTeamCommands, invitationsCommand, addPreviewSetup, addProjectWebsite, codeCommand, collectionsCommand, envCommand, formsCommand,
+  secretsCommand, settingsCommand,
+} from "./commands/setup";
+import { applyCommand, exportCommand, planCommand } from "./commands/desired";
 import { CLI_VERSION, withApprovalOptions } from "./output";
 
 const program = new Command()
@@ -40,7 +45,8 @@ program.addCommand(useCommand());
 program.addCommand(loginCommand());
 program.addCommand(logoutCommand());
 program.addCommand(whoamiCommand());
-program.addCommand(projectsCommand());
+program.addCommand(addProjectWebsite(projectsCommand()));
+program.addCommand(codeCommand());
 program.addCommand(orgsCommand());
 program.addCommand(statusCommand());
 program.addCommand(doctorCommand());
@@ -49,20 +55,29 @@ program.addCommand(contentCommand());
 program.addCommand(entriesCommand());
 program.addCommand(spaceCommand());
 program.addCommand(stageCommand());
-program.addCommand(hostingCommand());
-program.addCommand(previewCommand());
+program.addCommand(addHostingSetup(hostingCommand()));
+program.addCommand(envCommand());
+program.addCommand(secretsCommand());
+program.addCommand(addPreviewSetup(previewCommand()));
 program.addCommand(domainsCommand());
 program.addCommand(keysCommand());
-program.addCommand(membersCommand());
+program.addCommand(addTeamCommands(membersCommand()));
+program.addCommand(invitationsCommand());
 program.addCommand(assetsCommand());
 program.addCommand(filesCommand());
-program.addCommand(localesCommand());
+program.addCommand(addLocaleSetup(localesCommand()));
+program.addCommand(settingsCommand());
+program.addCommand(collectionsCommand());
+program.addCommand(exportCommand());
+program.addCommand(planCommand());
+program.addCommand(applyCommand());
 program.addCommand(migrateCommand());
 program.addCommand(migrateStatusCommand());
 program.addCommand(uploadCommand());
 program.addCommand(generateCommand());
 program.addCommand(snapshotCommand());
 program.addCommand(submissionsCommand());
+program.addCommand(formsCommand());
 program.addCommand(analyticsCommand());
 program.addCommand(linksCommand());
 program.addCommand(helpCommand(program));

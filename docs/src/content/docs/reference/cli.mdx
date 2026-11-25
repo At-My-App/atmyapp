@@ -538,6 +538,104 @@ States match `stage preview`: `ready`, `starting`, `stopping`, `stopped` and `er
 
 When a preview is broken: run `preview status`, read `preview logs`, then `preview restart --wait`.
 
+## Project setup
+
+Set up a project from the terminal: connect the code, create the first website, add secrets and languages, and create forms. With a personal login, deleting things and changing secrets ask for your approval.
+
+### Code
+
+| Command | Purpose |
+| --- | --- |
+| `code connect github [--repo <owner/repo>]` | Connect your GitHub account and give the AtMyApp app access. One browser step: the command prints a link and continues when GitHub lists the repository |
+| `code repos` | Repositories your GitHub account can connect |
+| `code add <owner/repo> [--branch] [--wait]` | Connect a repository to the project; safe to run twice |
+| `code ls`, `code sync [<owner/repo>] [--wait]`, `code rm <owner/repo>` | List, copy again, disconnect |
+
+If the browser step isn't done, the command exits `6` (`needs_person`, reason `browser`). `details.code` says what's missing: `github_authorization_expired` (sign in to GitHub again), `github_not_installed` (install the app) or `github_repo_not_granted` (add the repository to the app's access).
+
+### Websites, presets, variables and secrets
+
+| Command | Purpose |
+| --- | --- |
+| `projects website connect --repo <owner/repo>` | The first website, with its build preset, key and preview server. Uses the settings the repository suggests unless you pass `--build`, `--output`, `--install`, `--root`, `--framework`, `--preview-command`, `--preview-port`, `--preview-url` or `--no-preview`. Run it again to continue after an interruption |
+| `hosting websites ls\|create\|edit\|rm` | More websites, from an existing build preset (`--preset`) |
+| `hosting presets ls\|show\|create\|edit` | How websites are built |
+| `env ls\|set\|rm [--website <name>\|--preview-server <name>]` | Variables of one website or preview server |
+| `secrets ls\|set\|rm` | Values shared by every target they're attached to |
+| `preview create\|edit` | Preview servers |
+
+Three kinds of value stay apart. `env set NAME=value` sets a plain value on one target. `env set NAME --secret` attaches the project secret called `NAME`; its value lives in `secrets`. `env rm NAME` removes a plain value, or detaches a secret from that target only; the secret and its other targets don't change. `secrets set NAME` reads the value from `--from-stdin` or `--from-env VAR`, never from a flag, so it stays out of your shell history; values are never printed back. `secrets rm` is refused while targets use the secret, unless `--detach-all`.
+
+A fresh project has no build preset, so `hosting websites create` refuses with `preset_required`: start with `projects website connect`.
+
+### Languages, settings and collections
+
+| Command | Purpose |
+| --- | --- |
+| `locales add <code>`, `locales default <code>` | Add a language, or make one the default. Refused while drafts are open |
+| `locales rm <code> [--wait]` | Remove a language; a cleanup job deletes its translations. A failed cleanup exits `1` with `locale_cleanup_failed` and the job ID |
+| `locales jobs [<jobId>] [--wait] [--retry]` | Cleanup jobs |
+| `settings images get\|set --file <json>` | Image policy |
+| `settings seo get` | SEO settings. They're content: change them with `content edit`, then `stage push` and `stage commit` |
+| `collections edit <name> [--label] [--description] [--hints <file>]` | Labels and editor hints |
+
+### Forms
+
+| Command | Purpose |
+| --- | --- |
+| `forms ls\|create\|edit\|rm` | Forms (submission types); `create` is safe to run twice |
+| `forms layout <form> [--file <json>\|--reset\|--generate]` | How a form's messages are laid out |
+| `forms captcha verify --provider <p> --site-key <key> --secret-from-stdin` | Check captcha keys |
+
+### Team
+
+A project's team is its organisation's: a change reaches every project in the organisation, and the command says how many.
+
+| Command | Purpose |
+| --- | --- |
+| `members ls` | People in the organisation and their roles |
+| `members invite <email> --role <role>` | Invite someone as `owner`, `admin`, `editor` or `reviewer`; safe to run twice |
+| `members role <member> <role>` | Change a role (member ID or email) |
+| `members rm <member> [--if-exists]` | Remove someone from the organisation |
+| `invitations ls`, `invitations revoke <invitation>` | Pending invitations |
+
+A login limited to some projects can change the team only when it reaches every project in the organisation (`credential_org_reach` otherwise). Partner rules still apply.
+
+| What asks for approval | Class |
+| --- | --- |
+| `code rm`, `hosting websites rm`, `locales rm`, `forms rm` | delete |
+| `secrets set`, `secrets rm`, attaching or detaching a secret (`env set --secret`, `env rm`) | access |
+| `members invite`, `members role`, `members rm`, `invitations revoke` | access, never covered by "allow similar" |
+
+## The project as a file
+
+`atmyapp.project.json` lists what a project should have: secrets (names only), build presets, websites, domains, languages, image policy, forms and preview servers. Check it in, so a project can be set up again, reviewed, or copied to a new one.
+
+| Command | Purpose |
+| --- | --- |
+| `export [--file <path>] [--force] [--stdout]` | Write the file from the project |
+| `plan [--file <path>] [--prune]` | Show what `apply` would change |
+| `apply [--file <path>] [--prune] [--yes] [--dry-run]` | Make the project match the file |
+
+```json
+{
+  "$schema": "https://docs.atmyapp.com/schemas/project.json",
+  "secrets": ["STRIPE_KEY"],
+  "presets": [{ "name": "Main build", "repo": "acme/site", "build": "pnpm build", "output": "dist", "secrets": ["STRIPE_KEY"] }],
+  "websites": [{ "name": "Main", "preset": "Main build" }],
+  "domains": [{ "hostname": "www.example.com", "website": "Main" }],
+  "locales": { "default": "en", "supported": ["en", "de"] }
+}
+```
+
+- **Nothing is deleted without `--prune`.** `plan` lists what `--prune` would delete. Without it, variables and secrets in the file are added to what a target has; with it, they become exactly the file's.
+- **A section left out isn't managed**, even with `--prune`: a file without `domains` never touches domains. Build presets and preview servers are never deleted by `apply`.
+- **Secret values never go in the file.** A listed secret that doesn't exist yet takes its value from the environment variable of the same name: `STRIPE_KEY=… atmyapp apply`. Without it, `plan` and `apply` exit `2` with `secret_values_missing`. Existing secrets are never overwritten.
+- **One approval for the whole plan.** With a personal login, `apply` asks once for every change it already knows, as one plan; a change that needs something the run creates first (a website for a new preset) asks when it runs. Changes run in order; a failed one skips only what depends on it, and `apply` exits `1` with `apply_incomplete`. Run it again to finish: it only does what's still missing.
+- The repository must already be connected to your GitHub account (`code connect github --repo`).
+
+Editors complete the file from the published schema at `https://docs.atmyapp.com/schemas/project.json`.
+
 ## `atmyapp snapshot`
 
 ```sh

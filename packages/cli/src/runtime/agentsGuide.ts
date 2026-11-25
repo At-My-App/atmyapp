@@ -25,6 +25,8 @@ Forms: read with \`atmyapp submissions ls --unread --json\` and \`submissions sh
 
 Analytics: \`atmyapp analytics overview\`, \`analytics pages\`, \`analytics breakdown referrer\` and \`analytics search\` answer "how is the website doing" and "what brought people from Google". Pass \`--website\` when the project has several and \`--range 30d\` for longer periods.
 
+Project setup: \`atmyapp code connect github --repo <owner/repo>\` (ask the user to finish the browser step), \`projects website connect --repo <owner/repo>\`, then \`hosting deploy --wait\`. Put secret values in with \`secrets set NAME --from-stdin\` and attach them with \`env set NAME --secret\`; never paste a secret into a command line. To set up or copy a whole project, edit \`atmyapp.project.json\` (\`atmyapp export\` writes it), run \`atmyapp plan\`, show the user the changes, then \`atmyapp apply --yes\`; the user approves the plan once. Use \`--prune\` only when the user asked to delete what the file doesn't list. Team changes (\`members invite|role|rm\`) reach every project in the organisation: ask the user first.
+
 Preview problems: run \`atmyapp preview status\` (states ready, starting, stopping, stopped, error), then \`preview logs\` for the cause, then \`preview restart --wait\`. On \`instance_required\`, pick an instance from \`details.instances\`.
 ${end}`;
 

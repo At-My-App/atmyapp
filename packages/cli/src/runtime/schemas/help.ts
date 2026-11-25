@@ -20,6 +20,7 @@ import { keyCreateSchema, keyRevokeSchema, keysListSchema } from "../keys";
 import { domainListSchema, domainRemoveSchema, domainResultSchema } from "../domains";
 import { organizationListSchema, projectCreateSchema, projectListSchema, projectShowSchema, projectUseSchema } from "../projects";
 import { statusResultSchema } from "../status";
+import { applyResultSchema, exportIncompleteSchema, planResultSchema, projectFileSchema } from "../desired";
 import { loginResultSchema, logoutResultSchema } from "../login";
 import { stageCommitResultSchema } from "../publish";
 import {
@@ -79,6 +80,9 @@ const outputs = new Map<string, z.ZodType>([
   ["projects create", outputEnvelope(projectCreateSchema)],
   ["orgs ls", outputEnvelope(organizationListSchema)],
   ["status", outputEnvelope(statusResultSchema)],
+  ["export", outputEnvelope(z.object({ file: z.string().nullable(), project: projectFileSchema, incomplete: exportIncompleteSchema }))],
+  ["plan", outputEnvelope(planResultSchema)],
+  ["apply", outputEnvelope(planResultSchema.extend(applyResultSchema.shape))],
   ["domains ls", outputEnvelope(domainListSchema)],
   ["domains show", outputEnvelope(domainResultSchema)],
   ["domains add", outputEnvelope(z.union([

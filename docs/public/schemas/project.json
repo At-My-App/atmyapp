@@ -1,0 +1,238 @@
+{
+  "$id": "https://docs.atmyapp.com/schemas/project.json",
+  "title": "AtMyApp project file",
+  "description": "What an AtMyApp project should have: atmyapp export writes it, atmyapp plan/apply compare and apply it. A section left out is not managed.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "secrets": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+      }
+    },
+    "presets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "repo": {
+            "type": "string",
+            "pattern": "^[\\w.-]+\\/[\\w.-]+$"
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "framework": {
+            "type": "string"
+          },
+          "install": {
+            "type": "string"
+          },
+          "build": {
+            "type": "string",
+            "minLength": 1
+          },
+          "root": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "env": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "secrets": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "repo",
+          "build"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "websites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "preset": {
+            "type": "string",
+            "minLength": 1
+          },
+          "autoPromote": {
+            "type": "boolean"
+          },
+          "autoRebuild": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "preset"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "domains": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "hostname": {
+            "type": "string",
+            "minLength": 3,
+            "pattern": "^[a-z0-9.-]+$"
+          },
+          "website": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "hostname",
+          "website"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "locales": {
+      "type": "object",
+      "properties": {
+        "default": {
+          "type": "string"
+        },
+        "supported": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "default",
+        "supported"
+      ],
+      "additionalProperties": false
+    },
+    "imagePolicy": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "forms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "accepting": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "previewServers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "repo": {
+            "type": "string",
+            "pattern": "^[\\w.-]+\\/[\\w.-]+$"
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 65535
+          },
+          "env": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "secrets": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "repo",
+          "command",
+          "port"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

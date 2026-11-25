@@ -59,6 +59,16 @@ Run your website with `ATMYAPP_CLIENT_MODE=local` to see the active space. A rev
 
 Use `stage push --operation-id <id>` to resume an interrupted push. Exit code `7` indicates a draft state such as review or expiry. After publication, run `content pull` to refresh the published copy and clear staged changes that the pull confirms were published.
 
+## The project as a file
+
+```bash
+npx atmyapp export            # writes atmyapp.project.json (secret names, never values)
+npx atmyapp plan              # what differs
+STRIPE_KEY=… npx atmyapp apply --yes
+```
+
+`apply` asks for one approval for the whole plan. Nothing is deleted without `--prune`, and a section the file leaves out isn't touched. Team: `members invite <email> --role editor`, `members role`, `members rm` and `invitations ls|revoke` (a change reaches every project in the organisation).
+
 ## Browser login, hosting and keys
 
 | Command | Purpose |
@@ -85,6 +95,11 @@ Use `stage push --operation-id <id>` to resume an interrupted push. Exit code `7
 | `links ls\|show\|create\|edit\|duplicate\|rm` | Short links and QR codes that count visits |
 | `preview status\|logs\|start\|stop\|restart\|url\|branch\|pull` | Check and control the preview server |
 | `hosting previews ls\|share\|open`, `hosting previews links ls\|revoke` | Preview builds and links to share them |
+| `code connect github`, `code repos\|add\|ls\|sync\|rm` | Connect repositories (one browser step for GitHub) |
+| `projects website connect --repo <owner/repo>` | Set up the first website, its build preset and preview server |
+| `hosting websites\|presets`, `env`, `secrets`, `preview create\|edit` | Websites, build settings, variables and secrets |
+| `locales add\|rm\|default\|jobs`, `settings images\|seo`, `collections edit` | Languages and settings |
+| `forms ls\|create\|edit\|rm\|layout`, `forms captcha verify` | Website forms |
 
 Without `--preset` or `--scopes`, a login asks for read-only access; you can pick a wider preset on the browser page. A login lasts 90 days, renews while you use it, and ends after a year at most. The CLI uses your OS keychain when available; the fallback is an owner-only credentials file. For an agent on another machine or in the cloud, create a personal token under **Account → Personal tokens** and set it as `ATMYAPP_CLI_KEY`.
 

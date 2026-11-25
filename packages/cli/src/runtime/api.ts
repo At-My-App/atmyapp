@@ -219,6 +219,25 @@ function errorFromResponse(status: number, body: ErrorBody | null, path: string,
       code === "device_expired" || code === "device_denied" ? EXIT.auth : EXIT.error;
     return new CliError(code, message, { status, details, exitCode });
   }
+  // Ownership is changed in the dashboard (§4.2.4): hand the person the page.
+  if (code === "dashboard_required") {
+    const url = typeof body?.details?.url === "string" ? body.details.url : undefined;
+    return needsPerson("dashboard", message, { url, fix: url ? `Open ${url} to do this.` : "Do this in the dashboard.", details: { code } });
+  }
+  // Deleting a secret something uses (checked by the database at deletion time).
+  if (code === "secret_in_use") {
+    return new CliError(code, message, {
+      exitCode: EXIT.conflict, status, details: body?.details,
+      fix: "Detach it first ('atmyapp env rm <NAME> --website <name>'), or run 'atmyapp secrets rm <NAME> --detach-all'.",
+    });
+  }
+  if (code === "secret_protected") {
+    return new CliError(code, message, { exitCode: EXIT.usage, status, fix: "To make it a plain variable, set a new value: 'atmyapp secrets set <NAME> --plain --from-stdin'." });
+  }
+  // A shared team needs reach covering the whole organisation (E32).
+  if (code === "credential_org_reach") {
+    return new CliError(code, message, { exitCode: EXIT.auth, status, fix: "Run 'atmyapp login' and choose the whole organisation, or make the change in the dashboard." });
+  }
   // Project creation refusals (CliEverywherePlan E29) and reach limits keep their reason.
   if (code && ["partner_quota", "staff_limit", "creation_not_allowed", "credential_project_limit", "not_a_business", "organization_not_found", "project_key_expired"].includes(code)) {
     return new CliError(code, message, { exitCode: EXIT.auth, status, details: body?.details });
@@ -315,6 +334,11 @@ export class ApiClient {
   /** A JSON request against the project API; `{ success, data }` is unwrapped. */
   async json<T>(method: string, subPath: string, options: RequestOptions = {}): Promise<T | null> {
     return this.jsonAt<T>(method, this.url(subPath, options.query), subPath, options);
+  }
+
+  /** `/v0/cli-approvals/…` (plan approvals for `apply`); a 428 waits like any approval. */
+  async cliApprovals<T>(method: string, subPath: string, options: RequestOptions = {}): Promise<T | null> {
+    return this.jsonAt<T>(method, cliApiUrl(this.session.url, "cli-approvals/" + subPath), "cli-approvals/" + subPath, options, "error");
   }
 
   async cliAuth<T>(method: string, subPath: string, options: RequestOptions = {}): Promise<T | null> {

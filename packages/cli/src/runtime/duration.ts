@@ -38,6 +38,12 @@ export const WAITS = {
   preview: { default: 3 * UNIT_MS.m, min: 5 * UNIT_MS.s, max: 15 * UNIT_MS.m, example: "3m" },
   domain: { default: 20 * UNIT_MS.m, min: 5 * UNIT_MS.s, max: UNIT_MS.h, example: "20m" },
   approval: { default: 3 * UNIT_MS.m, min: 5 * UNIT_MS.s, max: 15 * UNIT_MS.m, example: "3m" },
+  /** Copying a repository (`code add|sync`, `projects website connect`). */
+  code: { default: 5 * UNIT_MS.m, min: 5 * UNIT_MS.s, max: 30 * UNIT_MS.m, example: "5m" },
+  /** The GitHub browser step (`code connect github`). */
+  github: { default: 10 * UNIT_MS.m, min: 5 * UNIT_MS.s, max: 30 * UNIT_MS.m, example: "10m" },
+  /** Translation cleanup after `locales rm`. */
+  cleanup: { default: 10 * UNIT_MS.m, min: 5 * UNIT_MS.s, max: UNIT_MS.h, example: "10m" },
 } as const;
 
 export type WaitKind = keyof typeof WAITS;
