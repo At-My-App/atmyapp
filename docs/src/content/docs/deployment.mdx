@@ -9,17 +9,17 @@ How your website is deployed decides when your client's published edits go live.
 
 | Setup | Published edits go live | You configure |
 | --- | --- | --- |
-| [AtMyApp hosting](#atmyapp-hosting) (static) | Automatically, after a rebuild | A GitHub repository and a build command |
+| [AtMyApp hosting](#atmyapp-hosting) (static) | Automatically, after a rebuild | Your code ([stored in AtMyApp](/guides/code-in-atmyapp/) or on GitHub) and a build command |
 | [Another static host](#another-static-host) | When you rebuild | Environment variables and a rebuild trigger |
 | [A server](#server-rendering) | On the next request | Environment variables and caching |
 
 ## AtMyApp hosting
 
-AtMyApp builds your repository and serves the result. When your client publishes, a new build starts, and the site switches over only when the build succeeds.
+AtMyApp builds your code and serves the result. The code can be [stored in AtMyApp](/guides/code-in-atmyapp/) with the project, which is the default for new projects, or in a connected GitHub repository. When your client publishes, a new build starts, and the site switches over only when the build succeeds.
 
 <Steps>
 
-1. In the dashboard, open **Settings → Hosting** and connect the GitHub repository.
+1. Give AtMyApp the code: in the project's **Setup**, keep **Store the code in AtMyApp** and push to it (`npx atmyapp code setup-git && git push atmyapp main`), or choose **Connect GitHub**.
 
 2. Set the build command (for example `npm run build`) and the output directory (`dist` for Astro).
 
@@ -37,7 +37,7 @@ Builds receive these environment variables automatically, so you don't add your 
 | `ATMYAPP_API_KEY` | A project API key |
 | `ATMYAPP_CODE_COMMIT`, `ATMYAPP_BUILD_TIME` | Used by [diagnostics](/guides/diagnostics/) |
 
-Add any other variables your build needs in the hosting settings. Rebuild on publish is on by default for new websites; you can turn it off there too. Pushing to the connected branch also starts a build.
+Add any other variables your build needs in the hosting settings. Rebuild on publish is on by default for new websites; you can turn it off there too. Pushing to the website's branch also starts a build, whether the code is stored in AtMyApp or on GitHub.
 
 <Aside type="tip">
 A failed build never replaces the live site. If content breaks a build, for example because a required read fails, the previous version stays online and the build log shows why.

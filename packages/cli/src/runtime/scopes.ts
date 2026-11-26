@@ -12,6 +12,7 @@ export const PERSONAL_SCOPES = [
   "hosting.logs", "project.read", "account.read", "projects.create",
   "forms.read", "forms.triage", "insights.read", "insights.manage", "preview.manage",
   "hosting.manage", "code.manage", "settings.manage", "forms.manage", "team.invite", "team.manage",
+  "code.read", "code.write",
 ] as const;
 export type PersonalScope = (typeof PERSONAL_SCOPES)[number];
 
@@ -20,7 +21,7 @@ export const PROJECT_KEY_SCOPES = [
   "schema.read", "content.read", "content.stage", "schema.push", "snapshot",
   "forms.tail", "content.publish", "hosting.read", "hosting.deploy", "hosting.logs", "project.read",
   "forms.read", "forms.triage", "insights.read", "insights.manage", "preview.manage",
-  "hosting.manage", "settings.manage", "forms.manage",
+  "hosting.manage", "settings.manage", "forms.manage", "code.read", "code.write",
 ] as const;
 
 const READ_ONLY: PersonalScope[] = ["schema.read", "content.read", "hosting.read", "project.read", "account.read", "forms.read", "insights.read"];
@@ -34,7 +35,7 @@ export const LOGIN_PRESETS = {
 export type LoginPreset = keyof typeof LOGIN_PRESETS;
 
 export const KEY_PRESETS = {
-  "ci-deploy": ["schema.push", "content.read", "hosting.deploy"],
+  "ci-deploy": ["schema.push", "content.read", "hosting.deploy", "code.read"],
   "ci-content": ["schema.read", "content.read"],
   "forms-feed": ["forms.tail"],
   "read-only": ["schema.read", "content.read", "hosting.read", "project.read", "forms.read", "insights.read"],

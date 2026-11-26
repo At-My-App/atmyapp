@@ -77,7 +77,7 @@ describe("presets", () => {
   });
 
   it("gives project keys only key scopes", () => {
-    expect(keyScopes({ preset: "ci-deploy" })).toEqual(["schema.push", "content.read", "hosting.deploy"]);
+    expect(keyScopes({ preset: "ci-deploy" })).toEqual(["schema.push", "content.read", "hosting.deploy", "code.read"]);
     expect(() => keyScopes({ scopes: "account.read" })).toThrow(/Choose scopes/);
     expect(keyScopes({})).toBeUndefined();
   });

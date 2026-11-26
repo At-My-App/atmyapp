@@ -13,7 +13,7 @@ In this tutorial you build a small business website with Astro and AtMyApp. By t
 - a **contact form** that needs no backend,
 - a **deployment** that rebuilds when your client publishes.
 
-It takes about 30 minutes. You need **Node.js 22.14 or newer**, an AtMyApp account and, for the last part, a GitHub account.
+It takes about 30 minutes. You need **Node.js 22.14 or newer** and an AtMyApp account. AtMyApp stores the code for you, so a GitHub account is optional.
 
 <Aside type="tip" title="Want the finished starter instead?">
 `npm create atmyapp@latest` scaffolds an Astro + Tailwind site that is already wired to AtMyApp. This tutorial builds the same pieces one at a time, so you understand each of them.
@@ -357,13 +357,20 @@ The build fetches all content and writes plain HTML to `dist/`. A failed read fa
 - package.json
 </FileTree>
 
-Commit everything except `.env` and `.ama/session.json`, and push it to a GitHub repository.
+Commit everything except `.env` and `.ama/session.json`. You push it to AtMyApp in the next step (or to a GitHub repository, if you prefer).
 
 ## 10. Deploy with AtMyApp hosting
 
 <Steps>
 
-1. In the dashboard, open **Settings → Hosting** and connect your GitHub repository.
+1. In the project's **Setup**, keep **Store the code in AtMyApp** and choose **Empty repository**. Then push your code:
+
+   ```sh
+   npx atmyapp code setup-git website
+   git push atmyapp main
+   ```
+
+   Using GitHub instead? Choose **Connect GitHub** and pick the repository. See [Store code in AtMyApp](/guides/code-in-atmyapp/).
 
 2. Use `npm run build` as the build command and `dist` as the output directory.
 

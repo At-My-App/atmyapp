@@ -26,7 +26,7 @@
           },
           "repo": {
             "type": "string",
-            "pattern": "^[\\w.-]+\\/[\\w.-]+$"
+            "pattern": "^(?:[\\w.-]+\\/[\\w.-]+|atmyapp:[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?)$"
           },
           "branch": {
             "type": "string",
@@ -189,7 +189,7 @@
           },
           "repo": {
             "type": "string",
-            "pattern": "^[\\w.-]+\\/[\\w.-]+$"
+            "pattern": "^(?:[\\w.-]+\\/[\\w.-]+|atmyapp:[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?)$"
           },
           "branch": {
             "type": "string",

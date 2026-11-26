@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { ApiClient } from "./api";
 import { isPersonalCredential } from "./auth";
 import { canonicalJson } from "./canonicalJson";
-import { githubAccess, listCodeSources, type Repository } from "./code";
+import { codeSourceName, githubAccess, listCodeSources, type Repository } from "./code";
 import { listDomains } from "./domains";
 import { CliError, EXIT } from "./errors";
 import { operation } from "./operations";
@@ -31,7 +31,8 @@ const envMap = z.record(z.string().regex(ENV_NAME), z.string());
 /** Secret names are stored upper case: `stripe_key` is STRIPE_KEY. */
 const secretName = z.string().trim().regex(ENV_NAME, "Use letters, digits and underscores, starting with a letter").toUpperCase();
 const secretList = z.array(secretName);
-const repo = z.string().trim().regex(/^[\w.-]+\/[\w.-]+$/, "Write it as owner/repo");
+// GitHub `owner/repo`, or `atmyapp:<name>` for code stored in AtMyApp.
+const repo = z.string().trim().regex(/^(?:[\w.-]+\/[\w.-]+|atmyapp:[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?)$/, "Write it as owner/repo, or atmyapp:<name> for code stored in AtMyApp");
 const label = z.string().trim().min(1);
 /** The preview create route's rule: 1024–65535, and 3000 is reserved. */
 const previewPort = z.number().int().min(1024).max(65535).refine((port) => port !== 3000, "Port 3000 is reserved");
@@ -168,7 +169,8 @@ function sectionsFor(file: ProjectFile): Set<Section> {
 
 const loaders: Record<Section, (api: ApiClient) => Promise<Partial<Current>>> = {
   sources: async (api) => ({
-    sources: (await listCodeSources(api)).codeSources.map((source) => ({ id: source.id, fullName: `${source.owner}/${source.repo}`, branch: source.branch })),
+    // Code stored in AtMyApp is written `atmyapp:<name>` (HostedCodeSources.md §8).
+    sources: (await listCodeSources(api)).codeSources.map((source) => ({ id: source.id, fullName: source.provider === "atmyapp" ? `atmyapp:${codeSourceName(source)}` : `${source.owner}/${source.repo}`, branch: source.branch })),
   }),
   secrets: async (api) => ({ secrets: await secretNames(api) }),
   presets: async (api) => ({ presets: (await listPresets(api)).presets }),
@@ -416,7 +418,17 @@ export async function planProject(api: ApiClient, input: ProjectFile, options: {
 
   // Code sources.
   const repos = [...new Set([...file.presets.map((preset) => lower(preset.repo)), ...file.previewServers.map((server) => lower(server.repo))])];
-  const missingRepos = repos.filter((item) => !findSource(item));
+  const missingHosted = repos.filter((item) => item.startsWith("atmyapp:") && !findSource(item));
+  for (const item of missingHosted) {
+    const name = item.slice("atmyapp:".length);
+    steps.push({
+      id: `code:${item}`, action: "create", resource: "code source", key: item, changes: {},
+      request: { method: "POST", path: "code-sources", body: { provider: "atmyapp", display_name: name, operation_id: `desired-state:${name}` } },
+      created: (response, ids) => { const id = idOf(response, "codeSource"); if (id) ids.sources.set(item, id); },
+      dependsOn: [], prune: false,
+    });
+  }
+  const missingRepos = repos.filter((item) => !item.startsWith("atmyapp:") && !findSource(item));
   const listed = new Map<string, Repository>();
   if (missingRepos.length) {
     const access = await githubAccess(api);

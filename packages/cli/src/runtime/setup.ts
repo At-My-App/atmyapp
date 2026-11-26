@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import { z } from "zod";
 import type { ApiClient } from "./api";
-import { addCodeSource, findCodeSource, parseRepository } from "./code";
+import { addCodeSource, findCodeSource, sourceRef } from "./code";
 import { diffFields, ensure } from "./ensure";
 import { CliError, EXIT } from "./errors";
 import { operation } from "./operations";
@@ -117,9 +117,9 @@ function presetBody(input: PresetInput) {
 export async function createPreset(api: ApiClient, input: PresetInput & { name: string }) {
   if (!input.repo) throw new CliError("invalid_options", "Say which repository it builds with --repo owner/repo.", { exitCode: EXIT.usage });
   if (!input.build) throw new CliError("invalid_options", "Give the build command with --build, such as 'npm run build'.", { exitCode: EXIT.usage });
-  const source = await findCodeSource(api, parseRepository(input.repo).fullName);
+  const source = await findCodeSource(api, sourceRef(input.repo));
   if (!source) {
-    throw new CliError("code_source_not_found", `${input.repo} isn't connected to this project.`, { fix: `Run 'atmyapp code add ${input.repo}' first.` });
+    throw new CliError("code_source_not_found", `${input.repo} isn't connected to this project.`, { fix: input.repo.includes("/") ? `Run 'atmyapp code add ${input.repo}' first.` : `Run 'atmyapp code create ${input.repo}' first.` });
   }
   const body = { ...presetBody(input), code_source_id: source.id, branch: input.branch ?? source.branch ?? undefined };
   const outcome = await ensure({
@@ -418,8 +418,8 @@ export async function createPreviewServer(api: ApiClient, input: PreviewServerIn
   if (!input.repo || !input.command || !input.port) {
     throw new CliError("invalid_options", "Give --repo owner/repo, --command (such as 'npm run dev') and --port.", { exitCode: EXIT.usage });
   }
-  const source = await findCodeSource(api, parseRepository(input.repo).fullName);
-  if (!source) throw new CliError("code_source_not_found", `${input.repo} isn't connected to this project.`, { fix: `Run 'atmyapp code add ${input.repo}' first.` });
+  const source = await findCodeSource(api, sourceRef(input.repo));
+  if (!source) throw new CliError("code_source_not_found", `${input.repo} isn't connected to this project.`, { fix: input.repo.includes("/") ? `Run 'atmyapp code add ${input.repo}' first.` : `Run 'atmyapp code create ${input.repo}' first.` });
   const op = operation(api.session, "preview.create", [input.name]);
   const outcome = await ensure({
     kind: "preview server", key: input.name,
@@ -618,10 +618,13 @@ export const websiteConnectSchema = z.object({
  * connect reuses its request ID, so it continues instead of starting over.
  */
 export async function connectWebsite(api: ApiClient, input: ConnectInput): Promise<z.infer<typeof websiteConnectSchema>> {
-  let source = input.repo ? await findCodeSource(api, parseRepository(input.repo).fullName) : null;
+  let source = input.repo ? await findCodeSource(api, sourceRef(input.repo)) : null;
   if (!source) {
     if (!input.repo) {
-      throw new CliError("invalid_options", "Say which repository with --repo owner/repo.", { exitCode: EXIT.usage });
+      throw new CliError("invalid_options", "Say which repository with --repo owner/repo, or the name of code stored in AtMyApp.", { exitCode: EXIT.usage });
+    }
+    if (!input.repo.includes("/")) {
+      throw new CliError("code_source_not_found", `This project has no code called '${input.repo}'.`, { fix: `Create it with 'atmyapp code create ${input.repo}', push the website, then run this again.` });
     }
     source = (await addCodeSource(api, input.repo, { branch: input.branch, wait: true, timeoutMs: input.timeoutMs, onProgress: input.onProgress })).codeSource;
   }

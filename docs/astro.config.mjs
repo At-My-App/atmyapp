@@ -119,6 +119,7 @@ export default defineConfig({
           label: "Ship",
           items: [
             { label: "Deploy", slug: "deployment" },
+            { label: "Store code in AtMyApp", slug: "guides/code-in-atmyapp" },
             { label: "Verify an integration", slug: "guides/diagnostics" },
             { label: "Hand over to your client", slug: "ai-assistant" },
             { label: "Troubleshooting", slug: "troubleshooting" },

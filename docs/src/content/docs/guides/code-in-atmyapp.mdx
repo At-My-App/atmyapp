@@ -1,0 +1,155 @@
+---
+title: Store code in AtMyApp
+description: Keep a website's code with its AtMyApp project, push with plain Git, and hand the site to a client without moving a repository.
+---
+
+import { Aside, Steps, Tabs, TabItem } from "@astrojs/starlight/components";
+
+AtMyApp can store your website's code next to its content. It's a normal Git repository: clone it, push to it, and use any editor or coding agent. A push to the main branch rebuilds the website, exactly like a push to a connected GitHub repository.
+
+Because the code belongs to the project, handing the website to a client hands over the code too. Nobody needs a GitHub account, and there's no repository to transfer when the project changes hands. When a partnership ends, the studio's Git access ends with it.
+
+New projects store their code in AtMyApp by default. You can still connect GitHub instead; both work the same way for builds, previews and content.
+
+## Create the repository
+
+<Tabs>
+<TabItem label="Dashboard">
+
+<Steps>
+
+1. Open the project's **Setup**. At **Your website's code**, keep **Store the code in AtMyApp** selected.
+
+2. Under **Start from**, pick one of your studio's starters, an AtMyApp starter, or **Empty repository**.
+
+3. Starters continue straight to the review of the website's settings. An empty repository waits for your first push: the page shows the commands and continues on its own once the push arrives.
+
+</Steps>
+
+Add more repositories (for example an app next to the website) in **Settings → Project setup → Code sources → New code repository**.
+
+</TabItem>
+<TabItem label="CLI">
+
+```sh
+npx atmyapp code create website            # an empty repository called "website"
+npx atmyapp code create website --starter <starter-id>
+npx atmyapp code ls
+```
+
+`code create` needs a browser login or a personal token with **Connect code sources** (`code.manage`). The name is what you use in commands; it must be lowercase letters, numbers and dashes, and you can rename it later without changing the Git address.
+
+</TabItem>
+</Tabs>
+
+## Push your code
+
+In a folder that already has your website in Git:
+
+```sh
+npx atmyapp code setup-git website
+git push atmyapp main
+```
+
+`setup-git` adds a remote called `atmyapp` (choose another with `--remote`) and tells Git to sign in through the CLI. To start from the repository instead:
+
+```sh
+npx atmyapp code clone website
+cd website
+```
+
+Once the code is there, `atmyapp code push` pushes the current branch and tells you which website build it started:
+
+```sh
+npx atmyapp code push
+# Pushed main. Building release 0f3c… (pending). Follow it: atmyapp hosting logs 0f3c…
+```
+
+Without the CLI, get a Git address with a password from the code page (**Get a Git address for another tool**) and use it like any remote. That address works for 24 hours; treat it like a password.
+
+<Aside type="tip">
+For a coding agent, the setup page has a **Coding agent** tab with instructions to copy. The agent only needs the CLI signed in (`atmyapp login` or a personal token in `ATMYAPP_CLI_KEY`).
+</Aside>
+
+## How Git signs in
+
+Git never stores a password of yours. `code clone` and `code setup-git` configure `atmyapp git credential` as Git's credential helper for the AtMyApp Git host only. When Git needs to sign in, the helper asks AtMyApp, which checks your access to the project and returns a token for that one repository.
+
+- **Who can clone and push:** people with developer access to the project (owners, admins and developers, including a studio's developers while it works on the project), and project keys allowed to use code.
+- **Tokens last 24 hours.** The helper caches them in your AtMyApp config folder (`~/.config/atmyapp/git-credentials.json`, owner-only) and asks again shortly before they expire.
+- **Losing access stops Git access.** Tokens are revoked when someone is removed from the project or organisation, loses developer access, signs the CLI out, or when a project key is revoked. Pausing or ending a partnership revokes the studio's tokens at once. A periodic check catches anything missed within 15 minutes.
+- **Sign everyone out** of Git for one repository from its code page (**Git access → Sign everyone out of Git**).
+
+The Git address points at Cloudflare Artifacts, where the code is stored (`https://<account>.artifacts.cloudflare.net/git/code/<repository>.git`). Print it with `atmyapp code url`.
+
+### In CI
+
+Create a project key with **Clone code stored in AtMyApp** (`code.read`), or **Push code** (`code.write`) if the job pushes, and set it as `ATMYAPP_CLI_KEY` with `ATMYAPP_PROJECT_ID`:
+
+```sh
+npx atmyapp code clone website ./site
+```
+
+The `ci-deploy` key preset includes `code.read`.
+
+## What a push does
+
+A push to a hosted repository runs the same pipeline as a GitHub push:
+
+- Websites that build the pushed branch rebuild, if **Rebuild when code changes** is on. A website's preview branch builds its own branch (`atmyapp hosting previews ls`).
+- A push to the main branch refreshes the code copy AtMyApp reads for website detection, schema sync and the assistant.
+- While a partnership is paused or has ended, pushed code isn't built; content publishes keep building the code that was live.
+
+The code page lists **Recent pushes** with the branch, commit and author. Authors come from the commits, as written by whoever pushed.
+
+<Aside type="caution">
+Hosted repositories have no branch protection. If the main branch, or a branch a website builds, is deleted or force-pushed, developers get a notification and the push is marked in **Recent pushes** with the previous commit. The live website is never affected: releases are built from a fixed commit. Put a branch back with `git push --force atmyapp <previous-commit>:main`.
+</Aside>
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| Repository size | 1 GB per repository |
+| One push | 64 MiB of data and 50,000 objects. Push long histories in parts |
+| One file | 32 MiB. Keep large images and video in AtMyApp's media library |
+| Repositories per project, code storage per project | Set by your plan (**Settings → Plan**) |
+
+When a project's code is over its plan's storage, Git becomes read-only: clones, builds and downloads keep working, and the CLI prints why pushes are paused. Remove files or change the plan to push again.
+
+## Starters for your studio
+
+A studio can turn any client website's code into a starter and begin the next website from it in one click.
+
+<Steps>
+
+1. Open the website's code (**Settings → Project setup → Code sources**, then the repository) and choose **Save as starter**. Studio owners and admins can do this.
+
+2. Name it and, optionally, tick **Include the content** to bring collections and entries along as sample content. The website's build and preview settings and content types always come along; secrets and environment variable values never do.
+
+3. Everyone in the studio now sees it under **Start from** when setting up a website.
+
+</Steps>
+
+Manage starters in the studio's settings under **Starters**: archive or delete them. Saving again creates a new version; websites already started from a starter keep their code.
+
+## Move a website between GitHub and AtMyApp
+
+Git moves the whole history. Get the AtMyApp repository's Git address with a password from its code page (**Get a Git address for another tool**), then:
+
+```sh
+# From GitHub to AtMyApp
+npx atmyapp code create website
+git clone --mirror https://github.com/acme/site.git && cd site.git
+git push --mirror "<Git address from the code page>"
+
+# From AtMyApp to GitHub (create an empty GitHub repository first)
+npx atmyapp code clone website && cd website
+git push --mirror https://github.com/acme/site.git
+```
+
+Then switch the website to the other repository: create a build preset for it (`atmyapp hosting presets create <name> --repo <owner/repo>` for GitHub) and point the website at it with `atmyapp hosting websites edit <website> --preset <name>`, or do both in **Settings → Hosting**. Large histories may need pushing in parts because of the 64 MiB limit per push.
+
+## Delete a repository
+
+Delete it in **Settings → Project setup → Code sources**. This deletes the repository with all of its history and signs everyone out of Git; it can't be undone, so clone a copy first. Deleting the project deletes its repositories too.

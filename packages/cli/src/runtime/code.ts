@@ -1,3 +1,4 @@
+import { listHostedCode } from "./hostedCode";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import type { ApiClient } from "./api";
@@ -135,7 +136,16 @@ const pick = (row: Row, ...names: string[]) => names.map((name) => row[name]).fi
 export const codeSourceSchema = z.object({
   id: z.string(), provider: z.string(), owner: z.string(), repo: z.string(), branch: z.string().nullable(),
   status: z.string().nullable(), lastSyncedAt: z.string().nullable(), lastSyncError: z.string().nullable(),
+  /** Code stored in AtMyApp (provider `atmyapp`). */
+  displayName: z.string().nullable().optional(),
+  remote: z.string().nullable().optional(),
+  lastPushAt: z.string().nullable().optional(),
 });
+
+/** `owner/repo` for GitHub, the name for code stored in AtMyApp. */
+export function codeSourceName(source: Pick<CodeSource, "provider" | "owner" | "repo" | "displayName">): string {
+  return source.provider === "atmyapp" ? source.displayName || source.repo : source.owner ? `${source.owner}/${source.repo}` : source.repo;
+}
 export type CodeSource = z.infer<typeof codeSourceSchema>;
 
 function toSource(row: Row): CodeSource {
@@ -148,7 +158,25 @@ function toSource(row: Row): CodeSource {
     status: (pick(row, "status") as string | undefined) ?? null,
     lastSyncedAt: (pick(row, "last_synced_at", "lastSyncedAt") as string | undefined) ?? null,
     lastSyncError: (pick(row, "last_sync_error", "lastSyncError") as string | undefined) ?? null,
+    displayName: (pick(row, "display_name", "displayName") as string | undefined) ?? null,
+    remote: (pick(row, "hosted_remote", "remote") as string | undefined) ?? null,
+    lastPushAt: (pick(row, "last_push_at", "lastPushAt") as string | undefined) ?? null,
   };
+}
+
+/** A Git-only credential can discover the hosted repositories it may clone. */
+export async function listVisibleCodeSources(api: ApiClient): Promise<{ codeSources: CodeSource[] }> {
+  try {
+    return await listCodeSources(api);
+  } catch (error) {
+    if (!(error instanceof CliError) || !["keys_not_accepted", "missing_scope"].includes(error.code)) throw error;
+    const hosted = await listHostedCode(api);
+    return { codeSources: hosted.map((source) => ({
+      id: source.id, provider: "atmyapp", owner: "", repo: source.name, displayName: source.name,
+      branch: source.branch, remote: source.remote, lastPushAt: source.lastPushAt,
+      status: null, lastSyncedAt: null, lastSyncError: null,
+    })) };
+  }
 }
 
 export async function listCodeSources(api: ApiClient): Promise<{ codeSources: CodeSource[] }> {
@@ -157,11 +185,22 @@ export async function listCodeSources(api: ApiClient): Promise<{ codeSources: Co
   return { codeSources: rows.map((row) => toSource(row)) };
 }
 
+/**
+ * A `--repo` value: `owner/repo` for GitHub, or the name of code stored in
+ * AtMyApp (also `atmyapp:<name>`). Returns the lookup key `findCodeSource` takes.
+ */
+export function sourceRef(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("atmyapp:")) return trimmed.slice("atmyapp:".length);
+  if (!trimmed.includes("/")) return trimmed;
+  return parseRepository(trimmed).fullName;
+}
+
 /** By ID or `owner/repo`. */
 export async function findCodeSource(api: ApiClient, ref: string): Promise<CodeSource | null> {
   const { codeSources } = await listCodeSources(api);
   const wanted = ref.trim().toLowerCase();
-  return codeSources.find((source) => source.id === ref.trim() || `${source.owner}/${source.repo}`.toLowerCase() === wanted) ?? null;
+  return codeSources.find((source) => source.id === ref.trim() || codeSourceName(source).toLowerCase() === wanted) ?? null;
 }
 
 async function requireCodeSource(api: ApiClient, ref: string): Promise<CodeSource> {
@@ -266,7 +305,7 @@ export async function removeCodeSource(api: ApiClient, ref: string, options: { i
     if (options.ifExists) return { repository: ref, removed: false, dryRun: Boolean(options.dryRun) };
     await requireCodeSource(api, ref);
   }
-  const repository = `${source!.owner}/${source!.repo}`;
+  const repository = codeSourceName(source!);
   if (options.dryRun) return { repository, removed: false, dryRun: true };
   await api.json("DELETE", `code-sources/${encodeURIComponent(source!.id)}`, { signal: timeout() });
   return { repository, removed: true, dryRun: false };

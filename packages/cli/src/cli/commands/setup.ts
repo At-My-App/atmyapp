@@ -3,12 +3,14 @@ import { Command, Option } from "commander";
 import { waitTimeout } from "../../runtime/duration";
 import {
   addCodeSource,
+  codeSourceName,
   connectGithub,
-  listCodeSources,
+  listVisibleCodeSources,
   listRepositories,
   removeCodeSource,
   syncCodeSource,
 } from "../../runtime/code";
+import { cloneHostedCode, createHostedCode, findHostedCode, gitCredential, pushHostedCode, setupGit } from "../../runtime/hostedCode";
 import {
   connectWebsite,
   createPreset,
@@ -46,7 +48,7 @@ import {
   verifyCaptcha,
 } from "../../runtime/settings";
 import { changeRole, inviteMember, removeMember, revokeInvitation, team, teamReach } from "../../runtime/team";
-import { connect, printValue, resumeCommand, runAction, table, withCommonOptions, type CommonOptions } from "../output";
+import { connect, printValue, requestedProject, resumeCommand, runAction, table, withCommonOptions, type CommonOptions } from "../output";
 import { confirm } from "./draftOptions";
 
 /**
@@ -102,8 +104,56 @@ export function codeCommand(): Command {
         (result) => console.log(table(result.repositories.map((repo) => ({ repository: repo.fullName, branch: repo.defaultBranch, private: repo.private ? "yes" : "" })), ["repository", "branch", "private"])))))
     .addCommand(withCommonOptions(new Command("ls"))
       .description("Code sources of this project")
-      .action((opts: Opts) => runAction(opts, () => listCodeSources(connect(opts).api),
-        (result) => console.log(table(result.codeSources.map((source) => ({ id: source.id, repository: `${source.owner}/${source.repo}`, branch: source.branch, status: source.status })), ["id", "repository", "branch", "status"])))))
+      .action((opts: Opts) => runAction(opts, () => listVisibleCodeSources(connect(opts).api),
+        (result) => console.log(table(result.codeSources.map((source) => ({ id: source.id, repository: codeSourceName(source), stored: source.provider === "atmyapp" ? "AtMyApp" : source.provider === "github" ? "GitHub" : source.provider, branch: source.branch, status: source.status })), ["id", "repository", "stored", "branch", "status"])))))
+    // --- Code stored in AtMyApp (HostedCodeSources.md §8) ---
+    .addCommand(withCommonOptions(new Command("create"))
+      .description("Create a code repository stored in AtMyApp (no GitHub needed)")
+      .argument("[name]", "Name used in commands, such as website (default: website)")
+      .option("--starter <id>", "Start from a starter instead of an empty repository")
+      .action((name: string | undefined, opts: Opts & { starter?: string }) => runAction(opts, () => createHostedCode(connect(opts).api, { name, starter: opts.starter }),
+        (result) => {
+          console.log(chalk.green(`Created ${result.code.name}.`));
+          console.log(`Clone it:  ${result.cloneCommand}`);
+          console.log(`Or, in a folder with code:  atmyapp code setup-git ${result.code.name} && git push atmyapp ${result.code.branch}`);
+        })))
+    .addCommand(withCommonOptions(new Command("clone"))
+      .description("Clone code stored in AtMyApp; Git signs in through the CLI")
+      .argument("[name]", "Which code (default: the only one)")
+      .argument("[directory]", "Folder to clone into (default: the name)")
+      .action((name: string | undefined, directory: string | undefined, opts: Opts) => runAction(opts, () => {
+        const { api, session } = connect(opts);
+        return cloneHostedCode(api, session.projectId, { ref: name, directory });
+      }, (result) => {
+        console.log(chalk.green(`Cloned ${result.code.name} into ${result.directory}.`));
+        if (result.empty) console.log(chalk.gray(`It's empty: add your code, then git push origin ${result.code.branch}.`));
+      })))
+    .addCommand(withCommonOptions(new Command("setup-git"))
+      .description("Add code stored in AtMyApp as a remote of the Git repository in this folder")
+      .argument("[name]", "Which code (default: the only one)")
+      .option("--remote <name>", "Remote name (default: atmyapp)")
+      .action((name: string | undefined, opts: Opts & { remote?: string }) => runAction(opts, () => {
+        const { api, session } = connect(opts);
+        return setupGit(api, session.projectId, { ref: name, remote: opts.remote });
+      }, (result) => console.log(`Remote ${result.remote} → ${result.code.name}. Push with: ${result.pushCommand}`))))
+    .addCommand(withCommonOptions(new Command("url"))
+      .description("The Git address of code stored in AtMyApp (no password)")
+      .argument("[name]", "Which code (default: the only one)")
+      .action((name: string | undefined, opts: Opts) => runAction(opts, () => findHostedCode(connect(opts).api, name),
+        (result) => console.log(result.remote))))
+    .addCommand(withCommonOptions(new Command("push"))
+      .description("git push, then show the website build it starts")
+      .argument("[git-args...]", "Passed to git push (default: the current branch)")
+      .option("--code <name>", "Which code (default: the only one)")
+      .option("--remote <name>", "Git remote (default: the one pointing at this code)")
+      .action((gitArgs: string[], opts: Opts & { code?: string; remote?: string }) => runAction(opts, () => pushHostedCode(connect(opts).api, {
+        ref: opts.code, remote: opts.remote, gitArgs,
+      }), (result) => {
+        if (!result.updates.length) return console.log("No branch head was updated.");
+        console.log(`Pushed ${result.branch}.`);
+        for (const release of result.releases) console.log(`Release ${release.id} (${release.status ?? "pending"}). Follow it: atmyapp hosting logs ${release.id}`);
+        if (!result.releases.length) console.log("No matching release observed.");
+      })))
     .addCommand(withCommonOptions(new Command("add"))
       .description("Connect a repository to this project (safe to run twice)")
       .argument("<owner/repo>", "The repository")
@@ -122,15 +172,45 @@ export function codeCommand(): Command {
         wait: opts.wait, timeoutMs: waitTimeout("code", opts.timeout), onProgress: progress(json),
       }), (result) => console.log(`${result.codeSource.owner}/${result.codeSource.repo}: ${result.codeSource.status ?? "syncing"}`))))
     .addCommand(withCommonOptions(new Command("rm"))
-      .description("Disconnect a repository from this project")
-      .argument("<owner/repo>", "Code source ID or repository")
+      .description("Disconnect a repository, or delete code stored in AtMyApp")
+      .argument("<owner/repo|name>", "Code source ID, GitHub repository, or the name of code stored in AtMyApp")
       .option("--yes", "Don't ask for confirmation")
       .option("--if-exists", "Succeed when it isn't connected")
       .option("--dry-run", "Show what would be removed")
       .action((ref: string, opts: Opts & { yes?: boolean; ifExists?: boolean; dryRun?: boolean }) => runAction(opts, async () => {
-        await confirm(opts as never, `Disconnect ${ref}? Websites built from it stop updating.`);
+        await confirm(opts as never, ref.includes("/")
+          ? `Disconnect ${ref}? Websites built from it stop updating.`
+          : `Delete ${ref}? If it's code stored in AtMyApp, the repository and all of its history are deleted and everyone is signed out of Git. Websites built from it stop updating.`);
         return removeCodeSource(connect(opts).api, ref, opts);
       }, (result) => console.log(result.removed ? `Disconnected ${result.repository}.` : result.dryRun ? `Would disconnect ${result.repository}.` : `${result.repository} isn't connected.`))));
+}
+
+// --- atmyapp git credential ------------------------------------------------------------
+
+/**
+ * Git's credential helper for code stored in AtMyApp (HostedCodeSources.md
+ * §6.6). Configured by `code clone` / `code setup-git` for our host only.
+ */
+export function gitCommand(): Command {
+  const credential = new Command("credential")
+    .description("Git credential helper (git calls this; you don't need to)")
+    .argument("<action>", "get, store or erase")
+    .action(async (action: string) => {
+      const input = await new Promise<string>((resolve) => {
+        let data = "";
+        process.stdin.setEncoding("utf8");
+        process.stdin.on("data", (chunk) => (data += chunk));
+        process.stdin.on("end", () => resolve(data));
+      });
+      try {
+        const output = await gitCredential(action, input, (project) => connect({ project }).api);
+        if (output) process.stdout.write(output);
+      } catch (error) {
+        // Git shows our message, then asks for a password: say what to do instead.
+        process.stderr.write(`atmyapp: ${error instanceof Error ? error.message : String(error)}\natmyapp: sign in with 'atmyapp login', then try again.\n`);
+      }
+    });
+  return new Command("git").description("Git integration for code stored in AtMyApp").addCommand(credential);
 }
 
 // --- projects website connect ------------------------------------------------------------
@@ -138,7 +218,7 @@ export function codeCommand(): Command {
 export function addProjectWebsite(projects: Command): Command {
   const websiteConnect = withCommonOptions(new Command("connect"))
     .description("Set up the project's first website: build preset, key and preview server")
-    .requiredOption("--repo <owner/repo>", "The website's repository (connected first if needed)")
+    .requiredOption("--repo <owner/repo|name>", "The website's repository: GitHub owner/repo (connected first if needed) or the name of code stored in AtMyApp")
     .option("--branch <name>", "Branch to build")
     .option("--root <dir>", "Folder of the website in the repository")
     .option("--framework <name>", "Framework, when detection is wrong")
@@ -215,7 +295,7 @@ export function addHostingSetup(hosting: Command): Command {
     .addCommand(withCommonOptions(new Command("show")).description("One build preset").argument("<preset>", "Name or ID")
       .action((ref: string, opts: Opts) => runAction(opts, () => showPreset(connect(opts).api, ref), (result) => printValue(result.preset))))
     .addCommand(presetOptions(withCommonOptions(new Command("create"))).description("Create a build preset (safe to run twice)")
-      .argument("<name>", "Preset name").requiredOption("--repo <owner/repo>", "Repository it builds")
+      .argument("<name>", "Preset name").requiredOption("--repo <owner/repo|name>", "Repository it builds (GitHub owner/repo, or the name of code stored in AtMyApp)")
       .action((name: string, opts: Opts) => runAction(opts, () => createPreset(connect(opts).api, { ...(opts as object), name } as never),
         (result) => console.log(result.unchanged ? chalk.gray(`${name} already exists.`) : chalk.green(`Created ${name}.`)))))
     .addCommand(presetOptions(withCommonOptions(new Command("edit"))).description("Change a build preset").argument("<preset>", "Name or ID")
@@ -297,7 +377,7 @@ export function addPreviewSetup(preview: Command): Command {
     .option("--root <dir>", "Folder of the website in the repository");
   return preview
     .addCommand(options(withCommonOptions(new Command("create"))).description("Create a preview server (safe to run twice)")
-      .argument("<name>", "Name").requiredOption("--repo <owner/repo>", "Repository it runs")
+      .argument("<name>", "Name").requiredOption("--repo <owner/repo|name>", "Repository it runs (GitHub owner/repo, or the name of code stored in AtMyApp)")
       .action((name: string, opts: Opts) => runAction(opts, () => createPreviewServer(connect(opts).api, { ...(opts as object), name } as never),
         (result) => console.log(result.unchanged ? chalk.gray(`${name} already exists.`) : chalk.green(`Created ${name}. Start it with 'atmyapp preview start --wait'.`)))))
     .addCommand(options(withCommonOptions(new Command("edit"))).description("Change a preview server")

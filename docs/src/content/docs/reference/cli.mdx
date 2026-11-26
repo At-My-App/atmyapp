@@ -14,26 +14,41 @@ npx atmyapp --help
 
 | Command | Does |
 | --- | --- |
+| **Start** | |
 | [`create`](#atmyapp-create) | Create a new website from a starter |
-| [`use`](#atmyapp-use) | Connect this folder to a project |
 | [`login`, `logout`](#sign-in-from-a-terminal) | Start or revoke a browser login |
-| [`whoami`](#atmyapp-whoami) | Show the project, the key and what it may do |
-| [`doctor`](#atmyapp-doctor) | Check the connection, schema, website and local copy |
-| [`init`](#atmyapp-init) | Write a starter schema |
+| [`use`](#atmyapp-use) | Connect this folder to a project with a CLI key |
+| [`projects`, `orgs`](#projects-and-organisations) | List, choose and create projects |
+| [`whoami`](#atmyapp-whoami), [`status`](#projects-and-organisations), [`doctor`](#atmyapp-doctor) | Who you are, the project at a glance, and a health check |
+| [`init`](#atmyapp-init) | Write a starter schema and agent instructions |
+| [`help`](#atmyapp-help) | Help for any command; `--json` describes them all |
+| **Code** | |
+| [`code create`, `clone`, `setup-git`, `push`, `url`](#code) | Code stored in AtMyApp: create, clone, push |
+| [`code connect github`, `repos`, `add`, `sync`, `ls`, `rm`](#code) | Connect GitHub repositories |
+| **Content** | |
 | [`schema show`](#atmyapp-schema-show) | Read the project's published schema |
-| [`content ls`, `content get`](#atmyapp-content) | List and read documents, files and entries |
+| [`content`](#atmyapp-content), [`entries`](#atmyapp-entries) | Read documents, files and entries; edit them in a local space |
 | [`content pull`](#atmyapp-content-pull) | Keep a local copy for offline use and local editing |
-| [`entries ls`, `entries get`](#atmyapp-entries) | List and read collection entries |
-| [`assets get`](#atmyapp-assets-get) | Download an image or file |
-| [`locales status`](#atmyapp-locales-status) | See which translations are current or outdated |
-| [`migrate`](#atmyapp-migrate) | Plan and apply schema changes |
-| [`migrate-status`](#atmyapp-migrate-status) | Check a migration whose result was lost |
-| [`submissions tail`](#atmyapp-submissions-tail) | Follow form submissions live |
-| [`stage commit`](#publish-a-named-draft) | Publish a named draft |
-| [`hosting`](#website-hosting) | Inspect, build and promote website releases |
-| [`keys`](#manage-keys-from-the-cli) | Manage project keys |
+| [`space`, `stage`](#local-spaces-and-review) | Local working copies, named drafts, review and publishing |
+| [`assets get`, `assets put`, `files put`](#merging-attachments-and-translations) | Download and attach images and files |
+| [`locales`](#languages-settings-and-collections) | Translation status, export and import; add and remove languages |
+| [`migrate`](#atmyapp-migrate), [`migrate-status`](#atmyapp-migrate-status) | Plan and apply schema changes |
 | [`snapshot`](#atmyapp-snapshot) | Download content for offline fallback |
-| [`upload`](#atmyapp-upload), [`generate`](#atmyapp-generate) | Write files to project storage directly (advanced) |
+| **Website** | |
+| [`hosting`](#website-hosting) | Builds, releases, previews, websites and build presets |
+| [`domains`](#atmyapp-domains) | Connect custom domains and fix their setup |
+| [`preview`](#atmyapp-preview) | The preview server that shows drafts |
+| [`env`, `secrets`](#websites-presets-variables-and-secrets) | Environment variables and secrets |
+| [`analytics`, `links`](#atmyapp-analytics-and-atmyapp-links) | Traffic, search phrases, events, short links and QR codes |
+| **Forms** | |
+| [`submissions`](#atmyapp-submissions) | Read, sort, export and follow form submissions |
+| [`forms`](#forms) | Forms, their layout and captcha keys |
+| **Project** | |
+| [`settings`, `collections`](#languages-settings-and-collections) | Image policy, SEO, collection labels and hints |
+| [`members`, `invitations`](#team) | The team |
+| [`keys`](#manage-keys-from-the-cli) | Project keys |
+| [`export`, `plan`, `apply`](#the-project-as-a-file) | The project as a file |
+| [`upload`](#atmyapp-upload), [`generate`](#atmyapp-generate) | Deprecated direct storage writes |
 
 Commands that talk to the project use the `--project`, `--url` and `--token` options first (`--project-id` still works), followed by the `ATMYAPP_CLI_URL`, `ATMYAPP_CLI_KEY` and `ATMYAPP_PROJECT_ID` environment variables, the saved browser login, and the connection saved by `atmyapp use`. In CI or an agent's shell, set the environment variables. `--verbose` prints detailed logs.
 
@@ -123,8 +138,16 @@ When you create a key, you choose what it's for. A key only works for the comman
 | Read analytics and links (`insights.read`) | `analytics`, `links ls`, `links show` |
 | Manage links and analytics settings (`insights.manage`) | `links create`, `edit`, `duplicate`, `rm`; `analytics settings` changes |
 | Control the preview server (`preview.manage`) | `preview start`, `stop`, `restart`, `url`, `branch`, `pull` |
+| Read the project overview and settings (`project.read`) | `settings images get` and other project overview reads |
+| Set up websites, build settings, variables and secrets (`hosting.manage`) | `projects website connect`, `hosting websites`, `hosting presets`, `env`, `preview create`, `preview edit` (also deploys) |
+| Change locales, SEO, images and collection settings (`settings.manage`) | `locales add`, `default`, `rm`, `jobs`; `settings images set`; `collections edit` |
+| Set up forms (`forms.manage`) | `forms create`, `edit`, `rm`, `layout`, `captcha verify` |
+| Clone code stored in AtMyApp (`code.read`) | `code clone`, `code url`, Git fetches through `atmyapp git credential` |
+| Push code stored in AtMyApp (`code.write`) | Git pushes, `code push` (also clones) |
 
 New keys read the schema and content, stage content for review, upload the schema and download snapshots by default. A key without the scope a command needs fails with exit code `3` and names the scope.
+
+Some permissions exist only on a browser login or personal token, never on a project key: **Manage project keys** (`keys.manage`), **List your projects** (`account.read`), **Create projects** (`projects.create`), **Connect code sources** (`code.manage`: `code connect`, `create`, `add`, `sync`, `rm`), and the team permissions (`team.invite`, `team.manage`). Secrets (`secrets set`, `secrets rm`) also need a personal credential.
 
 Give remote content commands both **Read content** and **Read the schema**. They use the published schema to resolve content and collection definitions. `assets get` needs only **Read content** when given an explicit file or entry asset reference. `--local` reads use the schema in the local copy and need no key.
 
@@ -171,7 +194,7 @@ npx atmyapp whoami
 npx atmyapp logout
 ~~~
 
-Match the code printed in the terminal to the browser page before approving. The page lets you choose which projects the login reaches (all of them, chosen organisations, or chosen projects) and what it may do: **Everything I can do**, **Developer**, **Content editor** or **Read only**, with individual permissions under **Customize**. Without `--preset` or `--scopes`, the CLI asks for read-only access. `--project <id>` limits the login to one project. Use `--url` to choose a different API and `--no-browser` to open the printed link yourself.
+Match the code printed in the terminal to the browser page before approving. The page lets you choose which projects the login reaches (all of them, chosen organisations, or chosen projects) and what it may do: **Everything I can do**, **Developer**, **Content editor** or **Read only**, with individual permissions under **Customize**. Without `--preset` or `--scopes`, the CLI asks for read-only access. `--project <id>` limits the login to one project. Use `--url` to choose a different API and `--no-browser` to open the printed link yourself. `login --dry-run` and `logout --dry-run` show what they would do.
 
 A login acts as you: in each project it can do what you can do there, within its permissions. It lasts 90 days, renews while you use it, and ends after a year at most. Revoke it with `logout` or under **Account → Signed-in devices**. The CLI uses the OS keychain when available and falls back to an owner-only `~/.config/atmyapp/credentials.json` file (or the corresponding `XDG_CONFIG_HOME` path).
 
@@ -223,14 +246,15 @@ npx atmyapp stage review --to reviewer@example.com --message "Review the new tit
 
 | Commands | What they do |
 | --- | --- |
-| `space create <name> [--from <space>]`, `space use <name>`, `space ls` | Create or copy a space, select it, and see changes or overlapping edits |
+| `space create <name> [--from <space>] [--no-use]`, `space use <name>`, `space ls` | Create or copy a space (and switch to it unless `--no-use`), select it, and see changes or overlapping edits |
 | `space rm <name> [--force]`, `space gc` | Remove a local space or free unused stored objects |
 | `content edit <ref>`, `content rm <ref>` | Copy an item into the space or mark it for deletion |
 | `content set <ref#pointer> <value>`, `content patch <ref> --json-patch @patch.json` | Change a value or apply an RFC 6902 patch |
 | `content status`, `content diff [refs…]`, `content grep <text>`, `content validate [refs…]` | Inspect changes, search the merged copy, and validate against the pulled schema |
 | `entries create <c> --data @entry.json`, `entries update <c> <id> --data @fields.json [--replace]` | Create entries or update their fields in a space |
 | `entries delete <c> <id>`, `entries move <c> <id> --before <id>` | Stage an entry deletion or change its order. Move also accepts `--after`, `--first`, or `--last` |
-| `stage push [refs…]`, `stage status`, `stage ls [--mine]`, `stage diff [ref]` | Save and inspect a named draft |
+| `stage push [refs…] [--ttl <duration>]`, `stage status`, `stage ls [--mine] [--state open\|in_review\|sent_back]`, `stage diff [ref]` | Save and inspect named drafts |
+| `stage conflicts` | Conflicts between the named draft and the current published content |
 | `stage preview [--wait]`, `stage review --to <email-or-id> --message <text>`, `stage extend --ttl 3d` | Preview or hand off a draft, or extend its lifetime |
 | `stage commit -m <message> [--accept-warnings]` | Publish the active space's named draft with `content.publish` |
 | `stage undo [stepId]`, `stage discard --yes` | Undo a saved step or close the server draft while keeping local edits |
@@ -273,6 +297,21 @@ Use `--dry-run` to inspect the target of a deploy or promotion. `hosting deploy 
 
 Drafts normally expire after 24 hours of inactivity. Review extends the deadline to seven days. A send-back resets it to 24 hours. The reviewer can edit or send the draft back from **Website → Drafts**, and a member with publishing permission can publish it. Run `content pull` after publishing.
 
+## `atmyapp domains`
+
+Connect custom domains to hosted websites and fix their setup from the terminal.
+
+| Command | Purpose |
+| --- | --- |
+| `domains ls` | The project's domains and their state |
+| `domains show <domain> [--records-text] [--debug]` | DNS records, certificate, website, issues and next steps. `--records-text` prints only the records, to paste into an email or a DNS form |
+| `domains add <hostname> [--deployment <website>]` | Connect a domain to a website and get the DNS records to add |
+| `domains edit <domain>` | Change which website a domain shows (`--deployment`, `--unassign`), stop or resume serving (`--disable`, `--enable`), always serve one release (`--pin <releaseId>`, `--unpin`), and how it serves (`--spa-fallback on\|off`, `--not-found-page /404.html`) |
+| `domains check <domain> [--wait] [--timeout <duration>]` | Check DNS now and ask for the HTTPS certificate again. `--wait` waits up to 20 minutes by default (at most `1h`) |
+| `domains rm <domain> [--yes] [--if-exists]` | Disconnect a domain and delete its certificate |
+
+`domains ls` and `show` need **Read hosting** (`hosting.read`); the others need **Deploy and manage domains** (`hosting.deploy`). `add`, `edit` and `rm` take `--dry-run`. With a personal login, adding, editing and removing domains ask for approval. `domains check --wait` exits `0` when the domain is live, `6` (`needs_person`, reason `dns`) when it needs a DNS change, and `8` when the certificate is still being issued at the timeout. Every JSON result includes `setup`: the phase, the DNS records to add, issues with fixes, and next steps. Bare domains (`example.com`) can't be hosted: add `www.example.com` and redirect the bare domain to it.
+
 ## `atmyapp init`
 
 ```sh
@@ -287,6 +326,8 @@ Writes `atmyapp.schema.ts` and, for `minimal` and `blog`, a client file, then pr
 | `--template <name>` | `empty` (schema only), `minimal` (one document) or `blog` (a document and a posts collection) |
 | `--path <file>` | Schema file name, such as `atmyapp.schema.json` |
 | `--force` | Overwrite existing files |
+| `--agents` | Write or update the AtMyApp section of `AGENTS.md` for coding agents |
+| `--dry-run` | Show what would be written |
 
 ## `atmyapp whoami`
 
@@ -544,25 +585,50 @@ Set up a project from the terminal: connect the code, create the first website, 
 
 ### Code
 
+A website's code is either **stored in AtMyApp** (the default for new projects) or in a **connected GitHub repository**. Both build, preview and push the same way. See [Store code in AtMyApp](/guides/code-in-atmyapp/).
+
+**Code stored in AtMyApp**
+
+| Command | Purpose |
+| --- | --- |
+| `code create [<name>] [--starter <id>]` | Create a repository, empty or from a starter. `<name>` defaults to `website` |
+| `code clone [<name>] [<directory>]` | Clone it, with Git signed in through the CLI |
+| `code setup-git [<name>] [--remote atmyapp]` | In an existing Git folder: add the repository as a remote and sign Git in through the CLI |
+| `code push [<git push args…>] [--code <name>] [--remote <remote>]` | `git push` (the current branch by default), then report the website build it started |
+| `code url [<name>]` | The Git address, without a password |
+| `code rm <name>` | Delete the repository with all of its history |
+
+With one hosted repository, `<name>` is optional. `clone` and `setup-git` configure `atmyapp git credential` as Git's credential helper for the AtMyApp Git host only, and record the project in the repository's Git config (`atmyapp.project`, `atmyapp.codeSource`). Git then gets a 24-hour token for that repository whenever it needs one; you never handle a password. Pushes need **Push code stored in AtMyApp** (`code.write`), clones **Clone code stored in AtMyApp** (`code.read`); a login with **Developer** or **Everything I can do** has both. When the project's code is over its plan's storage, the helper gives a read-only token and prints why.
+
+`code push` exits `1` with `git_push_failed` when Git refuses the push; Artifacts accepts at most 64 MiB per push and 32 MiB per file.
+
+**GitHub**
+
 | Command | Purpose |
 | --- | --- |
 | `code connect github [--repo <owner/repo>]` | Connect your GitHub account and give the AtMyApp app access. One browser step: the command prints a link and continues when GitHub lists the repository |
 | `code repos` | Repositories your GitHub account can connect |
 | `code add <owner/repo> [--branch] [--wait]` | Connect a repository to the project; safe to run twice |
-| `code ls`, `code sync [<owner/repo>] [--wait]`, `code rm <owner/repo>` | List, copy again, disconnect |
+| `code sync [<owner/repo>] [--wait]` | Copy the latest code again |
+| `code rm <owner/repo>` | Disconnect the repository (it stays on GitHub) |
 
-If the browser step isn't done, the command exits `6` (`needs_person`, reason `browser`). `details.code` says what's missing: `github_authorization_expired` (sign in to GitHub again), `github_not_installed` (install the app) or `github_repo_not_granted` (add the repository to the app's access).
+`code ls` lists both kinds, with where each is stored. Commands that take `--repo` (`projects website connect`, `hosting presets create`, `preview create`) accept a GitHub `owner/repo` or the name of code stored in AtMyApp.
+
+If the GitHub browser step isn't done, the command exits `6` (`needs_person`, reason `browser`). `details.code` says what's missing: `github_authorization_expired` (sign in to GitHub again), `github_not_installed` (install the app) or `github_repo_not_granted` (add the repository to the app's access).
 
 ### Websites, presets, variables and secrets
 
 | Command | Purpose |
 | --- | --- |
-| `projects website connect --repo <owner/repo>` | The first website, with its build preset, key and preview server. Uses the settings the repository suggests unless you pass `--build`, `--output`, `--install`, `--root`, `--framework`, `--preview-command`, `--preview-port`, `--preview-url` or `--no-preview`. Run it again to continue after an interruption |
-| `hosting websites ls\|create\|edit\|rm` | More websites, from an existing build preset (`--preset`) |
-| `hosting presets ls\|show\|create\|edit` | How websites are built |
-| `env ls\|set\|rm [--website <name>\|--preview-server <name>]` | Variables of one website or preview server |
-| `secrets ls\|set\|rm` | Values shared by every target they're attached to |
-| `preview create\|edit` | Preview servers |
+| `projects website connect --repo <owner/repo\|name>` | The first website, with its build preset, key and preview server. Uses the settings the repository suggests unless you pass `--branch`, `--build`, `--output`, `--install`, `--root`, `--framework`, `--preview-command`, `--preview-port`, `--preview-url` or `--no-preview`. Run it again to continue after an interruption |
+| `hosting websites ls` | Websites and their preset, live release and automation |
+| `hosting websites create <name> --preset <preset> [--auto-promote on\|off] [--auto-rebuild on\|off]` | Another website from an existing build preset; safe to run twice. `--auto-promote` makes successful builds live by themselves, `--auto-rebuild` rebuilds when content is published (both on by default) |
+| `hosting websites edit <website> [--name] [--preset] [--auto-promote] [--auto-rebuild]`, `hosting websites rm <website>` | Change or delete a website |
+| `hosting presets ls`, `hosting presets show <preset>` | How websites are built |
+| `hosting presets create <name> --repo <owner/repo\|name> --build <command> [--branch] [--install] [--root] [--output] [--framework]`, `hosting presets edit <preset> [--name] …` | Create or change a build preset |
+| `env ls\|set\|rm [--website <name>\|--preview-server <name>] [--shared]` | Variables of one website or preview server. `--shared` changes the build preset every website using it shares |
+| `secrets ls`, `secrets set <NAME> --from-stdin\|--from-env <VAR> [--plain] [--description <text>]`, `secrets rm <NAME> [--detach-all]` | Values shared by every target they're attached to. `--plain` marks a value that isn't secret and may be shown back |
+| `preview create <name> --repo <owner/repo\|name> --command <command> --port <port> [--branch] [--install] [--root]`, `preview edit [--server <name>] …` | Preview servers |
 
 Three kinds of value stay apart. `env set NAME=value` sets a plain value on one target. `env set NAME --secret` attaches the project secret called `NAME`; its value lives in `secrets`. `env rm NAME` removes a plain value, or detaches a secret from that target only; the secret and its other targets don't change. `secrets set NAME` reads the value from `--from-stdin` or `--from-env VAR`, never from a flag, so it stays out of your shell history; values are never printed back. `secrets rm` is refused while targets use the secret, unless `--detach-all`.
 
@@ -575,16 +641,18 @@ A fresh project has no build preset, so `hosting websites create` refuses with `
 | `locales add <code>`, `locales default <code>` | Add a language, or make one the default. Refused while drafts are open |
 | `locales rm <code> [--wait]` | Remove a language; a cleanup job deletes its translations. A failed cleanup exits `1` with `locale_cleanup_failed` and the job ID |
 | `locales jobs [<jobId>] [--wait] [--retry]` | Cleanup jobs |
+| `locales status [<ref>] [--locale] [--only <statuses>]` | Which translations are current, incomplete, outdated or missing |
+| `locales export [refs…] --locale <code> [--status <statuses>] [-o <file>]`, `locales import <file> [--locale]` | Send text to translators and apply what comes back; only segments whose source text still matches are applied. See the [translation workflow](/guides/translations/) |
 | `settings images get\|set --file <json>` | Image policy |
 | `settings seo get` | SEO settings. They're content: change them with `content edit`, then `stage push` and `stage commit` |
-| `collections edit <name> [--label] [--description] [--hints <file>]` | Labels and editor hints |
+| `collections edit <name> [--label] [--description] [--hints <file>] [--branch <name>]` | Labels and editor hints |
 
 ### Forms
 
 | Command | Purpose |
 | --- | --- |
-| `forms ls\|create\|edit\|rm` | Forms (submission types); `create` is safe to run twice |
-| `forms layout <form> [--file <json>\|--reset\|--generate]` | How a form's messages are laid out |
+| `forms ls`, `forms create <name> [--accepting on\|off] [--file <json>]`, `forms edit <name> …`, `forms rm <name>` | Forms (submission types). `--file` holds the settings (protection and options); `create` is safe to run twice |
+| `forms layout <form> [--file <json>\|--reset\|--generate [--instructions <text>]]` | Show or change how a form's messages are laid out |
 | `forms captcha verify --provider <p> --site-key <key> --secret-from-stdin` | Check captcha keys |
 
 ### Team
@@ -603,7 +671,8 @@ A login limited to some projects can change the team only when it reaches every 
 
 | What asks for approval | Class |
 | --- | --- |
-| `code rm`, `hosting websites rm`, `locales rm`, `forms rm` | delete |
+| `code rm` (for code stored in AtMyApp, this deletes the repository), `hosting websites rm`, `locales rm`, `forms rm`, `domains rm` | delete |
+| `domains add`, `domains edit`, `keys create`, `keys revoke` | access |
 | `secrets set`, `secrets rm`, attaching or detaching a secret (`env set --secret`, `env rm`) | access |
 | `members invite`, `members role`, `members rm`, `invitations revoke` | access, never covered by "allow similar" |
 
@@ -632,7 +701,7 @@ A login limited to some projects can change the team only when it reaches every 
 - **A section left out isn't managed**, even with `--prune`: a file without `domains` never touches domains. Build presets and preview servers are never deleted by `apply`.
 - **Secret values never go in the file.** A listed secret that doesn't exist yet takes its value from the environment variable of the same name: `STRIPE_KEY=… atmyapp apply`. Without it, `plan` and `apply` exit `2` with `secret_values_missing`. Existing secrets are never overwritten.
 - **One approval for the whole plan.** With a personal login, `apply` asks once for every change it already knows, as one plan; a change that needs something the run creates first (a website for a new preset) asks when it runs. Changes run in order; a failed one skips only what depends on it, and `apply` exits `1` with `apply_incomplete`. Run it again to finish: it only does what's still missing.
-- The repository must already be connected to your GitHub account (`code connect github --repo`).
+- A preset's or preview server's `repo` is a GitHub `owner/repo`, which must already be reachable (`code connect github --repo`), or `atmyapp:<name>` for code stored in AtMyApp. `apply` creates a missing `atmyapp:<name>` repository; push the code to it afterwards.
 
 Editors complete the file from the published schema at `https://docs.atmyapp.com/schemas/project.json`.
 
@@ -691,6 +760,16 @@ Asks the project to generate placeholder content for a storage path, based on th
 | `--json` | Print the raw response |
 | `--warnings-as-error` | Fail on validation warnings |
 | `--branch <name>` | Target branch |
+
+## `atmyapp help`
+
+```sh
+npx atmyapp help code push
+npx atmyapp help --json            # every command, argument and option
+npx atmyapp help stage push --json # one command, with its outputSchema
+```
+
+`--json` describes commands for scripts and agents, including the success and error envelopes of commands that write JSON.
 
 ## Programmatic use
 

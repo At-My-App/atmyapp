@@ -27,7 +27,7 @@ import { statusCommand } from "./commands/status";
 import { analyticsCommand, linksCommand } from "./commands/analytics";
 import { previewCommand } from "./commands/preview";
 import {
-  addHostingSetup, addLocaleSetup, addTeamCommands, invitationsCommand, addPreviewSetup, addProjectWebsite, codeCommand, collectionsCommand, envCommand, formsCommand,
+  addHostingSetup, addLocaleSetup, addTeamCommands, invitationsCommand, addPreviewSetup, addProjectWebsite, codeCommand, gitCommand, collectionsCommand, envCommand, formsCommand,
   secretsCommand, settingsCommand,
 } from "./commands/setup";
 import { applyCommand, exportCommand, planCommand } from "./commands/desired";
@@ -47,6 +47,7 @@ program.addCommand(logoutCommand());
 program.addCommand(whoamiCommand());
 program.addCommand(addProjectWebsite(projectsCommand()));
 program.addCommand(codeCommand());
+program.addCommand(gitCommand(), { hidden: true });
 program.addCommand(orgsCommand());
 program.addCommand(statusCommand());
 program.addCommand(doctorCommand());
