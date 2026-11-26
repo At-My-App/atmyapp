@@ -1,5 +1,11 @@
 # @atmyapp/cli
 
+## 0.8.0
+
+### Minor Changes
+
+- 3676467: Code stored in AtMyApp: `atmyapp code create`, `code clone`, `code setup-git`, `code push` and `code url`, with `atmyapp git credential` as Git's credential helper (24-hour tokens, no passwords to copy). `--repo` options and `atmyapp.project.json` accept the name of code stored in AtMyApp (`atmyapp:<name>` in the file), and `code ls` shows where each code source is stored.
+
 ## 0.7.0
 
 ### Minor Changes
